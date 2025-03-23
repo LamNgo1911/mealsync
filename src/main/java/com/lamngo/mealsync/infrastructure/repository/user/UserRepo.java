@@ -1,4 +1,4 @@
-package com.lamngo.mealsync.infrastructure.repository;
+package com.lamngo.mealsync.infrastructure.repository.user;
 
 import com.lamngo.mealsync.domain.model.User;
 import com.lamngo.mealsync.domain.repository.IUserRepo;
@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public class UserRepoRepo implements IUserRepo {
+public class UserRepo implements IUserRepo {
     @Autowired
     private UserJpaRepo _userJpaRepo;
 
