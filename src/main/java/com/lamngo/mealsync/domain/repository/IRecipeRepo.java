@@ -4,11 +4,11 @@ import com.lamngo.mealsync.domain.model.Recipe;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface IRecipeRepo {
     Recipe createRecipe(Recipe recipe);
-    Optional<Recipe> getRecipeById(String id);
+    Optional<Recipe> getRecipeById(UUID id);
     List<Recipe> getAllRecipes();
-    void updateRecipe(Recipe recipe);
-    void deleteRecipe(String id);
+    void deleteRecipe(UUID id);
 }

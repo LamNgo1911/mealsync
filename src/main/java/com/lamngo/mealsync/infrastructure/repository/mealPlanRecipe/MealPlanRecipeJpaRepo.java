@@ -6,13 +6,14 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
-public interface MealPlanRecipeJpaRepo extends JpaRepository<MealPlanRecipe, String> {
+public interface MealPlanRecipeJpaRepo extends JpaRepository<MealPlanRecipe, UUID> {
     MealPlanRecipe save(MealPlanRecipe mealPlanRecipe);
-    void deleteById(String id);
-    Optional<MealPlanRecipe> findById(String id);
+    void deleteById(UUID id);
+    Optional<MealPlanRecipe> findById(UUID id);
     List<MealPlanRecipe> findAll();
-    List<MealPlanRecipe> findByMealPlanId(String mealPlanId);
-    List<MealPlanRecipe> findByRecipeId(String recipeId);
+    List<MealPlanRecipe> findByMealPlanId(UUID mealPlanId);
+    List<MealPlanRecipe> findByRecipeId(UUID recipeId);
 }

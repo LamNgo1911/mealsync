@@ -7,12 +7,14 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 public class PreferenceRepo implements IPreferenceRepo {
 
     @Autowired
     private PreferenceJpaRepo _preferenceJpaRepo;
+
     @Override
     public void savePreference(Preference preference) {
         _preferenceJpaRepo.save(preference);
@@ -24,22 +26,18 @@ public class PreferenceRepo implements IPreferenceRepo {
     }
 
     @Override
-    public void deletePreference(String id) {
+    public void deletePreference(UUID id) {
         _preferenceJpaRepo.deleteById(id);
     }
 
-    @Override
-    public void updatePreference(Preference preference) {
-        _preferenceJpaRepo.updatePreference(preference);
-    }
 
     @Override
-    public Optional<Preference> getPreferenceById(String id) {
+    public Optional<Preference> getPreferenceById(UUID id) {
         return _preferenceJpaRepo.findById(id);
     }
 
     @Override
-    public Optional<Preference> getPreferenceByUserId(String userId) {
+    public Optional<Preference> getPreferenceByUserId(UUID userId) {
         return _preferenceJpaRepo.findByUserId(userId);
     }
 }

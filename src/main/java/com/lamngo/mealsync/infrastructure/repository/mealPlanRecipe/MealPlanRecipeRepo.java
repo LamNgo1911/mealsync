@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.UUID;
 
 @Repository
 public class MealPlanRecipeRepo implements IMealPlanRecipeRepo {
@@ -25,18 +26,18 @@ public class MealPlanRecipeRepo implements IMealPlanRecipeRepo {
     }
 
     @Override
-    public List<String> getRecipesByMealPlanId(String mealPlanId) {
+    public List<UUID> getRecipesByMealPlanId(UUID mealPlanId) {
         return _mealPlanRecipeJpaRepo.findByMealPlanId(mealPlanId)
                 .stream()
-                .map(mealPlanRecipe -> mealPlanRecipe.getRecipe().getId().toString())
+                .map(mealPlanRecipe -> UUID.fromString(mealPlanRecipe.getRecipe().getId().toString()))
                 .toList();
     }
 
     @Override
-    public List<String> getMealPlansByRecipeId(String recipeId) {
+    public List<UUID> getMealPlansByRecipeId(UUID recipeId) {
         return _mealPlanRecipeJpaRepo.findByRecipeId(recipeId)
                 .stream()
-                .map(mealPlanRecipe -> mealPlanRecipe.getMealPlan().getId().toString())
+                .map(mealPlanRecipe -> UUID.fromString(mealPlanRecipe.getMealPlan().getId().toString()))
                 .toList();
     }
 }

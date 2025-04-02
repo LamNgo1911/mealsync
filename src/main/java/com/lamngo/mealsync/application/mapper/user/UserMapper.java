@@ -18,5 +18,6 @@ public interface UserMapper {
 
     UserReadDto toUserReadDto(User user);
 
+
     void updateUserFromDto(UserUpdateDto userUpdateDto, @MappingTarget User user);
 }

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 public class MealPlanRepo implements IMealPlanRepo {
@@ -20,7 +21,7 @@ public class MealPlanRepo implements IMealPlanRepo {
     }
 
     @Override
-    public Optional<MealPlan> getMealPlanById(String id) {
+    public Optional<MealPlan> getMealPlanById(UUID id) {
         return _mealPlanJpaRepo.findById(id);
     }
 
@@ -30,12 +31,7 @@ public class MealPlanRepo implements IMealPlanRepo {
     }
 
     @Override
-    public void updateMealPlan(MealPlan mealPlan) {
-        _mealPlanJpaRepo.updateMealPlan(mealPlan);
-    }
-
-    @Override
-    public void deleteMealPlan(String id) {
+    public void deleteMealPlan(UUID id) {
         _mealPlanJpaRepo.deleteById(id);
 
     }

@@ -6,12 +6,12 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
-public interface PreferenceJpaRepo extends JpaRepository<Preference, String> {
-    Optional<Preference> findByUserId(String userId);
+public interface PreferenceJpaRepo extends JpaRepository<Preference, UUID> {
+    Optional<Preference> findByUserId(UUID userId);
     List<Preference> findAll();
-    void deleteByUserId(String userId);
-    void updatePreference(Preference preference);
-    Optional<Preference> findById(String id);
+    void deleteByUserId(UUID userId);
+    Optional<Preference> findById(UUID id);
 }
