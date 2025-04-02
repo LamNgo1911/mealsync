@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 public class UserRepo implements IUserRepo {
@@ -24,7 +25,7 @@ public class UserRepo implements IUserRepo {
     }
 
     @Override
-    public Optional<User> findById(String id) {
+    public Optional<User> findById(UUID id) {
         return _userJpaRepo.findById(id);
     }
 
@@ -34,7 +35,7 @@ public class UserRepo implements IUserRepo {
     }
 
     @Override
-    public void deleteById(String id) {
+    public void deleteById(UUID id) {
         _userJpaRepo.deleteById(id);
     }
 }

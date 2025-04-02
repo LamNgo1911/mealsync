@@ -2,25 +2,20 @@ package com.lamngo.mealsync.infrastructure.repository.mealPlan;
 
 import com.lamngo.mealsync.domain.model.MealPlan;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
-public interface MealPlanJpaRepo extends JpaRepository<MealPlan, String> {
+public interface MealPlanJpaRepo extends JpaRepository<MealPlan, UUID> {
     MealPlan save(MealPlan mealPlan);
 
-    void deleteById(String id);
+    void deleteById(UUID id);
 
-    void updateMealPlan(MealPlan mealPlan);
-
-    Optional<MealPlan> findById(String id);
+    Optional<MealPlan> findById(UUID id);
 
     List<MealPlan> findAll();
-
-    List<MealPlan> findByUserId(String userId);
-
-    List<MealPlan> findByRecipeId(String recipeId);
-
 }

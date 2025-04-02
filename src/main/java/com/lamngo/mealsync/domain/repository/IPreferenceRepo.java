@@ -4,12 +4,12 @@ import com.lamngo.mealsync.domain.model.Preference;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface IPreferenceRepo {
     void savePreference(Preference preference);
     List<Preference> getAllPreferences();
-    void deletePreference(String id);
-    void updatePreference(Preference preference);
-    Optional<Preference> getPreferenceById(String id);
-    Optional<Preference> getPreferenceByUserId(String userId);
+    void deletePreference(UUID id);
+    Optional<Preference> getPreferenceById(UUID id);
+    Optional<Preference> getPreferenceByUserId(UUID userId);
 }

@@ -1,14 +1,17 @@
-package com.lamngo.mealsync.application.service;
+package com.lamngo.mealsync.application.service.user;
 
 import com.lamngo.mealsync.application.dto.user.UserCreateDto;
 import com.lamngo.mealsync.application.dto.user.UserReadDto;
+import com.lamngo.mealsync.application.dto.user.UserUpdateDto;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
 import com.lamngo.mealsync.domain.model.User;
 import com.lamngo.mealsync.domain.repository.IUserRepo;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -18,19 +21,10 @@ public class UserService implements IUserService {
     private IUserRepo _iUserRepo;
 
     @Autowired
+    private PasswordEncoder _passwordEncoder;
+
+    @Autowired
     UserMapper _userMapper;
-
-    @Override
-    public UserReadDto register(UserCreateDto userCreateDto) {
-        User user = _userMapper.toUser(userCreateDto);
-        User savedUser = _iUserRepo.save(user);
-        return _userMapper.toUserReadDto(savedUser);
-    }
-
-    @Override
-    public UserReadDto login(String email, String password) {
-        return null;
-    }
 
     @Override
     public List<UserReadDto> getAllUsers() {
@@ -41,7 +35,7 @@ public class UserService implements IUserService {
     }
 
     @Override
-    public UserReadDto findUserById(String id) {
+    public UserReadDto findUserById(UUID id) {
         User user = _iUserRepo.findById(id).orElseThrow(() -> new RuntimeException("User not found with id: " + id));
         return _userMapper.toUserReadDto(user);
     }
@@ -53,8 +47,18 @@ public class UserService implements IUserService {
     }
 
     @Override
-    public void deleteById(String id) {
+    public void deleteById(UUID id) {
         _iUserRepo.findById(id).orElseThrow(() -> new RuntimeException("User not found with id: " + id));
         _iUserRepo.deleteById(id);
+    }
+
+    @Override
+    public UserReadDto updateUser(UUID id, UserUpdateDto userUpdateDto) {
+        User user = _iUserRepo.findById(id).orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+        user.setName(userUpdateDto.getName());
+        user.setPassword(userUpdateDto.getPassword());
+
+        User updatedUser = _iUserRepo.save(user);
+        return _userMapper.toUserReadDto(updatedUser);
     }
 }

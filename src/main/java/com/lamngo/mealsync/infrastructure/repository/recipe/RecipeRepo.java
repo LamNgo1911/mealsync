@@ -7,19 +7,21 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 public class RecipeRepo implements IRecipeRepo {
 
     @Autowired
     private RecipeJpaRepo _recipeJpaRepo;
+
     @Override
     public Recipe createRecipe(Recipe recipe) {
         return _recipeJpaRepo.save(recipe);
     }
 
     @Override
-    public Optional<Recipe> getRecipeById(String id) {
+    public Optional<Recipe> getRecipeById(UUID id) {
         return _recipeJpaRepo.findById(id);
     }
 
@@ -28,13 +30,9 @@ public class RecipeRepo implements IRecipeRepo {
         return _recipeJpaRepo.findAll();
     }
 
-    @Override
-    public void updateRecipe(Recipe recipe) {
-        _recipeJpaRepo.updateRecipe(recipe);
-    }
 
     @Override
-    public void deleteRecipe(String id) {
+    public void deleteRecipe(UUID id) {
         _recipeJpaRepo.deleteById(id);
     }
 }
