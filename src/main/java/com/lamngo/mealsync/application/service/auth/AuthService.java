@@ -16,6 +16,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.security.core.Authentication;
 
+import java.util.Optional;
+
 @Service
 public class AuthService implements IAuthService {
     private final AuthenticationManager authenticationManager;
@@ -63,6 +65,57 @@ public class AuthService implements IAuthService {
             throw new RuntimeException("Invalid email or password");
         }
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        System.out.println("UserDetails: " + userDetails.getAuthorities());
+        System.out.println("UserDetails: " + userDetails.getUsername());
+        // Generate JWT token
         return jwtTokenProvider.generateToken(userDetails);
     }
+
+    @Override
+    public void logout(String token) {
+        // Implement token revocation (e.g., store invalid tokens in a blacklist)
+        System.out.println("Token revoked: " + token);
+    }
+
+    @Override
+    public void changePassword(String email, String oldPassword, String newPassword) {
+        Optional<User> userOptional = _userRepo.findByEmail(email);
+
+        if (userOptional.isEmpty()) {
+            throw new RuntimeException("User not found");
+        }
+
+        User user = userOptional.get();
+
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new RuntimeException("Old password is incorrect");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        _userRepo.save(user);
+    }
+
+    @Override
+    public boolean validateToken(String token) {
+        // Extract email from token
+        String email = jwtTokenProvider.extractEmail(token);
+        // Find user by email
+        Optional<User> userOptional = _userRepo.findByEmail(email);
+        if (userOptional.isEmpty()) {
+            return false;
+        }
+
+        User user = userOptional.get();
+
+        // Validate token
+        return jwtTokenProvider.validateToken(token, user);
+    }
+
+    @Override
+    public void refreshToken(String token) {
+        // Implement token refresh logic
+        // This typically involves generating a new token with a new expiration time
+        System.out.println("Token refreshed: " + token);
+    }
 }
+
