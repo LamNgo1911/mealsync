@@ -14,10 +14,11 @@ import org.mapstruct.NullValuePropertyMappingStrategy;
         nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE // Ignore null fields in updates
 )
 public interface UserMapper {
+    @Mapping(target = "id", ignore = true) // Ignore id when creating a new user
     User toUser(UserCreateDto userCreateDto);
 
+    @Mapping(target = "id", source = "user.id")
     UserReadDto toUserReadDto(User user);
-
 
     void updateUserFromDto(UserUpdateDto userUpdateDto, @MappingTarget User user);
 }

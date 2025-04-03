@@ -15,18 +15,18 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     private static final Logger logger = LoggerFactory.getLogger(CustomUserDetailsService.class);
 
-    private final IUserRepo userRepo;
+    private final IUserRepo _userRepo;
 
     // Constructor injection is preferred
-    public CustomUserDetailsService(IUserRepo userRepo) {
-        this.userRepo = userRepo;
+    public CustomUserDetailsService(IUserRepo _userRepo) {
+        this._userRepo = _userRepo;
     }
 
     @Override
     @Transactional(readOnly = true) // Add @Transactional for proper session handling
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         logger.debug("Loading user by email: {}", email);
-        return userRepo.findByEmail(email)
+        return _userRepo.findByEmail(email)
                 .orElseThrow(() -> {
                     logger.warn("User not found with email: {}", email); // Log at WARN level
                     return new UsernameNotFoundException("User not found with email: " + email);
