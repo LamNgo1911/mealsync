@@ -1,0 +1,2 @@
+package com.lamngo.mealsync.presentation.error;public class ForbiddenException {
+}
