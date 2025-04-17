@@ -1,6 +1,6 @@
 package com.lamngo.mealsync.domain.repository;
 
-import com.lamngo.mealsync.domain.model.User;
+import com.lamngo.mealsync.domain.model.user.User;
 
 import java.util.List;
 import java.util.Optional;

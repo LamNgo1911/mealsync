@@ -1,6 +1,6 @@
 package com.lamngo.mealsync.infrastructure.repository.recipe;
 
-import com.lamngo.mealsync.domain.model.Recipe;
+import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

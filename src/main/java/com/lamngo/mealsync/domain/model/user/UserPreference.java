@@ -1,7 +1,8 @@
-package com.lamngo.mealsync.domain.model;
+package com.lamngo.mealsync.domain.model.user;
 
 import jakarta.persistence.*;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
@@ -10,8 +11,9 @@ import java.util.UUID;
 @Entity
 @Getter
 @Setter
+@NoArgsConstructor
 @Table(name = "preferences")
-public class Preference {
+public class UserPreference {
 
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)

@@ -1,6 +1,6 @@
 package com.lamngo.mealsync.infrastructure.repository.user;
 
-import com.lamngo.mealsync.domain.model.User;
+import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.repository.IUserRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;

@@ -1,6 +1,6 @@
 package com.lamngo.mealsync.infrastructure.repository.preference;
 
-import com.lamngo.mealsync.domain.model.Preference;
+import com.lamngo.mealsync.domain.model.user.UserPreference;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -9,9 +9,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface PreferenceJpaRepo extends JpaRepository<Preference, UUID> {
-    Optional<Preference> findByUserId(UUID userId);
-    List<Preference> findAll();
+public interface PreferenceJpaRepo extends JpaRepository<UserPreference, UUID> {
+    Optional<UserPreference> findByUserId(UUID userId);
+    List<UserPreference> findAll();
     void deleteByUserId(UUID userId);
-    Optional<Preference> findById(UUID id);
+    Optional<UserPreference> findById(UUID id);
 }

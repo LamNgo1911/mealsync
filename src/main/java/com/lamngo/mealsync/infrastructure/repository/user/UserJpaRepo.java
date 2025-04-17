@@ -1,6 +1,6 @@
 package com.lamngo.mealsync.infrastructure.repository.user;
 
-import com.lamngo.mealsync.domain.model.User;
+import com.lamngo.mealsync.domain.model.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

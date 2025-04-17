@@ -4,8 +4,8 @@ import com.lamngo.mealsync.application.dto.user.UserCreateDto;
 import com.lamngo.mealsync.application.dto.user.UserLoginDto;
 import com.lamngo.mealsync.application.dto.user.UserReadDto;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
-import com.lamngo.mealsync.domain.model.Role;
-import com.lamngo.mealsync.domain.model.User;
+import com.lamngo.mealsync.domain.model.user.UserRole;
+import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.repository.IUserRepo;
 import com.lamngo.mealsync.infrastructure.security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +41,7 @@ public class AuthService implements IAuthService {
         user.setEmail(userCreateDto.getEmail());
         user.setPassword(passwordEncoder.encode(userCreateDto.getPassword()));
         user.setName(userCreateDto.getName());
-        user.setRole(userCreateDto.getRole() == null? Role.USER : userCreateDto.getRole() );
+        user.setRole(userCreateDto.getRole() == null? UserRole.USER : userCreateDto.getRole() );
         user = _userRepo.save(user);
         return _userMapper.toUserReadDto(user);
     }
