@@ -1,17 +1,19 @@
 package com.lamngo.mealsync.application.dto.user;
 
-import com.lamngo.mealsync.domain.model.Role;
-import jakarta.persistence.Column;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
+import com.lamngo.mealsync.domain.model.user.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.AllArgsConstructor; // Added
+import lombok.Builder;         // Added
+import lombok.Data;            // Added (includes @Getter, @Setter, @ToString, @EqualsAndHashCode)
+import lombok.NoArgsConstructor;  // Added
 
-@Getter
-@Setter
+@Data // Replaces @Getter and @Setter, adds more
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class UserCreateDto {
     @NotBlank(message = "Email is required")
     @Email(message = "Email must be valid")
@@ -24,7 +26,6 @@ public class UserCreateDto {
     @NotBlank(message = "Name is required")
     private String name;
 
-    @Column(nullable = false)
-    @Enumerated(EnumType.STRING)
-    private Role role;
+    @NotNull(message = "Role is required")
+    private UserRole role;
 }

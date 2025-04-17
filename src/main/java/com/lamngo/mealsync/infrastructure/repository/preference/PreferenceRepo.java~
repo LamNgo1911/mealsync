@@ -1,6 +1,6 @@
 package com.lamngo.mealsync.infrastructure.repository.preference;
 
-import com.lamngo.mealsync.domain.model.user.UserPreference;
+import com.lamngo.mealsync.domain.model.user.Preference;
 import com.lamngo.mealsync.domain.repository.IPreferenceRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
@@ -16,12 +16,12 @@ public class PreferenceRepo implements IPreferenceRepo {
     private PreferenceJpaRepo _preferenceJpaRepo;
 
     @Override
-    public void savePreference(UserPreference userPreference) {
-        _preferenceJpaRepo.save(userPreference);
+    public void savePreference(Preference preference) {
+        _preferenceJpaRepo.save(preference);
     }
 
     @Override
-    public List<UserPreference> getAllPreferences() {
+    public List<Preference> getAllPreferences() {
         return _preferenceJpaRepo.findAll();
     }
 
@@ -32,12 +32,12 @@ public class PreferenceRepo implements IPreferenceRepo {
 
 
     @Override
-    public Optional<UserPreference> getPreferenceById(UUID id) {
+    public Optional<Preference> getPreferenceById(UUID id) {
         return _preferenceJpaRepo.findById(id);
     }
 
     @Override
-    public Optional<UserPreference> getPreferenceByUserId(UUID userId) {
+    public Optional<Preference> getPreferenceByUserId(UUID userId) {
         return _preferenceJpaRepo.findByUserId(userId);
     }
 }

@@ -1,15 +1,15 @@
 package com.lamngo.mealsync.domain.repository;
 
-import com.lamngo.mealsync.domain.model.Preference;
+import com.lamngo.mealsync.domain.model.user.UserPreference;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface IPreferenceRepo {
-    void savePreference(Preference preference);
-    List<Preference> getAllPreferences();
+    void savePreference(UserPreference userPreference);
+    List<UserPreference> getAllPreferences();
     void deletePreference(UUID id);
-    Optional<Preference> getPreferenceById(UUID id);
-    Optional<Preference> getPreferenceByUserId(UUID userId);
+    Optional<UserPreference> getPreferenceById(UUID id);
+    Optional<UserPreference> getPreferenceByUserId(UUID userId);
 }

@@ -1,10 +1,9 @@
 package com.lamngo.mealsync.application.service.user;
 
-import com.lamngo.mealsync.application.dto.user.UserCreateDto;
 import com.lamngo.mealsync.application.dto.user.UserReadDto;
 import com.lamngo.mealsync.application.dto.user.UserUpdateDto;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
-import com.lamngo.mealsync.domain.model.User;
+import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.repository.IUserRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
