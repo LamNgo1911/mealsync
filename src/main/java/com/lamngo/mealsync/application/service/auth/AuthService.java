@@ -4,10 +4,12 @@ import com.lamngo.mealsync.application.dto.user.UserCreateDto;
 import com.lamngo.mealsync.application.dto.user.UserLoginDto;
 import com.lamngo.mealsync.application.dto.user.UserReadDto;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
+import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.domain.model.user.UserRole;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.repository.IUserRepo;
 import com.lamngo.mealsync.infrastructure.security.JwtTokenProvider;
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -16,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.security.core.Authentication;
 
+import java.util.ArrayList;
 import java.util.Optional;
 
 @Service
@@ -36,12 +39,33 @@ public class AuthService implements IAuthService {
     }
 
     @Override
+    @Transactional
     public UserReadDto register(UserCreateDto userCreateDto) {
+        // Check if the email already exists
+        Optional<User> existingUser = _userRepo.findByEmail(userCreateDto.getEmail());
+        if (existingUser.isPresent()) {
+            throw new RuntimeException("Email already exists");
+        }
+
+        // Create a new user
         User user = new User();
         user.setEmail(userCreateDto.getEmail());
         user.setPassword(passwordEncoder.encode(userCreateDto.getPassword()));
         user.setName(userCreateDto.getName());
         user.setRole(userCreateDto.getRole() == null? UserRole.USER : userCreateDto.getRole() );
+
+        // Create a default UserPreference
+        UserPreference userPreference = new UserPreference();
+
+        userPreference.setDietaryRestrictions(new ArrayList<>());
+        userPreference.setFavoriteCuisines(new ArrayList<>());
+        userPreference.setDislikedIngredients(new ArrayList<>());
+
+        userPreference.setUser(user);
+        System.out.println("User preference: " + userPreference);
+        user.setUserPreference(userPreference);
+        System.out.println("User: " + user);
+
         user = _userRepo.save(user);
         return _userMapper.toUserReadDto(user);
     }
@@ -65,8 +89,6 @@ public class AuthService implements IAuthService {
             throw new RuntimeException("Invalid email or password");
         }
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-        System.out.println("UserDetails: " + userDetails.getAuthorities());
-        System.out.println("UserDetails: " + userDetails.getUsername());
         // Generate JWT token
         return jwtTokenProvider.generateToken(userDetails);
     }
