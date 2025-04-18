@@ -16,7 +16,7 @@ public class RecipeReadDto {
 
     private UUID id;
     private String name;
-    private List<String> ingredients;
+    private List<RecipeIngredientReadDto> ingredients;
     private String instructions;
     private String cuisine;
     private String imageUrl;

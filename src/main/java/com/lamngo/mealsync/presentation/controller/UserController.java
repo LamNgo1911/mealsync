@@ -1,8 +1,6 @@
 package com.lamngo.mealsync.presentation.controller;
 
-import com.lamngo.mealsync.application.dto.user.UserCreateDto;
-import com.lamngo.mealsync.application.dto.user.UserReadDto;
-import com.lamngo.mealsync.application.dto.user.UserUpdateDto;
+import com.lamngo.mealsync.application.dto.user.*;
 import com.lamngo.mealsync.application.service.user.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,7 +27,6 @@ public class UserController {
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<UserReadDto>> getAllUsers() {
-        System.out.println("getAllUsers");
         List<UserReadDto> users = userService.getAllUsers();
         return ResponseEntity.ok(users);
     }
@@ -57,6 +54,18 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UserReadDto> updateUser(@PathVariable UUID id, @RequestBody @Valid UserUpdateDto userUpdateDto) {
         UserReadDto updatedUser = userService.updateUser(id, userUpdateDto);
+        return ResponseEntity.ok(updatedUser);
+    }
+
+    // update user preference
+    @PutMapping("/{id}/preference")
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<UserReadDto> updateUserPreferenceById(@PathVariable UUID id, @RequestBody @Valid UserPreferenceUpdateDto userPreferenceUpdateDto) {
+        UserPreferenceReadDto updatedUserPreference = userService.updateUserPreferencesById(id, userPreferenceUpdateDto);
+        UserReadDto updatedUser = userService.findUserById(id);
+        updatedUser.setUserPreference(updatedUserPreference);
+
+        // Return the updated user with the updated preference
         return ResponseEntity.ok(updatedUser);
     }
 }

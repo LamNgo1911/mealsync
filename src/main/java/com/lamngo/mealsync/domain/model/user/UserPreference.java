@@ -1,6 +1,7 @@
 package com.lamngo.mealsync.domain.model.user;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -23,15 +24,15 @@ public class UserPreference {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @NotEmpty(message = "Dietary restrictions cannot be empty")
+    @NotNull(message = "Dietary restrictions cannot be empty")
     @ElementCollection
     private List<String> dietaryRestrictions;
 
-    @NotEmpty(message = "Favorite cuisines cannot be empty")
+    @NotNull(message = "Favorite cuisines cannot be empty")
     @ElementCollection
     private List<String> favoriteCuisines;
 
-    @NotEmpty(message = "Disliked ingredients cannot be empty")
+    @NotNull(message = "Disliked ingredients cannot be empty")
     @ElementCollection
     private List<String> dislikedIngredients;
 }

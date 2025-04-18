@@ -22,7 +22,7 @@ public class RecipeCreateDto {
     private String name;
 
     @NotEmpty(message = "Ingredients list cannot be empty")
-    private List<String> ingredients;
+    private List<RecipeIngredientReadDto> ingredients;
 
     @NotBlank(message = "Instructions cannot be blank")
     @Size(max = 5000, message = "Instructions cannot exceed 5000 characters")
