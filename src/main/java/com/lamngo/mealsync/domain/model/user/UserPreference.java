@@ -24,15 +24,15 @@ public class UserPreference {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @NotNull(message = "Dietary restrictions cannot be empty")
+    @NotNull(message = "Dietary restrictions cannot be null")
     @ElementCollection
     private List<String> dietaryRestrictions;
 
-    @NotNull(message = "Favorite cuisines cannot be empty")
+    @NotNull(message = "Favorite cuisines cannot be null")
     @ElementCollection
     private List<String> favoriteCuisines;
 
-    @NotNull(message = "Disliked ingredients cannot be empty")
+    @NotNull(message = "Disliked ingredients cannot be null")
     @ElementCollection
     private List<String> dislikedIngredients;
 }

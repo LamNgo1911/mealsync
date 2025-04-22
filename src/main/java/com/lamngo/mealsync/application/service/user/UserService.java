@@ -66,7 +66,6 @@ public class UserService implements IUserService {
     public UserReadDto updateUser(UUID id, UserUpdateDto userUpdateDto) {
         User user = _iUserRepo.findById(id).orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
         user.setName(userUpdateDto.getName());
-        user.setPassword(userUpdateDto.getPassword());
 
         User updatedUser = _iUserRepo.save(user);
         return _userMapper.toUserReadDto(updatedUser);
