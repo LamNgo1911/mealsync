@@ -1,7 +1,6 @@
 package com.lamngo.mealsync.presentation.controller;
 
-import com.lamngo.mealsync.application.service.ingredient.IngredientRecognitionService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.lamngo.mealsync.application.service.AI.IngredientRecognitionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
