@@ -1,4 +1,4 @@
-package com.lamngo.mealsync.application.service.ingredient;
+package com.lamngo.mealsync.application.service.AI;
 
 import com.google.cloud.vision.v1.AnnotateImageRequest;
 import com.google.cloud.vision.v1.AnnotateImageResponse;
@@ -18,11 +18,11 @@ import java.util.List;
 @Service
 public class IngredientRecognitionService {
     public List<String> recognizeIngredients(MultipartFile imageFile) throws IOException {
-        System.out.println("Recognizing ingredients from image..." + imageFile.getOriginalFilename());
+
         List<String> ingredients = new ArrayList<>();
         try {
             ByteString imgBytes = ByteString.readFrom(imageFile.getInputStream());
-            System.out.println("Image bytes length: " + imgBytes.size());
+
             if (imgBytes.isEmpty()) {
                 throw new IOException("Image is empty or invalid");
             }
@@ -33,17 +33,17 @@ public class IngredientRecognitionService {
                     .setImage(img)
                     .build();
             try (ImageAnnotatorClient client = ImageAnnotatorClient.create()) {
-                System.out.println("Client created");
+
                 List<AnnotateImageRequest> requests = new ArrayList<>();
                 requests.add(request);
                 List<AnnotateImageResponse> responses = client.batchAnnotateImages(requests).getResponsesList();
-                System.out.println("Responses size: " + responses.size());
+
                 for (AnnotateImageResponse res : responses) {
                     if (res.hasError()) {
                         System.out.println("Error from Vision API: " + res.getError().getMessage());
                         throw new IOException("Error from Vision API: " + res.getError().getMessage());
                     }
-                    System.out.println("Label annotations count: " + res.getLabelAnnotationsList().size());
+
                     for (EntityAnnotation annotation : res.getLabelAnnotationsList()) {
                         String label = annotation.getDescription().toLowerCase();
                         System.out.println("Label: " + label + ", Score: " + annotation.getScore());
