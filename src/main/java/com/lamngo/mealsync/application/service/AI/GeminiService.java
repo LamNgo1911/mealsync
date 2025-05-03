@@ -1,6 +1,8 @@
 package com.lamngo.mealsync.application.service.AI;
 
 import com.lamngo.mealsync.domain.model.recipe.RecipeIngredient;
+import com.lamngo.mealsync.domain.model.user.UserPreference;
+import jakarta.transaction.Transactional;
 import okhttp3.*;
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -19,6 +21,7 @@ import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeMapper;
 
 @Service
+@Transactional
 public class GeminiService {
     private static final Logger logger = LoggerFactory.getLogger(GeminiService.class);
 
@@ -43,25 +46,26 @@ public class GeminiService {
     /**
      * Generates a list of recipes using Gemini based on ingredients and user preferences.
      * @param ingredients List of ingredient names
-     * @param userPreferences User preference string (e.g., dietary, cuisine)
+     * @param userPreference UserPreference object
      * @return Recipes as a list of RecipeReadDto objects
      * @throws IOException on network/API errors
      */
-    public List<RecipeReadDto> generateRecipes(List<String> ingredients, String userPreferences) throws IOException {
+    public List<RecipeReadDto> generateRecipes(List<String> ingredients, UserPreference userPreference) throws IOException {
         if (ingredients == null || ingredients.isEmpty()) {
             logger.warn("Ingredient list is empty or null");
             throw new IllegalArgumentException("Ingredient list cannot be empty");
         }
-        if (userPreferences == null) {
-            userPreferences = "";
+        if (userPreference == null) {
+            userPreference = new UserPreference(); // or handle as needed
         }
         if (geminiApiBaseUrl == null || !geminiApiBaseUrl.startsWith("https://") || geminiApiBaseUrl.contains("YOUR_GEMINI_API_KEY")
             || geminiApiKey == null || geminiApiKey.isEmpty() || geminiApiKey.equals("YOUR_GEMINI_API_KEY")) {
             logger.error("GEMINI_API_BASE_URL or GEMINI_API_KEY is not set properly. Check your env.properties file.");
             throw new IllegalStateException("Please set GEMINI_API_BASE_URL and GEMINI_API_KEY in env.properties");
         }
+        String userPrefString = userPreference.toString(); // You may want to customize this
         String prompt = "Given these ingredients: " + String.join(", ", ingredients) +
-                ". And these user preferences: " + userPreferences +
+                ". And these user preferences: " + userPrefString +
                 ". Suggest 5 creative recipes in JSON array format, each with fields: name, instructions, cuisine, imageUrl, ingredientKey. Respond with only the JSON array.";
 
         JSONObject requestBody = new JSONObject();

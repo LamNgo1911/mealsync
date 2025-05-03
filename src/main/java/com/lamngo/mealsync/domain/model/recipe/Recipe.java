@@ -2,11 +2,11 @@ package com.lamngo.mealsync.domain.model.recipe;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import jakarta.validation.constraints.NotEmpty;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,4 +48,44 @@ public class Recipe {
 
     @Column(length = 255) // Allow null
     private String ingredientKey;
+
+    @Size(max = 500)
+    @Column(length = 500)
+    private String description;
+
+    @Column
+    private Integer preparationTime; // in minutes
+
+    @Column
+    private Integer cookingTime; // in minutes
+
+    @Column
+    private Integer totalTime; // in minutes
+
+    @Column
+    private Integer servings;
+
+    @Size(max = 20)
+    @Column(length = 20)
+    private String difficulty;
+
+    @Size(max = 255)
+    @Column(length = 255)
+    private String tags; // e.g. "vegan,quick dinner,gluten-free"
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private com.lamngo.mealsync.domain.model.user.User author;
+
+    @Column(updatable = false)
+    private java.time.Instant createdAt;
+
+    @Column
+    private java.time.Instant updatedAt;
+
+    @PrePersist
+    protected void onCreate() { this.createdAt = java.time.Instant.now(); }
+
+    @PreUpdate
+    protected void onUpdate() { this.updatedAt = java.time.Instant.now(); }
 }
