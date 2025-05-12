@@ -14,7 +14,5 @@ public class RecipeIngredientReadDto {
     private String name;
     private double quantity;
     private String unit;
-    private String preparationNote;
 
-    // Note: Excludes 'id' and 'recipe' fields from the entity
 }
