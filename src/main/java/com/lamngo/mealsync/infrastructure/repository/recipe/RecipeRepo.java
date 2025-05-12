@@ -30,9 +30,12 @@ public class RecipeRepo implements IRecipeRepo {
         return _recipeJpaRepo.findAll();
     }
 
-
     @Override
     public void deleteRecipe(UUID id) {
         _recipeJpaRepo.deleteById(id);
+    }
+
+    public boolean existsByIngredientKey(String ingredientKey) {
+        return _recipeJpaRepo.existsByIngredientKey(ingredientKey);
     }
 }

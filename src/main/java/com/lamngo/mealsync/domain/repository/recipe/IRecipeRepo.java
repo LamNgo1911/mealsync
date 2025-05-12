@@ -11,4 +11,5 @@ public interface IRecipeRepo {
     Optional<Recipe> getRecipeById(UUID id);
     List<Recipe> getAllRecipes();
     void deleteRecipe(UUID id);
+    boolean existsByIngredientKey(String ingredientKey);
 }
