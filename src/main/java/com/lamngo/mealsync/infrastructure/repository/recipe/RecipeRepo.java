@@ -1,7 +1,7 @@
 package com.lamngo.mealsync.infrastructure.repository.recipe;
 
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
-import com.lamngo.mealsync.domain.repository.IRecipeRepo;
+import com.lamngo.mealsync.domain.repository.recipe.IRecipeRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 

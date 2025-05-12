@@ -1,7 +1,6 @@
 package com.lamngo.mealsync.infrastructure.security;
 
-import com.lamngo.mealsync.domain.repository.IUserRepo;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.lamngo.mealsync.domain.repository.user.IUserRepo;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;

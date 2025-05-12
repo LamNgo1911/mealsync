@@ -7,7 +7,7 @@ import com.lamngo.mealsync.application.mapper.user.UserMapper;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.domain.model.user.UserRole;
 import com.lamngo.mealsync.domain.model.user.User;
-import com.lamngo.mealsync.domain.repository.IUserRepo;
+import com.lamngo.mealsync.domain.repository.user.IUserRepo;
 import com.lamngo.mealsync.infrastructure.security.JwtTokenProvider;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
