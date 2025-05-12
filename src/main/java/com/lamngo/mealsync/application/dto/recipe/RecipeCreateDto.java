@@ -35,4 +35,20 @@ public class RecipeCreateDto {
     @URL(message = "Image URL must be a valid URL")
     @Size(max = 2048, message = "Image URL cannot exceed 2048 characters")
     private String imageUrl;
+
+    @NotBlank(message = "Ingredient key cannot be blank")
+    @Size(max = 255, message = "Ingredient key cannot exceed 255 characters")
+    private String ingredientKey;
+
+    @NotBlank(message = "Description cannot be blank")
+    @Size(max = 500, message = "Description cannot exceed 500 characters")
+    private String description;
+
+    private Integer preparationTime;
+    private Integer cookingTime;
+    private Integer totalTime;
+    private Integer servings;
+    private String difficulty;
+    private List<String> tags;
+    private String source;
 }

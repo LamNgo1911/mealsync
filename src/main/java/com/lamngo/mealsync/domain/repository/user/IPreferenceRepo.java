@@ -1,4 +1,4 @@
-package com.lamngo.mealsync.domain.repository;
+package com.lamngo.mealsync.domain.repository.user;
 
 import com.lamngo.mealsync.domain.model.user.UserPreference;
 

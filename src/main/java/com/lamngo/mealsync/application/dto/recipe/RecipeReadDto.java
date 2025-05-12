@@ -20,4 +20,13 @@ public class RecipeReadDto {
     private String instructions;
     private String cuisine;
     private String imageUrl;
+    private String ingredientKey;
+    private String description;
+    private Integer preparationTime;
+    private Integer cookingTime;
+    private Integer totalTime;
+    private Integer servings;
+    private String difficulty;
+    private List<String> tags;
+    private String source;
 }

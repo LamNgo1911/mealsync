@@ -2,9 +2,9 @@ package com.lamngo.mealsync.application.service.AI;
 
 import com.lamngo.mealsync.domain.model.recipe.RecipeIngredient;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
-import com.lamngo.mealsync.domain.repository.IRecipeRepo;
+import com.lamngo.mealsync.domain.repository.recipe.IRecipeIngredient;
+import com.lamngo.mealsync.domain.repository.recipe.IRecipeRepo;
 import com.lamngo.mealsync.presentation.error.GeminiServiceException;
-import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import okhttp3.*;
 import org.json.JSONObject;
@@ -48,6 +48,9 @@ public class GeminiService {
 
     @Autowired
     private IRecipeRepo recipeRepo;
+
+    @Autowired
+    private IRecipeIngredient recipeIngredientRepo;
 
     public static void setApiKey(String key) {
         // apiKey is not used anymore, consider removing this method
@@ -187,16 +190,13 @@ public class GeminiService {
                                     ingredient.setUnit(ingObj.optString("unit", ""));
                                     ingredient.setRecipe(recipe);
 
-
-
-
                                     ingredientList.add(ingredient);
                                 }
                                 recipe.setIngredients(ingredientList);
                             }
                         }
-                        // Save the recipe to the database
-                        recipeRepo.createRecipe(recipe);
+                        // Save the recipe (cascades to ingredients)
+                        recipe = recipeRepo.createRecipe(recipe);
                         recipes.add(recipe);
                     }
                     // Convert to List<RecipeReadDto>

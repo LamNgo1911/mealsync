@@ -5,7 +5,7 @@ import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeUpdateDto;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeMapper;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
-import com.lamngo.mealsync.domain.repository.IRecipeRepo;
+import com.lamngo.mealsync.domain.repository.recipe.IRecipeRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 public class RecipeService implements IRecipeService {

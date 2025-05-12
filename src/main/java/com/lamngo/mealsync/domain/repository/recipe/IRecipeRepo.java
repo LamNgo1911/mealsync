@@ -1,4 +1,4 @@
-package com.lamngo.mealsync.domain.repository;
+package com.lamngo.mealsync.domain.repository.recipe;
 
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 

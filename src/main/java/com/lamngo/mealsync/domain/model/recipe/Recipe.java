@@ -36,7 +36,7 @@ public class Recipe {
 
     @NotBlank(message = "Instructions cannot be blank")
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String instructions;
 
     @NotBlank(message = "Cuisine cannot be blank")
