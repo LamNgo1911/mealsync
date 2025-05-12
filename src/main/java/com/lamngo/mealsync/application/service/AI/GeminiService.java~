@@ -186,10 +186,6 @@ public class GeminiService {
                                     ingredient.setQuantity(ingObj.optString("quantity", "1"));  // Map quantity as a String
                                     ingredient.setUnit(ingObj.optString("unit", ""));
                                     ingredient.setRecipe(recipe);
-
-
-
-
                                     ingredientList.add(ingredient);
                                 }
                                 recipe.setIngredients(ingredientList);

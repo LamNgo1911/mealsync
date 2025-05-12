@@ -23,7 +23,4 @@ public class RecipeIngredientCreateDto {
 
     @Size(max = 50, message = "Unit cannot exceed 50 characters")
     private String unit; // Optional field
-
-    @Size(max = 150, message = "Preparation note cannot exceed 150 characters")
-    private String preparationNote; // Optional field
 }

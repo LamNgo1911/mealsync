@@ -39,10 +39,6 @@ public class RecipeIngredient {
     @Column(length = 50)
     private String unit;
 
-    @Size(max = 150, message = "Preparation note cannot exceed 150 characters")
-    @Column(length = 150)
-    private String preparationNote;
-
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -62,7 +58,6 @@ public class RecipeIngredient {
                 ", name='" + name + '\'' +
                 ", quantity='" + quantity + '\'' +
                 ", unit='" + unit + '\'' +
-                ", preparationNote='" + preparationNote + '\'' +
                 '}';
     }
 }
