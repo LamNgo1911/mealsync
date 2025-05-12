@@ -101,5 +101,18 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errorResponseEntity, HttpStatus.FORBIDDEN);
     }
 
+    @ExceptionHandler(GeminiServiceException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public ResponseEntity<ErrorResponseEntity> handleGeminiServiceException(GeminiServiceException ex) {
+        ErrorEntity errorEntity = ErrorEntity.builder()
+                .field("GeminiService")
+                .message(ex.getMessage())
+                .build();
 
+        ErrorResponseEntity errorResponseEntity = ErrorResponseEntity.builder()
+                .errors(List.of(errorEntity))
+                .build();
+
+        return new ResponseEntity<>(errorResponseEntity, HttpStatus.BAD_GATEWAY);
+    }
 }

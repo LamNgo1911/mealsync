@@ -2,6 +2,8 @@ package com.lamngo.mealsync.application.service.AI;
 
 import com.lamngo.mealsync.domain.model.recipe.RecipeIngredient;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
+import com.lamngo.mealsync.presentation.error.GeminiServiceException;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import okhttp3.*;
 import org.json.JSONObject;
@@ -12,10 +14,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
 import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeMapper;
@@ -45,114 +51,137 @@ public class GeminiService {
 
     /**
      * Generates a list of recipes using Gemini based on ingredients and user preferences.
-     * @param ingredients List of ingredient names
+     *
+     * @param ingredients    List of ingredient names
      * @param userPreference UserPreference object
      * @return Recipes as a list of RecipeReadDto objects
-     * @throws IOException on network/API errors
      */
-    public List<RecipeReadDto> generateRecipes(List<String> ingredients, UserPreference userPreference) throws IOException {
-        if (ingredients == null || ingredients.isEmpty()) {
-            logger.warn("Ingredient list is empty or null");
-            throw new IllegalArgumentException("Ingredient list cannot be empty");
-        }
-        if (userPreference == null) {
-            userPreference = new UserPreference(); // or handle as needed
-        }
-        if (geminiApiBaseUrl == null || !geminiApiBaseUrl.startsWith("https://") || geminiApiBaseUrl.contains("YOUR_GEMINI_API_KEY")
-            || geminiApiKey == null || geminiApiKey.isEmpty() || geminiApiKey.equals("YOUR_GEMINI_API_KEY")) {
-            logger.error("GEMINI_API_BASE_URL or GEMINI_API_KEY is not set properly. Check your env.properties file.");
-            throw new IllegalStateException("Please set GEMINI_API_BASE_URL and GEMINI_API_KEY in env.properties");
-        }
-        String userPrefString = userPreference.toString(); // You may want to customize this
-        String prompt = "Given these ingredients: " + String.join(", ", ingredients) +
-                ". And these user preferences: " + userPrefString +
-                ". Suggest 5 creative recipes in JSON array format, each with fields: name, instructions, cuisine, imageUrl, ingredientKey. Respond with only the JSON array.";
 
-        JSONObject requestBody = new JSONObject();
-        requestBody.put("contents", new JSONArray()
-                .put(new JSONObject().put("parts", new JSONArray()
-                        .put(new JSONObject().put("text", prompt)))));
-
-        RequestBody body = RequestBody.create(
-                requestBody.toString(),
-                MediaType.parse("application/json")
-        );
-
-        String fullUrl = geminiApiBaseUrl + "?key=" + geminiApiKey;
-        Request request = new Request.Builder()
-                .url(fullUrl)
-                .post(body)
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                logger.error("Gemini API call failed: HTTP {} - {}", response.code(), response.message());
-                throw new IOException("Gemini API call failed: HTTP " + response.code() + " - " + response.message());
+    public List<RecipeReadDto> generateRecipes(List<String> ingredients, UserPreference userPreference) {
+        try {
+            if (ingredients == null || ingredients.isEmpty()) {
+                logger.warn("Ingredient list is empty or null");
+                throw new IllegalArgumentException("Ingredient list cannot be empty");
             }
-            String responseBody = response.body() != null ? response.body().string() : null;
-            if (responseBody == null) {
-                logger.error("Empty response from Gemini API");
-                throw new IOException("Empty response from Gemini API");
+            if (userPreference == null) {
+                userPreference = new UserPreference(); // or handle as needed
             }
-            try {
-                JSONObject json = new JSONObject(responseBody);
-                if (!json.has("candidates") || json.getJSONArray("candidates").isEmpty()) {
-                    logger.error("No candidates returned from Gemini API");
-                    throw new IOException("No candidates returned from Gemini API");
-                }
-                JSONObject candidate = json.getJSONArray("candidates").getJSONObject(0);
-                if (!candidate.has("content")) {
-                    logger.error("Malformed Gemini API response: missing content");
-                    throw new IOException("Malformed Gemini API response: missing content");
-                }
-                JSONObject content = candidate.getJSONObject("content");
-                if (!content.has("parts") || content.getJSONArray("parts").isEmpty()) {
-                    logger.error("Malformed Gemini API response: missing parts");
-                    throw new IOException("Malformed Gemini API response: missing parts");
-                }
-                JSONObject part = content.getJSONArray("parts").getJSONObject(0);
-                if (!part.has("text")) {
-                    logger.error("Malformed Gemini API response: missing text");
-                    throw new IOException("Malformed Gemini API response: missing text");
-                }
-                String recipesJson = part.getString("text").trim();
-                // Parse JSON array of recipes
-                JSONArray recipesArray = new JSONArray(recipesJson);
-                List<Recipe> recipes = new ArrayList<>();
-                for (int i = 0; i < recipesArray.length(); i++) {
-                    JSONObject obj = recipesArray.getJSONObject(i);
-                    Recipe recipe = new Recipe();
-                    recipe.setName(obj.optString("name"));
-                    recipe.setInstructions(obj.optString("instructions"));
-                    recipe.setCuisine(obj.optString("cuisine"));
-                    recipe.setImageUrl(obj.optString("imageUrl", null));
-                    recipe.setIngredientKey(obj.optString("ingredientKey", null));
 
-                    // Optimize: parse ingredients array only if present and not empty
-                    if (obj.has("ingredients") && !obj.isNull("ingredients")) {
-                        JSONArray ingredientsArray = obj.getJSONArray("ingredients");
-                        if (!ingredientsArray.isEmpty()) {
-                            List<RecipeIngredient> ingredientList = new ArrayList<>(ingredientsArray.length());
-                            for (int j = 0; j < ingredientsArray.length(); j++) {
-                                JSONObject ingObj = ingredientsArray.getJSONObject(j);
-                                RecipeIngredient ingredient = new RecipeIngredient();
-                                ingredient.setName(ingObj.optString("name"));
-                                ingredient.setQuantity(ingObj.optDouble("quantity", 1.0));
-                                ingredient.setUnit(ingObj.optString("unit", ""));
-                                ingredient.setRecipe(recipe);
-                                ingredientList.add(ingredient);
-                            }
-                            recipe.setIngredients(ingredientList);
-                        }
+            if (geminiApiBaseUrl == null || !geminiApiBaseUrl.startsWith("https://")
+                    || geminiApiKey == null || geminiApiKey.isEmpty() ) {
+                logger.error("GEMINI_API_BASE_URL or GEMINI_API_KEY is not set properly. Check your env.properties file.");
+                throw new IllegalStateException("Please set GEMINI_API_BASE_URL and GEMINI_API_KEY in env.properties");
+            }
+
+            String prompt = "Given these ingredients: " + String.join(", ", ingredients) +
+                    ". And these user preferences: dietary restrictions: " + userPreference.getDietaryRestrictions() +
+                    ", favorite cuisines: " + userPreference.getFavoriteCuisines() +
+                    ", disliked ingredients: " + userPreference.getDislikedIngredients() + "." +
+                    " Generate exactly 5 creative recipes and respond with ONLY a valid JSON array. Do not include any text or explanation. Each recipe should have the following fields: " +
+                    "name, instructions, cuisine, imageUrl, ingredientKey, description, preparationTime, cookingTime, totalTime, servings, difficulty, tags, " +
+                    "and ingredients (with name, quantity, unit).";
+
+
+
+            JSONObject requestBody = new JSONObject();
+            requestBody.put("contents", new JSONArray()
+                    .put(new JSONObject().put("parts", new JSONArray()
+                            .put(new JSONObject().put("text", prompt)))));
+
+            RequestBody body = RequestBody.create(
+                    requestBody.toString(),
+                    MediaType.parse("application/json")
+            );
+
+            String fullUrl = geminiApiBaseUrl + "?key=" + geminiApiKey;
+            Request request = new Request.Builder()
+                    .url(fullUrl)
+                    .post(body)
+                    .build();
+            logger.info("Sending request to Gemini API: {}", request);
+            try (Response response = client.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    logger.error("Gemini API call failed: HTTP {} - {}", response.code(), response.message());
+                    throw new IOException("Gemini API call failed: HTTP " + response.code() + " - " + response.message());
+                }
+                String responseBody = response.body() != null ? response.body().string() : null;
+                if (responseBody == null) {
+                    logger.error("Empty response from Gemini API");
+                    throw new IOException("Empty response from Gemini API");
+                }
+                try {
+                    JSONObject json = new JSONObject(responseBody);
+                    if (!json.has("candidates") || json.getJSONArray("candidates").isEmpty()) {
+                        logger.error("No candidates returned from Gemini API");
+                        throw new IOException("No candidates returned from Gemini API");
                     }
-                    recipes.add(recipe);
+                    JSONObject candidate = json.getJSONArray("candidates").getJSONObject(0);
+                    if (!candidate.has("content")) {
+                        logger.error("Malformed Gemini API response: missing content");
+                        throw new IOException("Malformed Gemini API response: missing content");
+                    }
+                    JSONObject content = candidate.getJSONObject("content");
+                    if (!content.has("parts") || content.getJSONArray("parts").isEmpty()) {
+                        logger.error("Malformed Gemini API response: missing parts");
+                        throw new IOException("Malformed Gemini API response: missing parts");
+                    }
+                    JSONObject part = content.getJSONArray("parts").getJSONObject(0);
+                    if (!part.has("text")) {
+                        logger.error("Malformed Gemini API response: missing text");
+                        throw new IOException("Malformed Gemini API response: missing text");
+                    }
+                    String recipesJson = part.getString("text").trim();
+
+                    // Extract the valid JSON array using regex if the response contains extra text
+                    Pattern jsonArrayPattern = Pattern.compile("(\\[.*])", Pattern.DOTALL);
+                    Matcher matcher = jsonArrayPattern.matcher(recipesJson);
+                    if (matcher.find()) {
+                        recipesJson = matcher.group(1);
+                    } else {
+                        throw new IOException("No valid JSON array found in Gemini response");
+                    }
+
+                    // Parse JSON array of recipes
+                    JSONArray recipesArray = new JSONArray(recipesJson);
+                    List<Recipe> recipes = new ArrayList<>();
+                    for (int i = 0; i < recipesArray.length(); i++) {
+                        JSONObject obj = recipesArray.getJSONObject(i);
+                        Recipe recipe = new Recipe();
+                        recipe.setName(obj.optString("name"));
+                        recipe.setInstructions(obj.optString("instructions"));
+                        recipe.setCuisine(obj.optString("cuisine"));
+                        recipe.setImageUrl(obj.optString("imageUrl", null));
+                        recipe.setIngredientKey(obj.optString("ingredientKey", null));
+
+                        // Optimize: parse ingredients array only if present and not empty
+                        if (obj.has("ingredients") && !obj.isNull("ingredients")) {
+                            JSONArray ingredientsArray = obj.getJSONArray("ingredients");
+                            if (!ingredientsArray.isEmpty()) {
+                                List<RecipeIngredient> ingredientList = new ArrayList<>(ingredientsArray.length());
+                                for (int j = 0; j < ingredientsArray.length(); j++) {
+                                    JSONObject ingObj = ingredientsArray.getJSONObject(j);
+                                    RecipeIngredient ingredient = new RecipeIngredient();
+                                    ingredient.setName(ingObj.optString("name"));
+                                    ingredient.setQuantity(ingObj.optString("quantity", "1"));  // Map quantity as a String
+                                    ingredient.setUnit(ingObj.optString("unit", ""));
+                                    ingredient.setRecipe(recipe);
+                                    ingredientList.add(ingredient);
+                                }
+                                recipe.setIngredients(ingredientList);
+                            }
+                        }
+                        recipes.add(recipe);
+                    }
+                    // Convert to List<RecipeReadDto>
+                    return recipeMapper.toRecipeReadDtoList(recipes);
+                } catch (JSONException e) {
+                    logger.error("Failed to parse Gemini API response: {}", e.getMessage());
+                    throw new IOException("Failed to parse Gemini API response: " + e.getMessage(), e);
                 }
-                // Convert to List<RecipeReadDto>
-                return recipeMapper.toRecipeReadDtoList(recipes);
-            } catch (org.json.JSONException e) {
-                logger.error("Failed to parse Gemini API response: {}", e.getMessage());
-                throw new IOException("Failed to parse Gemini API response: " + e.getMessage(), e);
             }
+        } catch (IOException | org.json.JSONException e) {
+            logger.error("Error generating recipes from Gemini API", e);
+            throw new GeminiServiceException("Failed to generate recipes from Gemini API", e);
         }
     }
 }

@@ -2,7 +2,6 @@ package com.lamngo.mealsync.domain.model.recipe;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -31,9 +30,10 @@ public class RecipeIngredient {
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Positive(message = "Quantity must be positive")
-    @Column(nullable = false)
-    private double quantity;
+    @NotBlank(message = "Quantity cannot be blank")
+    @Size(max = 50, message = "Quantity cannot exceed 50 characters")
+    @Column(nullable = false, length = 50)
+    private String quantity;  // String to support "1", "2 1/2", "a pinch", etc.
 
     @Size(max = 50, message = "Unit cannot exceed 50 characters")
     @Column(length = 50)
@@ -46,14 +46,13 @@ public class RecipeIngredient {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        RecipeIngredient that = (RecipeIngredient) o;
+        if (!(o instanceof RecipeIngredient that)) return false;
         return id != null && Objects.equals(id, that.id);
     }
 
     @Override
     public int hashCode() {
-        return getClass().hashCode();
+        return Objects.hashCode(id);
     }
 
     @Override
@@ -61,8 +60,9 @@ public class RecipeIngredient {
         return "RecipeIngredient{" +
                 "id=" + id +
                 ", name='" + name + '\'' +
-                ", quantity=" + quantity +
+                ", quantity='" + quantity + '\'' +
                 ", unit='" + unit + '\'' +
+                ", preparationNote='" + preparationNote + '\'' +
                 '}';
     }
 }
