@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,7 +18,7 @@ public class RecipeReadDto {
     private UUID id;
     private String name;
     private List<RecipeIngredientReadDto> ingredients;
-    private String instructions;
+    private List<String> instructions;
     private String cuisine;
     private String imageUrl;
     private String ingredientKey;
@@ -29,4 +30,6 @@ public class RecipeReadDto {
     private String difficulty;
     private List<String> tags;
     private String source;
+    private Instant createdAt;
+    private Instant updatedAt;
 }
