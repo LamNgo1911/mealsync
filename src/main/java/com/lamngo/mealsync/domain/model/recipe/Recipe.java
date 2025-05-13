@@ -34,10 +34,12 @@ public class Recipe {
     @NotEmpty(message = "Ingredients list cannot be empty")
     private List<RecipeIngredient> ingredients = new ArrayList<>();
 
-    @NotBlank(message = "Instructions cannot be blank")
-    @Lob
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String instructions;
+    @ElementCollection
+    @CollectionTable(name = "recipe_instructions", joinColumns = @JoinColumn(name = "recipe_id"))
+    @Column(name = "instruction", columnDefinition = "TEXT")
+    @Size(min = 1, message = "At least one instruction step is required")
+    private List<String> instructions = new ArrayList<>();
+
 
     @NotBlank(message = "Cuisine cannot be blank")
     @Size(max = 50, message = "Cuisine cannot exceed 50 characters")

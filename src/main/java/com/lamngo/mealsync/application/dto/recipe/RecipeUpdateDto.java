@@ -24,9 +24,8 @@ public class RecipeUpdateDto {
     @NotEmpty(message = "Ingredients list cannot be empty if provided")
     private List<RecipeIngredientReadDto> ingredients;
 
-    @NotBlank(message = "Instructions cannot be blank if provided")
-    @Size(max = 5000, message = "Instructions cannot exceed 5000 characters")
-    private String instructions;
+    @NotEmpty(message = "Instructions cannot be empty if provided")
+    private List<String> instructions;
 
     @NotBlank(message = "Cuisine cannot be blank if provided")
     @Size(max = 50, message = "Cuisine cannot exceed 50 characters")

@@ -15,5 +15,4 @@ public interface RecipeJpaRepo extends JpaRepository<Recipe, UUID> {
     void deleteById(UUID id);
     List<Recipe> findAll();
     Optional<Recipe> findByIngredientKey(String ingredientKey);
-    boolean existsByIngredientKey(String ingredientKey);
 }

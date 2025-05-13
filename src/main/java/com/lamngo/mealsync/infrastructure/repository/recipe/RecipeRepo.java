@@ -35,7 +35,8 @@ public class RecipeRepo implements IRecipeRepo {
         _recipeJpaRepo.deleteById(id);
     }
 
-    public boolean existsByIngredientKey(String ingredientKey) {
-        return _recipeJpaRepo.existsByIngredientKey(ingredientKey);
+    @Override
+    public Optional<Recipe> findByIngredientKey(String ingredientKey) {
+        return _recipeJpaRepo.findByIngredientKey(ingredientKey);
     }
 }

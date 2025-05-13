@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Optional;
 
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
@@ -85,10 +86,8 @@ public class GeminiService {
                     ", favorite cuisines: " + userPreference.getFavoriteCuisines() +
                     ", disliked ingredients: " + userPreference.getDislikedIngredients() + "." +
                     " Generate exactly 5 creative recipes and respond with ONLY a valid JSON array. Do not include any text or explanation. Each recipe should have the following fields: " +
-                    "name, instructions, cuisine, imageUrl, ingredientKey, description, preparationTime, cookingTime, totalTime, servings, difficulty, tags, " +
+                    "name, instructions (as a string array, one step per item), cuisine, imageUrl, description, preparationTime, cookingTime, totalTime, servings, difficulty, tags, " +
                     "and ingredients (with name, quantity, unit).";
-
-
 
             JSONObject requestBody = new JSONObject();
             requestBody.put("contents", new JSONArray()
@@ -138,65 +137,94 @@ public class GeminiService {
                         throw new IOException("Malformed Gemini API response: missing text");
                     }
                     String recipesJson = part.getString("text").trim();
-                    System.out.println("Gemini API response: " + recipesJson);
 
                     // Extract the valid JSON array using regex if the response contains extra text
                     Pattern jsonArrayPattern = Pattern.compile("(\\[.*])", Pattern.DOTALL);
                     Matcher matcher = jsonArrayPattern.matcher(recipesJson);
                     if (matcher.find()) {
                         recipesJson = matcher.group(1);
+
                     } else {
                         throw new IOException("No valid JSON array found in Gemini response");
                     }
 
                     // Parse JSON array of recipes
                     JSONArray recipesArray = new JSONArray(recipesJson);
+                    // printout the JSON array for debugging
+                    for (int i = 0; i < recipesArray.length(); i++) {
+                        logger.info("Recipe {}: {}", i + 1, recipesArray.getJSONObject(i).toString(2));
+                    }
                     List<Recipe> recipes = new ArrayList<>();
                     for (int i = 0; i < recipesArray.length(); i++) {
                         JSONObject obj = recipesArray.getJSONObject(i);
-                        Recipe recipe = new Recipe();
-                        recipe.setName(obj.optString("name"));
-                        recipe.setInstructions(obj.optString("instructions"));
-                        recipe.setCuisine(obj.optString("cuisine"));
-                        recipe.setImageUrl(obj.optString("imageUrl", null));
-                        recipe.setIngredientKey(obj.optString("ingredientKey", null));
-                        recipe.setDescription(obj.optString("description", ""));
-                        recipe.setPreparationTime(obj.has("preparationTime") && !obj.isNull("preparationTime") ? obj.optInt("preparationTime", 0) : 0);
-                        recipe.setCookingTime(obj.has("cookingTime") && !obj.isNull("cookingTime") ? obj.optInt("cookingTime", 0) : 0);
-                        recipe.setTotalTime(obj.has("totalTime") && !obj.isNull("totalTime") ? obj.optInt("totalTime", 0) : 0);
-                        recipe.setServings(obj.has("servings") && !obj.isNull("servings") ? obj.optInt("servings", 1) : 1);
-                        recipe.setDifficulty(obj.optString("difficulty", ""));
-                        // Tags
-                        List<String> tags = new ArrayList<>();
-                        if (obj.has("tags") && !obj.isNull("tags")) {
-                            JSONArray tagsArray = obj.getJSONArray("tags");
-                            for (int t = 0; t < tagsArray.length(); t++) {
-                                tags.add(tagsArray.optString(t, ""));
-                            }
+                        String recipeName = obj.optString("name", null);
+                        String ingredientKey = generateIngredientKey(recipeName);
+
+                        if (ingredientKey == null || ingredientKey.isBlank()) {
+                            logger.warn("Skipping recipe due to missing ingredientKey");
+                            continue;
                         }
-                        recipe.setTags(tags);
-                        // Source (optional, fallback to "AI")
-                        recipe.setSource(obj.optString("source", "AI"));
-                        // Ingredients
-                        if (obj.has("ingredients") && !obj.isNull("ingredients")) {
-                            JSONArray ingredientsArray = obj.getJSONArray("ingredients");
-                            if (!ingredientsArray.isEmpty()) {
-                                List<RecipeIngredient> ingredientList = new ArrayList<>(ingredientsArray.length());
+
+                        Optional<Recipe> existingRecipeOpt = recipeRepo.findByIngredientKey(ingredientKey);
+                        Recipe recipe;
+                        if (existingRecipeOpt.isPresent()) {
+                            logger.info("Recipe with ingredientKey '{}' already exists. Using existing recipe.", ingredientKey);
+                            recipe = existingRecipeOpt.get();
+
+                        } else {
+                            recipe = new Recipe();
+                            recipe.setName(recipeName);
+
+                            List<String> instructions = new ArrayList<>();
+                            if (obj.has("instructions") && !obj.isNull("instructions")) {
+                                JSONArray instArray = obj.getJSONArray("instructions");
+                                for (int k = 0; k < instArray.length(); k++) {
+                                    instructions.add(instArray.optString(k, ""));
+                                }
+                            }
+                            recipe.setInstructions(instructions);
+
+                            recipe.setCuisine(obj.optString("cuisine"));
+                            recipe.setImageUrl(obj.optString("imageUrl", null));
+                            recipe.setIngredientKey(ingredientKey);
+                            recipe.setDescription(obj.optString("description", ""));
+                            recipe.setPreparationTime(obj.optInt("preparationTime", 0));
+                            recipe.setCookingTime(obj.optInt("cookingTime", 0));
+                            recipe.setTotalTime(obj.optInt("totalTime", 0));
+                            recipe.setServings(obj.optInt("servings", 1));
+                            recipe.setDifficulty(obj.optString("difficulty", ""));
+
+                            // Tags
+                            List<String> tags = new ArrayList<>();
+                            if (obj.has("tags") && !obj.isNull("tags")) {
+                                JSONArray tagsArray = obj.getJSONArray("tags");
+                                for (int t = 0; t < tagsArray.length(); t++) {
+                                    tags.add(tagsArray.optString(t, ""));
+                                }
+                            }
+                            recipe.setTags(tags);
+
+                            recipe.setSource(obj.optString("source", "AI"));
+
+                            // Ingredients
+                            if (obj.has("ingredients") && !obj.isNull("ingredients")) {
+                                JSONArray ingredientsArray = obj.getJSONArray("ingredients");
+                                List<RecipeIngredient> ingredientList = new ArrayList<>();
                                 for (int j = 0; j < ingredientsArray.length(); j++) {
                                     JSONObject ingObj = ingredientsArray.getJSONObject(j);
                                     RecipeIngredient ingredient = new RecipeIngredient();
                                     ingredient.setName(ingObj.optString("name"));
-                                    ingredient.setQuantity(ingObj.optString("quantity", "1"));  // Map quantity as a String
+                                    ingredient.setQuantity(ingObj.optString("quantity", "1"));
                                     ingredient.setUnit(ingObj.optString("unit", ""));
                                     ingredient.setRecipe(recipe);
-
                                     ingredientList.add(ingredient);
                                 }
                                 recipe.setIngredients(ingredientList);
                             }
+
+                            // Save new recipe to DB
+                            recipe = recipeRepo.createRecipe(recipe);
                         }
-                        // Save the recipe (cascades to ingredients)
-                        recipe = recipeRepo.createRecipe(recipe);
                         recipes.add(recipe);
                     }
                     // Convert to List<RecipeReadDto>
@@ -210,5 +238,10 @@ public class GeminiService {
             logger.error("Error generating recipes from Gemini API", e);
             throw new GeminiServiceException("Failed to generate recipes from Gemini API", e);
         }
+    }
+
+    private String generateIngredientKey(String recipeName) {
+        if (recipeName == null) return null;
+        return recipeName.trim().toLowerCase().replaceAll("[^a-z0-9\\s]", "").replaceAll("\\s+", "_");
     }
 }
