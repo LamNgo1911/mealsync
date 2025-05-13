@@ -135,6 +135,13 @@
             <artifactId>json</artifactId>
             <version>20230227</version>
         </dependency>
+        <!-- AWS SDK for S3 integration -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.31.41</version>
+            <scope>compile</scope>
+        </dependency>
     </dependencies>
 
     <build>
