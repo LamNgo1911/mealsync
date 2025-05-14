@@ -9,13 +9,14 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
-import java.io.InputStream;
-import java.net.URL;
+import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.UUID;
+import java.nio.file.Path;
+
 
 @Service
 @Transactional
@@ -38,23 +39,28 @@ public class S3Service {
                 .build();
     }
 
-    public String uploadImageFromUrl(String imageUrl) {
-        try (InputStream in = new URL(imageUrl).openStream()) {
-            String key = "images/" + UUID.randomUUID() + ".jpg";
-            byte[] imageBytes = in.readAllBytes();
+    public String uploadImage(byte[] imageBytes, String imageName) {
+        try {
+            Path filePath = Files.createTempFile(imageName, ".png");
+            Files.write(filePath, imageBytes);
 
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(bucketName)
-                    .key(key)
-                    .contentType("image/jpeg")
+                    .key("recipes/" + imageName + ".png")
+                    .contentType("image/png")
+                    .acl(ObjectCannedACL.PUBLIC_READ)
                     .build();
 
-            s3Client.putObject(putObjectRequest, RequestBody.fromBytes(imageBytes));
+            s3Client.putObject(putObjectRequest, RequestBody.fromFile(filePath));
 
-            return "https://" + bucketName + ".s3.amazonaws.com/" + key;
+            Files.deleteIfExists(filePath);
 
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to upload image to S3", e);
+            return "https://" + bucketName + ".s3.amazonaws.com/recipes/" + imageName + ".png";
+        } catch (IOException | S3Exception e) {
+            // Log the error (replace with your logging framework)
+            System.err.println("Error uploading image to S3: " + e.getMessage());
+            throw new RuntimeException("Failed to upload image", e);
         }
     }
+
 }
