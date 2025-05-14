@@ -142,6 +142,11 @@
             <version>2.31.41</version>
             <scope>compile</scope>
         </dependency>
+        <!-- WebClient for API calls -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
