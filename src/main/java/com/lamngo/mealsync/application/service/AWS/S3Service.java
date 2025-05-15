@@ -54,7 +54,7 @@ public class S3Service {
             s3Client.putObject(putObjectRequest, RequestBody.fromFile(filePath));
 
             Files.deleteIfExists(filePath);
-
+            System.out.println("Image uploaded to S3: " + imageName);
             return "https://" + bucketName + ".s3.amazonaws.com/recipes/" + imageName + ".png";
         } catch (IOException | S3Exception e) {
             // Log the error (replace with your logging framework)
