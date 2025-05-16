@@ -3,6 +3,7 @@ package com.lamngo.mealsync.presentation.controller;
 import com.lamngo.mealsync.application.dto.recipe.PhotoRecipeRequest;
 import com.lamngo.mealsync.application.service.AI.ImageGeneratorService;
 import com.lamngo.mealsync.application.service.AWS.S3Service;
+import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,14 +25,16 @@ public class PhotoController {
     }
 
     @PostMapping("/generate")
-    public ResponseEntity<String> generateAndUploadImage(@RequestBody PhotoRecipeRequest request) {
+    public ResponseEntity<SuccessResponseEntity<String>>generateAndUploadImage(@RequestBody PhotoRecipeRequest request) {
 
         String apiResponse = imageGeneratorService.generateImage(request.getRecipeName(), request.getIngredients(), request.getDescription());
         byte[] imageBytes = decodeBase64ToBytes(apiResponse);
 
         String imageUrl = s3UploadService.uploadImage(imageBytes, request.getRecipeName());
+        SuccessResponseEntity<String> body = new SuccessResponseEntity<>();
+        body.setData(imageUrl);
 
-        return ResponseEntity.ok(imageUrl);
+        return ResponseEntity.ok(body);
     }
 
     private byte[] decodeBase64ToBytes(String base64) {

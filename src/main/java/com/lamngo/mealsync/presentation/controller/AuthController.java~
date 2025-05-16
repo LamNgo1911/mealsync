@@ -35,12 +35,9 @@ public class AuthController {
 
     // Anyone can log in
     @PostMapping("/login")
-    public ResponseEntity<SuccessResponseEntity<String>> login(@RequestBody @Valid UserLoginDto userLoginDto) {
+    public ResponseEntity<String> login(@RequestBody @Valid UserLoginDto userLoginDto) {
 
         String token = authService.login(userLoginDto);
-        SuccessResponseEntity<String> body = new SuccessResponseEntity<>();
-        body.setData(token);
-
-        return ResponseEntity.ok(body);
+        return ResponseEntity.ok(token);
     }
 }

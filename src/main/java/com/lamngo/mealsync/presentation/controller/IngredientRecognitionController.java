@@ -1,6 +1,7 @@
 package com.lamngo.mealsync.presentation.controller;
 
 import com.lamngo.mealsync.application.service.AI.IngredientRecognitionService;
+import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,8 +19,11 @@ public class IngredientRecognitionController {
     }
 
     @PostMapping("/detect")
-    public ResponseEntity<List<String>> recognizeIngredients(@RequestParam("image") MultipartFile image) {
+    public ResponseEntity<SuccessResponseEntity<List<String>>> recognizeIngredients(@RequestParam("image") MultipartFile image) {
         List<String> ingredients = ingredientRecognitionService.recognizeIngredients(image);
-        return ResponseEntity.ok(ingredients);
+        SuccessResponseEntity<List<String>> body = new SuccessResponseEntity<>();
+        body.setData(ingredients);
+
+        return ResponseEntity.ok(body);
     }
 }
