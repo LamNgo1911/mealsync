@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.application.service.AI;
 
+import com.lamngo.mealsync.presentation.error.ImageGeneratorServiceException;
 import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
@@ -43,43 +44,56 @@ public class ImageGeneratorService {
     }
 
     private String callStabilityAiAPI(String prompt) {
-        String response = webClient.post()
-                .bodyValue(Map.of(
-                        "text_prompts", List.of(Map.of("text", prompt)),
-                        "cfg_scale", 7,
-                        "height", 512,
-                        "width", 512,
-                        "samples", 1,
-                        "steps", 30
-                ))
-                .retrieve()
-                .bodyToMono(String.class)
-                .doOnError(error -> log.error("Stability AI error: ", error))
-                .onErrorResume(error -> Mono.empty())
-                .block();
+        try {
+            String response = webClient.post()
+                    .bodyValue(Map.of(
+                            "text_prompts", List.of(Map.of("text", prompt)),
+                            "cfg_scale", 7,
+                            "height", 512,
+                            "width", 512,
+                            "samples", 1,
+                            "steps", 30
+                    ))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .doOnError(error -> log.error("Stability AI error: ", error))
+                    .onErrorResume(error -> Mono.empty())
+                    .block();
 
-        // Parse JSON response and extract base64 string
-        if (response != null) {
+            if (response == null) {
+                throw new ImageGeneratorServiceException("Stability AI API call failed");
+            }
+
+            // Parse JSON response and extract base64 string
             JSONObject jsonResponse = new JSONObject(response);
             JSONArray artifacts = jsonResponse.getJSONArray("artifacts");
-            if (artifacts.length() > 0) {
-                return artifacts.getJSONObject(0).getString("base64");
-            } else {
-                throw new RuntimeException("No artifacts found in Stability AI response");
+
+            if (artifacts.length() == 0) {
+                throw new ImageGeneratorServiceException("No artifacts found in Stability AI response");
             }
-        } else {
-            return null;
+
+            return artifacts.getJSONObject(0).getString("base64");
+        } catch (Exception e) {
+            log.error("Image generation failed: {}", e.getMessage(), e);
+            throw new ImageGeneratorServiceException("Image generation failed", e);
         }
     }
 
     public String generateImage(String recipeName, List<String> ingredients, String description) {
+        if (recipeName == null || recipeName.isEmpty()) {
+            log.warn("Recipe name is empty or null");
+            throw new ImageGeneratorServiceException("Recipe name is empty or null");
+        }
+        if (ingredients == null) {
+            ingredients = List.of();
+        }
         String prompt = String.format(
                 "A high-quality food photography image of %s, served with ingredients like %s. Styled in a realistic kitchen or restaurant setting. %s",
                 recipeName,
                 String.join(", ", ingredients),
                 description
         );
-
         return callStabilityAiAPI(prompt);
     }
 }
+
