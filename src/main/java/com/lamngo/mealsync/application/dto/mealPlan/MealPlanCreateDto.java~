@@ -1,0 +1,4 @@
+package com.lamngo.mealsync.application.dto.mealPlan;
+
+public class MealPlanCreateDto {
+}
