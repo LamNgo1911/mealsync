@@ -125,5 +125,5 @@ public class GlobalExceptionHandler {
     private String extractServiceNameFromException(RuntimeException ex) {
         // Return simple class name as the service identifier
         return ex.getClass().getSimpleName().replace("Exception", "");
-    }
+    }}
 

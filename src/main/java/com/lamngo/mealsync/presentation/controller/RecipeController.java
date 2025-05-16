@@ -8,8 +8,10 @@ import com.lamngo.mealsync.application.service.AI.GeminiService;
 import com.lamngo.mealsync.application.service.recipe.RecipeService;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.presentation.error.BadRequestException;
+import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,7 +30,7 @@ public class RecipeController {
     }
 
     @PostMapping("/generate-recipes")
-    public ResponseEntity<List<RecipeReadDto>> generateRecipesFromIngredients(
+    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> generateRecipesFromIngredients(
             @RequestBody @Valid GenerateRecipeRequest request) {
         List<String> ingredients = request.getIngredients();
         UserPreference userPreference = request.getUserPreference();
@@ -37,32 +39,42 @@ public class RecipeController {
             throw new BadRequestException("Ingredient list cannot be empty");
         }
         List<RecipeReadDto> recipes = geminiService.generateRecipes(ingredients, userPreference);
-        return ResponseEntity.ok(recipes);
+        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
+        body.setData(recipes);
+        return ResponseEntity.ok(body);
     }
 
     // CRUD endpoints for RecipeService
     @PostMapping
-    public ResponseEntity<RecipeReadDto> createRecipe(@RequestBody @Valid RecipeCreateDto recipeCreateDto) {
+    public ResponseEntity<SuccessResponseEntity<RecipeReadDto>> createRecipe(@RequestBody @Valid RecipeCreateDto recipeCreateDto) {
         RecipeReadDto created = recipeService.createRecipe(recipeCreateDto);
-        return ResponseEntity.ok(created);
+        SuccessResponseEntity<RecipeReadDto> body = new SuccessResponseEntity<>();
+        body.setData(created);
+        return new ResponseEntity<>(body, HttpStatus.CREATED);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<RecipeReadDto> getRecipeById(@PathVariable("id") String id) {
+    public ResponseEntity<SuccessResponseEntity<RecipeReadDto>> getRecipeById(@PathVariable("id") String id) {
         RecipeReadDto recipe = recipeService.getRecipeById(UUID.fromString(id));
-        return ResponseEntity.ok(recipe);
+        SuccessResponseEntity<RecipeReadDto> body = new SuccessResponseEntity<>();
+        body.setData(recipe);
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping
-    public ResponseEntity<List<RecipeReadDto>> getAllRecipes() {
+    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> getAllRecipes() {
         List<RecipeReadDto> recipes = recipeService.getAllRecipes();
-        return ResponseEntity.ok(recipes);
+        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
+        body.setData(recipes);
+        return ResponseEntity.ok(body);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<RecipeReadDto> updateRecipe(@PathVariable("id") String id, @RequestBody @Valid RecipeUpdateDto updateDto) {
+    public ResponseEntity<SuccessResponseEntity<RecipeReadDto>> updateRecipe(@PathVariable("id") String id, @RequestBody @Valid RecipeUpdateDto updateDto) {
         RecipeReadDto updated = recipeService.updateRecipe(UUID.fromString(id), updateDto);
-        return ResponseEntity.ok(updated);
+        SuccessResponseEntity<RecipeReadDto> body = new SuccessResponseEntity<>();
+        body.setData(updated);
+        return ResponseEntity.ok(body);
     }
 
     @DeleteMapping("/{id}")
