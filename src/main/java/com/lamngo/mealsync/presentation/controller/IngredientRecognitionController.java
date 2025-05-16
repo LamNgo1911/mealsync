@@ -19,11 +19,7 @@ public class IngredientRecognitionController {
 
     @PostMapping("/detect")
     public ResponseEntity<List<String>> recognizeIngredients(@RequestParam("image") MultipartFile image) {
-        try {
-            List<String> ingredients = ingredientRecognitionService.recognizeIngredients(image);
-            return ResponseEntity.ok(ingredients);
-        } catch (IOException e) {
-            return ResponseEntity.badRequest().build();
-        }
+        List<String> ingredients = ingredientRecognitionService.recognizeIngredients(image);
+        return ResponseEntity.ok(ingredients);
     }
 }
