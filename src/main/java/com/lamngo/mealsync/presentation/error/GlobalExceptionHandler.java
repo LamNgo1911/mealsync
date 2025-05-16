@@ -101,11 +101,17 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errorResponseEntity, HttpStatus.FORBIDDEN);
     }
 
-    @ExceptionHandler(GeminiServiceException.class)
+    @ExceptionHandler({
+            GeminiServiceException.class,
+            ImageGeneratorServiceException.class,
+            IngredientRecognitionServiceException.class
+    })
     @ResponseStatus(HttpStatus.BAD_GATEWAY)
-    public ResponseEntity<ErrorResponseEntity> handleGeminiServiceException(GeminiServiceException ex) {
+    public ResponseEntity<ErrorResponseEntity> handleServiceExceptions(RuntimeException ex) {
+        String field = extractServiceNameFromException(ex);
+
         ErrorEntity errorEntity = ErrorEntity.builder()
-                .field("GeminiService")
+                .field(field)
                 .message(ex.getMessage())
                 .build();
 
@@ -115,4 +121,9 @@ public class GlobalExceptionHandler {
 
         return new ResponseEntity<>(errorResponseEntity, HttpStatus.BAD_GATEWAY);
     }
-}
+
+    private String extractServiceNameFromException(RuntimeException ex) {
+        // Return simple class name as the service identifier
+        return ex.getClass().getSimpleName().replace("Exception", "");
+    }
+
