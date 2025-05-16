@@ -1,6 +1,6 @@
 package com.lamngo.mealsync.infrastructure.repository.mealPlan;
 
-import com.lamngo.mealsync.domain.model.MealPlan;
+import com.lamngo.mealsync.domain.model.mealPlan.MealPlan;
 import com.lamngo.mealsync.domain.repository.IMealPlanRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;

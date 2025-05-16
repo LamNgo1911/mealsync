@@ -1,6 +1,6 @@
 package com.lamngo.mealsync.domain.repository;
 
-import com.lamngo.mealsync.domain.model.MealPlan;
+import com.lamngo.mealsync.domain.model.mealPlan.MealPlan;
 
 import java.util.List;
 import java.util.Optional;
