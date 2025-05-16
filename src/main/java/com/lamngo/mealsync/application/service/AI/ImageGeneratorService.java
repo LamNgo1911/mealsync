@@ -4,7 +4,6 @@ import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -26,14 +25,17 @@ public class ImageGeneratorService {
     @Value("${STABILITY_API_KEY}")
     private String stabilityApiKey;
 
+    @Value("${STABILITY_API_URL}")
+    private String stabilityApiUrl;
+
     @PostConstruct
     public void init() {
         ExchangeStrategies strategies = ExchangeStrategies.builder()
-                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(16 * 1024 * 1024)) // 16MB buffer size, adjust as needed
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
                 .build();
         this.webClient = WebClient.builder()
                 .exchangeStrategies(strategies)
-                .baseUrl("https://api.stability.ai/v1/generation/stable-diffusion-v1-6/text-to-image")
+                .baseUrl(stabilityApiUrl)
                 .defaultHeader("Authorization", "Bearer " + stabilityApiKey)
                 .defaultHeader("Accept", "application/json")
                 .defaultHeader("Content-Type", "application/json")

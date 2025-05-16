@@ -9,6 +9,8 @@ import com.lamngo.mealsync.domain.model.user.UserRole;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
 import com.lamngo.mealsync.infrastructure.security.JwtTokenProvider;
+import com.lamngo.mealsync.presentation.error.BadRequestException;
+import com.lamngo.mealsync.presentation.error.ResourceNotFoundException;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -44,7 +46,7 @@ public class AuthService implements IAuthService {
         // Check if the email already exists
         Optional<User> existingUser = _userRepo.findByEmail(userCreateDto.getEmail());
         if (existingUser.isPresent()) {
-            throw new RuntimeException("Email already exists");
+            throw new BadRequestException("Email already exists");
         }
 
         // Create a new user
@@ -78,7 +80,7 @@ public class AuthService implements IAuthService {
 
         // Validate email and password
         if (email == null || password == null) {
-            throw new RuntimeException("Email and password must not be null");
+            throw new BadRequestException("Email and password must not be null");
         }
 
         Authentication authentication = authenticationManager.authenticate(
@@ -86,7 +88,7 @@ public class AuthService implements IAuthService {
         );
 
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new RuntimeException("Invalid email or password");
+            throw new BadRequestException("Invalid email or password");
         }
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         // Generate JWT token
@@ -104,13 +106,13 @@ public class AuthService implements IAuthService {
         Optional<User> userOptional = _userRepo.findByEmail(email);
 
         if (userOptional.isEmpty()) {
-            throw new RuntimeException("User not found");
+            throw new ResourceNotFoundException("User not found");
         }
 
         User user = userOptional.get();
 
         if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
-            throw new RuntimeException("Old password is incorrect");
+            throw new BadRequestException("Old password is incorrect");
         }
 
         user.setPassword(passwordEncoder.encode(newPassword));
