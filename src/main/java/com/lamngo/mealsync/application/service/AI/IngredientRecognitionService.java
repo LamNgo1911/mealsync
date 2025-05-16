@@ -17,6 +17,7 @@ import java.util.List;
 
 @Service
 public class IngredientRecognitionService {
+
     public List<String> recognizeIngredients(MultipartFile imageFile) throws IOException {
 
         List<String> ingredients = new ArrayList<>();
