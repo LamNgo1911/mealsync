@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.domain.model;
 
+import com.lamngo.mealsync.domain.model.mealPlan.MealPlan;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import jakarta.persistence.*;
 import lombok.Getter;
