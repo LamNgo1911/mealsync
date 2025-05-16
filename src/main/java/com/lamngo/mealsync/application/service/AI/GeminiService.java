@@ -85,7 +85,7 @@ public class GeminiService {
                     ". And these user preferences: dietary restrictions: " + userPreference.getDietaryRestrictions() +
                     ", favorite cuisines: " + userPreference.getFavoriteCuisines() +
                     ", disliked ingredients: " + userPreference.getDislikedIngredients() + "." +
-                    " Generate exactly 5 creative recipes and respond with ONLY a valid JSON array. Do not include any text or explanation. Each recipe should have the following fields: " +
+                    " Generate exactly 2 creative recipes and respond with ONLY a valid JSON array. Do not include any text or explanation. Each recipe should have the following fields: " +
                     "name, instructions (as a string array, one step per item), cuisine, imageUrl, description, preparationTime, cookingTime, totalTime, servings, difficulty, tags, " +
                     "and ingredients (with name, quantity, unit).";
 

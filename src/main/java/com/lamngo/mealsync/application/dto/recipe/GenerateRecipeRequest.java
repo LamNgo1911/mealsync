@@ -12,8 +12,9 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class GenerateRecipeRequest {
-    @NotNull
-    @NotEmpty
+
+    @NotNull(message = "Ingredients list cannot be null")
+    @NotEmpty(message = "Ingredients list cannot be empty")
     private List<String> ingredients;
 
     private UserPreference userPreference;
