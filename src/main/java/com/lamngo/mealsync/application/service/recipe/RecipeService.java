@@ -3,9 +3,15 @@ package com.lamngo.mealsync.application.service.recipe;
 import com.lamngo.mealsync.application.dto.recipe.RecipeCreateDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeUpdateDto;
+import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
+import com.lamngo.mealsync.application.mapper.UserRecipeMapper;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeMapper;
+import com.lamngo.mealsync.domain.model.UserRecipe;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
+import com.lamngo.mealsync.domain.model.user.User;
+import com.lamngo.mealsync.domain.repository.IUserRecipeRepo;
 import com.lamngo.mealsync.domain.repository.recipe.IRecipeRepo;
+import com.lamngo.mealsync.domain.repository.user.IUserRepo;
 import com.lamngo.mealsync.presentation.error.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -19,11 +25,18 @@ import java.util.UUID;
 public class RecipeService implements IRecipeService {
     private final IRecipeRepo recipeRepo;
     private final RecipeMapper recipeMapper;
+    private final IUserRecipeRepo userRecipeRepo;
+    private final UserRecipeMapper userRecipeMapper;
+    private final IUserRepo userRepo; // Assuming you have a user repository
 
     @Autowired
-    public RecipeService(IRecipeRepo recipeRepo, RecipeMapper recipeMapper) {
+    public RecipeService(IRecipeRepo recipeRepo, RecipeMapper recipeMapper,
+                         IUserRecipeRepo userRecipeRepo, UserRecipeMapper userRecipeMapper, IUserRepo userRepo) {
         this.recipeRepo = recipeRepo;
         this.recipeMapper = recipeMapper;
+        this.userRecipeRepo = userRecipeRepo;
+        this.userRecipeMapper = userRecipeMapper;
+        this.userRepo = userRepo;
     }
 
     @Override
@@ -64,13 +77,18 @@ public class RecipeService implements IRecipeService {
     }
 
     @Override
-    public RecipeReadDto saveRecipe(UUID recipeId, UUID userId) {
+    public void addRecipeToUser(UUID userId, UUID recipeId) {
         Recipe recipe = recipeRepo.getRecipeById(recipeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Recipe not found with id: " + recipeId));
 
-        // Assuming there's a method to save the recipe for the user
-        // userRecipeRepo.saveUserRecipe(userId, recipe);
+        User user = userRepo.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
-        return recipeMapper.toRecipeReadDto(recipe);
+        UserRecipe userRecipe = new UserRecipe();
+        userRecipe.setUser(user);
+        userRecipe.setRecipe(recipe);
+
+        userRecipeRepo.saveUserRecipe(userRecipe);
     }
+
 }
