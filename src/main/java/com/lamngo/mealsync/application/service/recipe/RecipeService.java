@@ -6,6 +6,7 @@ import com.lamngo.mealsync.application.dto.recipe.RecipeUpdateDto;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeMapper;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import com.lamngo.mealsync.domain.repository.recipe.IRecipeRepo;
+import com.lamngo.mealsync.presentation.error.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,7 +38,7 @@ public class RecipeService implements IRecipeService {
     public RecipeReadDto getRecipeById(UUID id) {
         Optional<Recipe> recipeOpt = recipeRepo.getRecipeById(id);
         return recipeOpt.map(recipeMapper::toRecipeReadDto)
-                .orElseThrow(() -> new RuntimeException("Recipe not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Recipe not found with id: " + id));
     }
 
     @Override
@@ -50,7 +51,7 @@ public class RecipeService implements IRecipeService {
     @Transactional
     public RecipeReadDto updateRecipe(UUID id, RecipeUpdateDto recipeUpdateDto) {
         Recipe recipe = recipeRepo.getRecipeById(id)
-                .orElseThrow(() -> new RuntimeException("Recipe not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Recipe not found with id: " + id));
         recipeMapper.updateRecipeFromDto(recipeUpdateDto, recipe);
         Recipe updated = recipeRepo.createRecipe(recipe); // Assuming createRecipe acts as save/update
         return recipeMapper.toRecipeReadDto(updated);
@@ -60,5 +61,16 @@ public class RecipeService implements IRecipeService {
     @Transactional
     public void deleteRecipe(UUID id) {
         recipeRepo.deleteRecipe(id);
+    }
+
+    @Override
+    public RecipeReadDto saveRecipe(UUID recipeId, UUID userId) {
+        Recipe recipe = recipeRepo.getRecipeById(recipeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Recipe not found with id: " + recipeId));
+
+        // Assuming there's a method to save the recipe for the user
+        // userRecipeRepo.saveUserRecipe(userId, recipe);
+
+        return recipeMapper.toRecipeReadDto(recipe);
     }
 }

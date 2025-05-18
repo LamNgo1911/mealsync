@@ -1,6 +1,7 @@
 package com.lamngo.mealsync.domain.model.user;
 
 import com.lamngo.mealsync.domain.model.mealPlan.MealPlan;
+import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

@@ -9,7 +9,10 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+
+import com.lamngo.mealsync.domain.model.user.User;
 
 @Entity
 @Getter
