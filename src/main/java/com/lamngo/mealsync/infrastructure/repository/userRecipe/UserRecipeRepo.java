@@ -1,0 +1,30 @@
+package com.lamngo.mealsync.infrastructure.repository.userRecipe;
+
+import com.lamngo.mealsync.domain.model.UserRecipe;
+import com.lamngo.mealsync.domain.repository.IUserRecipeRepo;
+
+import java.util.List;
+import java.util.UUID;
+
+public class UserRecipeRepo implements IUserRecipeRepo {
+    private final UserRecipeJpaRepo userRecipeJpaRepo;
+
+    public UserRecipeRepo(UserRecipeJpaRepo userRecipeJpaRepo) {
+        this.userRecipeJpaRepo = userRecipeJpaRepo;
+    }
+
+    @Override
+    public void saveUserRecipe(UserRecipe userRecipe) {
+        userRecipeJpaRepo.save(userRecipe);
+    }
+
+    @Override
+    public List<UserRecipe> getUserRecipesByUserId(UUID userId) {
+        return userRecipeJpaRepo.findAllByUserId(userId);
+    }
+
+    @Override
+    public void deleteUserRecipe(UUID userRecipeId) {
+        userRecipeJpaRepo.deleteById(userRecipeId);
+    }
+}

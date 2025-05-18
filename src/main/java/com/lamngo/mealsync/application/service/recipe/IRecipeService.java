@@ -12,4 +12,5 @@ public interface IRecipeService {
     List<RecipeReadDto> getAllRecipes();
     RecipeReadDto updateRecipe(UUID id, RecipeUpdateDto recipeUpdateDto);
     void deleteRecipe(UUID id);
+    RecipeReadDto saveRecipe(UUID recipeId, UUID userId);
 }
