@@ -3,6 +3,8 @@ package com.lamngo.mealsync.application.service.recipe;
 import com.lamngo.mealsync.application.dto.recipe.RecipeCreateDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeUpdateDto;
+import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -12,5 +14,5 @@ public interface IRecipeService {
     List<RecipeReadDto> getAllRecipes();
     RecipeReadDto updateRecipe(UUID id, RecipeUpdateDto recipeUpdateDto);
     void deleteRecipe(UUID id);
-    RecipeReadDto saveRecipe(UUID recipeId, UUID userId);
+    void addRecipeToUser(UUID userId, UUID recipeId);
 }
