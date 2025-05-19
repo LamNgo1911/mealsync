@@ -4,12 +4,17 @@ import com.lamngo.mealsync.application.dto.recipe.GenerateRecipeRequest;
 import com.lamngo.mealsync.application.dto.recipe.RecipeCreateDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeUpdateDto;
+import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeCreateDto;
+import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
 import com.lamngo.mealsync.application.service.AI.GeminiService;
 import com.lamngo.mealsync.application.service.recipe.RecipeService;
+import com.lamngo.mealsync.domain.model.UserRecipe;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.presentation.error.BadRequestException;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +25,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/recipes")
 public class RecipeController {
-
+    private Logger logger = LoggerFactory.getLogger(RecipeController.class);
     private final GeminiService geminiService;
     private final RecipeService recipeService;
 
@@ -41,6 +46,17 @@ public class RecipeController {
         List<RecipeReadDto> recipes = geminiService.generateRecipes(ingredients, userPreference);
         SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
         body.setData(recipes);
+        return ResponseEntity.ok(body);
+    }
+
+    // Save recipe with user
+    @PostMapping("/save")
+    public ResponseEntity<SuccessResponseEntity<UserRecipeReadDto>> saveRecipeWithUser(@RequestBody @Valid
+            UserRecipeCreateDto userRecipeCreateDto) {
+        logger.info("Saving recipe with user: {}", userRecipeCreateDto);
+        UserRecipeReadDto userRecipeReadDto = recipeService.addRecipeToUser(userRecipeCreateDto.getUserId(), userRecipeCreateDto.getRecipeId());
+        SuccessResponseEntity<UserRecipeReadDto> body = new SuccessResponseEntity<>();
+        body.setData(userRecipeReadDto);
         return ResponseEntity.ok(body);
     }
 

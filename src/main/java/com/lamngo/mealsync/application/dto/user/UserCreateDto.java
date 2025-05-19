@@ -10,7 +10,7 @@ import lombok.Builder;         // Added
 import lombok.Data;            // Added (includes @Getter, @Setter, @ToString, @EqualsAndHashCode)
 import lombok.NoArgsConstructor;  // Added
 
-@Data // Replaces @Getter and @Setter, adds more
+@Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

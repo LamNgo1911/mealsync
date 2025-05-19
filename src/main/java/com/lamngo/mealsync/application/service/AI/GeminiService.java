@@ -228,8 +228,6 @@ public class GeminiService {
                             }
                             recipe.setTags(tags);
 
-                            recipe.setSource(obj.optString("source", "AI"));
-
                             // Ingredients
                             if (obj.has("ingredients") && !obj.isNull("ingredients")) {
                                 JSONArray ingredientsArray = obj.getJSONArray("ingredients");

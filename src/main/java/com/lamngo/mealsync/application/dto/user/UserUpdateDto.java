@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
-@Data // Replaces @Getter/@Setter, adds toString, equals/hashCode
+@Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

@@ -1,22 +1,21 @@
 package com.lamngo.mealsync.application.dto.userRecipe;
 
-import com.lamngo.mealsync.domain.model.recipe.Recipe;
-import com.lamngo.mealsync.domain.model.user.User;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
+import com.lamngo.mealsync.application.dto.user.UserReadDto;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.UUID;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserRecipeReadDto {
-    private String id;
-    private User user;
-    private Recipe recipe;
+    private UUID id;
+    private UserReadDto user;
+    private RecipeReadDto recipe;
     private String savedAt;
 }

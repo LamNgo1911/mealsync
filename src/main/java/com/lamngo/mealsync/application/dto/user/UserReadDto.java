@@ -3,7 +3,7 @@ package com.lamngo.mealsync.application.dto.user;
 import com.lamngo.mealsync.domain.model.user.UserRole;
 import lombok.*;
 
-@Data // Replaces @Getter/@Setter, adds toString, equals/hashCode
+@Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

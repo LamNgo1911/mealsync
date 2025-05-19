@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 public interface IUserRecipeRepo {
-     void saveUserRecipe(UserRecipe userRecipe);
+     UserRecipe saveUserRecipe(UserRecipe userRecipe);
      List<UserRecipe> getUserRecipesByUserId(UUID userId);
      void deleteUserRecipe(UUID userRecipeId);
 }
