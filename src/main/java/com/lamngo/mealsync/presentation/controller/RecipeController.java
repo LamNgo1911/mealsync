@@ -8,6 +8,8 @@ import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeCreateDto;
 import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
 import com.lamngo.mealsync.application.service.AI.GeminiService;
 import com.lamngo.mealsync.application.service.recipe.RecipeService;
+import com.lamngo.mealsync.application.shared.OffsetPage;
+import com.lamngo.mealsync.application.shared.PaginationResponse;
 import com.lamngo.mealsync.domain.model.UserRecipe;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.presentation.error.BadRequestException;
@@ -78,11 +80,12 @@ public class RecipeController {
     }
 
     @GetMapping
-    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> getAllRecipes() {
-        List<RecipeReadDto> recipes = recipeService.getAllRecipes();
-        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
-        body.setData(recipes);
-        return ResponseEntity.ok(body);
+    public ResponseEntity<PaginationResponse<RecipeReadDto>> getAllRecipes(
+            @RequestParam(defaultValue = "1") int offset,
+            @RequestParam(defaultValue = "10") int limit) {
+        OffsetPage page = new OffsetPage(offset, limit);
+        PaginationResponse<RecipeReadDto> response = recipeService.getAllRecipes(page);
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{id}")

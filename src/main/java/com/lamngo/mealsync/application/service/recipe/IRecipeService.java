@@ -4,6 +4,8 @@ import com.lamngo.mealsync.application.dto.recipe.RecipeCreateDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeUpdateDto;
 import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
+import com.lamngo.mealsync.application.shared.OffsetPage;
+import com.lamngo.mealsync.application.shared.PaginationResponse;
 
 import java.util.List;
 import java.util.UUID;
@@ -11,7 +13,7 @@ import java.util.UUID;
 public interface IRecipeService {
     RecipeReadDto createRecipe(RecipeCreateDto recipeCreateDto);
     RecipeReadDto getRecipeById(UUID id);
-    List<RecipeReadDto> getAllRecipes();
+    PaginationResponse<RecipeReadDto> getAllRecipes(OffsetPage page);
     RecipeReadDto updateRecipe(UUID id, RecipeUpdateDto recipeUpdateDto);
     void deleteRecipe(UUID id);
     UserRecipeReadDto addRecipeToUser(UUID userId, UUID recipeId);
