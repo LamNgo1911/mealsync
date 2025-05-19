@@ -10,6 +10,8 @@ public interface IRecipeRepo {
     Recipe createRecipe(Recipe recipe);
     Optional<Recipe> getRecipeById(UUID id);
     List<Recipe> getAllRecipes();
+    List<Recipe> getAllRecipes(int offset, int limit);
     void deleteRecipe(UUID id);
     Optional<Recipe> findByIngredientKey(String ingredientKey);
+    long countAllRecipes();
 }

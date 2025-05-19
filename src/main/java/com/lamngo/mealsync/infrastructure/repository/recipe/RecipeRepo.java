@@ -3,6 +3,7 @@ package com.lamngo.mealsync.infrastructure.repository.recipe;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import com.lamngo.mealsync.domain.repository.recipe.IRecipeRepo;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -31,6 +32,12 @@ public class RecipeRepo implements IRecipeRepo {
     }
 
     @Override
+    public List<Recipe> getAllRecipes(int offset, int limit) {
+        int page = offset / limit;
+        return _recipeJpaRepo.findAll(PageRequest.of(page, limit)).getContent();
+    }
+
+    @Override
     public void deleteRecipe(UUID id) {
         _recipeJpaRepo.deleteById(id);
     }
@@ -38,5 +45,10 @@ public class RecipeRepo implements IRecipeRepo {
     @Override
     public Optional<Recipe> findByIngredientKey(String ingredientKey) {
         return _recipeJpaRepo.findByIngredientKey(ingredientKey);
+    }
+
+    @Override
+    public long countAllRecipes() {
+        return _recipeJpaRepo.count();
     }
 }
