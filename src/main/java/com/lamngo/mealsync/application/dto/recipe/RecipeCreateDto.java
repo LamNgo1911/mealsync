@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.application.dto.recipe;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
@@ -43,11 +44,21 @@ public class RecipeCreateDto {
     @Size(max = 500, message = "Description cannot exceed 500 characters")
     private String description;
 
+    @Min(value = 0, message = "Preparation time must be non-negative")
     private Integer preparationTime;
+
+    @Min(value = 0, message = "Cooking time must be non-negative")
     private Integer cookingTime;
+
+    @Min(value = 0, message = "Total time must be non-negative")
     private Integer totalTime;
+
+    @Min(value = 1, message = "Servings must be at least 1")
     private Integer servings;
+
+    @Size(max = 50, message = "Difficulty cannot exceed 50 characters")
     private String difficulty;
-    private List<String> tags;
-    private String source;
+
+    @Size(max = 10, message = "You can have up to 10 tags")
+    private List<@Size(max = 30, message = "Each tag cannot exceed 30 characters") String> tags;
 }

@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
-@Data // Replaces @Getter/@Setter, adds toString, equals/hashCode
+@Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
