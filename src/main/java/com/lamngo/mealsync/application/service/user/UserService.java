@@ -22,17 +22,17 @@ import java.util.stream.Collectors;
 @Service
 public class UserService implements IUserService {
 
-    @Autowired
-    private IUserRepo _iUserRepo;
+    private final IUserRepo _iUserRepo;
 
-    @Autowired
-    private PasswordEncoder _passwordEncoder;
-
-    @Autowired
-    private UserPreferenceMapper _userPreferenceMapper;
+    private final UserPreferenceMapper _userPreferenceMapper;
 
     @Autowired
     UserMapper _userMapper;
+
+    public UserService(IUserRepo iUserRepo, UserPreferenceMapper userPreferenceMapper) {
+        this._iUserRepo = iUserRepo;
+        this._userPreferenceMapper = userPreferenceMapper;
+    }
 
 
     @Override

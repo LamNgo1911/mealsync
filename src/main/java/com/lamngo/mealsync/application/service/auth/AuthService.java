@@ -1,6 +1,7 @@
 package com.lamngo.mealsync.application.service.auth;
 
 import com.lamngo.mealsync.application.dto.user.UserCreateDto;
+import com.lamngo.mealsync.application.dto.user.UserInfoDto;
 import com.lamngo.mealsync.application.dto.user.UserLoginDto;
 import com.lamngo.mealsync.application.dto.user.UserReadDto;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
@@ -73,7 +74,7 @@ public class AuthService implements IAuthService {
     }
 
     @Override
-    public String login(UserLoginDto userLoginDto) {
+    public UserInfoDto login(UserLoginDto userLoginDto) {
 
         String email = userLoginDto.getEmail();
         String password = userLoginDto.getPassword();
@@ -91,8 +92,21 @@ public class AuthService implements IAuthService {
             throw new BadRequestException("Invalid email or password");
         }
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-        // Generate JWT token
-        return jwtTokenProvider.generateToken(userDetails);
+        String token = jwtTokenProvider.generateToken(userDetails);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails);
+        User user = _userRepo.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        UserReadDto userReadDto = _userMapper.toUserReadDto(user);
+
+        UserInfoDto userInfoDto = new UserInfoDto();
+        userInfoDto.setToken(token);
+        userInfoDto.setRefreshToken(refreshToken);
+        userInfoDto.setId(user.getId().toString());
+        userInfoDto.setEmail(user.getEmail());
+        userInfoDto.setName(user.getName());
+        userInfoDto.setRole(user.getRole());
+        userInfoDto.setUserPreference(userReadDto.getUserPreference());
+
+        return userInfoDto;
     }
 
     @Override

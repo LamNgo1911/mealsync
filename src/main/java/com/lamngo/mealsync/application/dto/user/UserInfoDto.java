@@ -1,0 +1,22 @@
+package com.lamngo.mealsync.application.dto.user;
+
+import com.lamngo.mealsync.domain.model.user.UserRole;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class UserInfoDto {
+    private String id;
+    private String email;
+    private String name;
+    private UserRole role;
+    private UserPreferenceReadDto userPreference;
+
+    private String token;
+    private String refreshToken;
+}

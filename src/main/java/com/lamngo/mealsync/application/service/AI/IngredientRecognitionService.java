@@ -24,12 +24,6 @@ import java.util.List;
 public class IngredientRecognitionService {
     private static final Logger logger = LoggerFactory.getLogger(IngredientRecognitionService.class);
 
-    /**
-     * Recognizes ingredients from an image using Google Vision API.
-     * @param imageFile image file
-     * @return Immutable list of recognized ingredient names
-     * @throws IngredientRecognitionServiceException if the image is invalid or API call fails
-     */
     public List<String> recognizeIngredients(MultipartFile imageFile) throws IngredientRecognitionServiceException {
         try {
             ByteString imgBytes = ByteString.readFrom(imageFile.getInputStream());
@@ -39,12 +33,6 @@ public class IngredientRecognitionService {
         }
     }
 
-    /**
-     * Recognizes ingredients from an image using Google Vision API.
-     * @param imgBytes image bytes
-     * @return Immutable list of recognized ingredient names
-     * @throws IngredientRecognitionServiceException if the image is invalid or API call fails
-     */
     public List<String> recognizeIngredients(final ByteString imgBytes) throws IngredientRecognitionServiceException {
         if (imgBytes == null || imgBytes.isEmpty()) {
             logger.warn("Image is empty or null");
@@ -73,9 +61,6 @@ public class IngredientRecognitionService {
         }
     }
 
-    /**
-     * Calls Google Vision API and extracts ingredient labels.
-     */
     private List<String> callGoogleVision(final ByteString imgBytes) throws IngredientRecognitionServiceException {
         try {
             final Image img = Image.newBuilder().setContent(imgBytes).build();

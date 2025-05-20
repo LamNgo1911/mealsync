@@ -67,14 +67,6 @@ public class GeminiService {
         this.s3Service = s3Service;
     }
 
-    /**
-     * Generates a list of recipes using Gemini based on ingredients and user preferences.
-     * Adds an image URL to each recipe using ImageGeneratorService and S3Service.
-     *
-     * @param ingredients    List of ingredient names
-     * @param userPreference UserPreference object
-     * @return Recipes as a list of RecipeReadDto objects
-     */
     public List<RecipeReadDto> generateRecipes(List<String> ingredients, UserPreference userPreference) {
         if (CollectionUtils.isEmpty(ingredients)) {
             logger.warn("Ingredient list is empty or null");
@@ -95,9 +87,6 @@ public class GeminiService {
         }
     }
 
-    /**
-     * Fetches recipes from Gemini API and maps to RecipeReadDto.
-     */
     private List<RecipeReadDto> fetchRecipesFromGemini(List<String> ingredients, UserPreference userPreference) {
         try {
             if (geminiApiBaseUrl == null || !geminiApiBaseUrl.startsWith("https://")
@@ -163,7 +152,7 @@ public class GeminiService {
                     }
                     String recipesJson = part.getString("text").trim();
 
-                    // Extract the valid JSON array using regex if the response contains extra text
+                    // Extract JSON array from the response
                     Pattern jsonArrayPattern = Pattern.compile("(\\[.*])", Pattern.DOTALL);
                     Matcher matcher = jsonArrayPattern.matcher(recipesJson);
                     if (matcher.find()) {
@@ -175,10 +164,7 @@ public class GeminiService {
 
                     // Parse JSON array of recipes
                     JSONArray recipesArray = new JSONArray(recipesJson);
-                    // printout the JSON array for debugging
-                    for (int i = 0; i < recipesArray.length(); i++) {
-                        logger.info("Recipe {}: {}", i + 1, recipesArray.getJSONObject(i).toString(2));
-                    }
+
                     List<Recipe> recipes = new ArrayList<>();
                     for (int i = 0; i < recipesArray.length(); i++) {
                         JSONObject obj = recipesArray.getJSONObject(i);
@@ -262,9 +248,7 @@ public class GeminiService {
         }
     }
 
-    /**
-     * Adds imageUrl to the given RecipeReadDto using AI and S3 services.
-     */
+    //    Adds imageUrl to the given RecipeReadDto using AI and S3 services.
     private void addImageToRecipe(RecipeReadDto dto) {
         try {
             String prompt = dto.getName();
