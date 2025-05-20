@@ -11,6 +11,7 @@ import java.util.UUID;
 public interface IRecipeRepo {
     Recipe createRecipe(Recipe recipe);
     Optional<Recipe> getRecipeById(UUID id);
+    List<Recipe> getAllRecipes();
     Page<Recipe> getAllRecipes(OffsetPage pageable);
     void deleteRecipe(UUID id);
     Optional<Recipe> findByIngredientKey(String ingredientKey);

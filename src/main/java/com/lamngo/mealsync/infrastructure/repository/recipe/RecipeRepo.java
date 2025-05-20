@@ -1,8 +1,10 @@
 package com.lamngo.mealsync.infrastructure.repository.recipe;
 
+import com.lamngo.mealsync.application.shared.OffsetPage;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import com.lamngo.mealsync.domain.repository.recipe.IRecipeRepo;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
@@ -27,14 +29,8 @@ public class RecipeRepo implements IRecipeRepo {
     }
 
     @Override
-    public List<Recipe> getAllRecipes() {
-        return _recipeJpaRepo.findAll();
-    }
-
-    @Override
-    public List<Recipe> getAllRecipes(int offset, int limit) {
-        int page = offset / limit;
-        return _recipeJpaRepo.findAll(PageRequest.of(page, limit)).getContent();
+    public Page<Recipe> getAllRecipes(OffsetPage pageable) {
+        return _recipeJpaRepo.findAll(pageable);
     }
 
     @Override

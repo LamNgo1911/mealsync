@@ -81,10 +81,10 @@ public class RecipeController {
 
     @GetMapping
     public ResponseEntity<PaginationResponse<RecipeReadDto>> getAllRecipes(
-            @RequestParam(defaultValue = "1") int offset,
-            @RequestParam(defaultValue = "10") int limit) {
-        OffsetPage page = new OffsetPage(offset, limit);
-        PaginationResponse<RecipeReadDto> response = recipeService.getAllRecipes(page);
+            @RequestParam(defaultValue = "0") int offset,
+            @RequestParam(defaultValue = "2") int limit) {
+
+        PaginationResponse<RecipeReadDto> response = recipeService.getAllRecipes(limit, offset);
         return ResponseEntity.ok(response);
     }
 
