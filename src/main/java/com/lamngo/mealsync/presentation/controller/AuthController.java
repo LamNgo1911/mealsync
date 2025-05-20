@@ -1,6 +1,7 @@
 package com.lamngo.mealsync.presentation.controller;
 
 import com.lamngo.mealsync.application.dto.user.UserCreateDto;
+import com.lamngo.mealsync.application.dto.user.UserInfoDto;
 import com.lamngo.mealsync.application.dto.user.UserLoginDto;
 import com.lamngo.mealsync.application.dto.user.UserReadDto;
 import com.lamngo.mealsync.application.service.auth.AuthService;
@@ -35,12 +36,11 @@ public class AuthController {
 
     // Anyone can log in
     @PostMapping("/login")
-    public ResponseEntity<SuccessResponseEntity<String>> login(@RequestBody @Valid UserLoginDto userLoginDto) {
+    public ResponseEntity<SuccessResponseEntity<UserInfoDto>> login(@RequestBody @Valid UserLoginDto userLoginDto) {
 
-        String token = authService.login(userLoginDto);
-        SuccessResponseEntity<String> body = new SuccessResponseEntity<>();
-        body.setData(token);
-
+        UserInfoDto userInfo = authService.login(userLoginDto);
+        SuccessResponseEntity<UserInfoDto> body = new SuccessResponseEntity<>();
+        body.setData(userInfo);
         return ResponseEntity.ok(body);
     }
 }

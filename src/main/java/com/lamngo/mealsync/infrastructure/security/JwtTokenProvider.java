@@ -24,6 +24,9 @@ public class JwtTokenProvider {
     @Value("${JWT_EXPIRATION}")
     private Integer jwtExpiration;
 
+    @Value("${JWT_REFRESH_EXPIRATION}")
+    private Long jwtRefreshExpiration;
+
     private Key key;
 
     @PostConstruct
@@ -46,6 +49,20 @@ public class JwtTokenProvider {
         } catch (Exception e) {
             logger.error("Error generating JWT token: {}", e.getMessage());
             throw new RuntimeException("Failed to generate JWT token", e); // Wrap for better handling
+        }
+    }
+
+    public String generateRefreshToken(UserDetails userDetails) {
+        try {
+            return Jwts.builder()
+                    .setSubject(userDetails.getUsername())
+                    .setIssuedAt(new Date())
+                    .setExpiration(new Date(System.currentTimeMillis() + jwtRefreshExpiration))
+                    .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                    .compact();
+        } catch (Exception e) {
+            logger.error("Error generating refresh token: {}", e.getMessage());
+            throw new RuntimeException("Failed to generate refresh token", e);
         }
     }
 
