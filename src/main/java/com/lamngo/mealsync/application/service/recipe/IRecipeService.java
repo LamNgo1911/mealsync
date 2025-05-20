@@ -13,7 +13,7 @@ import java.util.UUID;
 public interface IRecipeService {
     RecipeReadDto createRecipe(RecipeCreateDto recipeCreateDto);
     RecipeReadDto getRecipeById(UUID id);
-    PaginationResponse<RecipeReadDto> getAllRecipes(OffsetPage page);
+    PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset);
     RecipeReadDto updateRecipe(UUID id, RecipeUpdateDto recipeUpdateDto);
     void deleteRecipe(UUID id);
     UserRecipeReadDto addRecipeToUser(UUID userId, UUID recipeId);
