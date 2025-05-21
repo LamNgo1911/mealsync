@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.domain.model.recipe;
 
+import com.lamngo.mealsync.domain.model.UserRecipe;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
@@ -105,6 +106,9 @@ public class Recipe {
 
     @Column
     private Instant updatedAt;
+
+    @OneToMany(mappedBy = "recipe", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<UserRecipe> userRecipes = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {

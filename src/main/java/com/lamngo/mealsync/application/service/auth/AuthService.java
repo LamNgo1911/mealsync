@@ -65,9 +65,7 @@ public class AuthService implements IAuthService {
         userPreference.setDislikedIngredients(new ArrayList<>());
 
         userPreference.setUser(user);
-        System.out.println("User preference: " + userPreference);
         user.setUserPreference(userPreference);
-        System.out.println("User: " + user);
 
         user = _userRepo.save(user);
         return _userMapper.toUserReadDto(user);
@@ -111,8 +109,9 @@ public class AuthService implements IAuthService {
 
     @Override
     public void logout(String token) {
-        // Implement token revocation (e.g., store invalid tokens in a blacklist)
-        System.out.println("Token revoked: " + token);
+        // MVP logout: client should simply delete the token on logout
+        // No server-side action needed for stateless JWT
+        System.out.println("Logout called for token: " + token);
     }
 
     @Override
@@ -156,4 +155,3 @@ public class AuthService implements IAuthService {
         System.out.println("Token refreshed: " + token);
     }
 }
-

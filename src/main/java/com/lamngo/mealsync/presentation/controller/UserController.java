@@ -35,7 +35,7 @@ public class UserController {
 
     // Any authenticated user can access their own user data
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('USER') and #id == #userDetails.id")
+    @PreAuthorize("hasRole('ADMIN') or #id == #userDetails.id")
     public ResponseEntity<SuccessResponseEntity<UserReadDto>> findUserById(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -49,13 +49,16 @@ public class UserController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteUserById(@PathVariable UUID id) {
+        // Debug: print current user's authorities
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        System.out.println("Authorities: " + auth.getAuthorities());
         userService.deleteById(id);
         return ResponseEntity.noContent().build();
     }
 
     // Only users with the ADMIN role can update user data
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
     public ResponseEntity<SuccessResponseEntity<UserReadDto>> updateUser(@PathVariable UUID id, @RequestBody @Valid UserUpdateDto userUpdateDto) {
         UserReadDto updatedUser = userService.updateUser(id, userUpdateDto);
         SuccessResponseEntity<UserReadDto> body = new SuccessResponseEntity<>();
@@ -65,7 +68,7 @@ public class UserController {
 
     // update user preference
     @PutMapping("/{id}/preference")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
     public ResponseEntity<SuccessResponseEntity<UserReadDto>> updateUserPreferenceById(@PathVariable UUID id, @RequestBody @Valid UserPreferenceUpdateDto userPreferenceUpdateDto) {
         UserPreferenceReadDto updatedUserPreference = userService.updateUserPreferencesById(id, userPreferenceUpdateDto);
         UserReadDto updatedUser = userService.findUserById(id);
