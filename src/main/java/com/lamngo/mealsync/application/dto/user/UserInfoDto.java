@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.application.dto.user;
 
+import com.lamngo.mealsync.domain.model.user.RefreshToken;
 import com.lamngo.mealsync.domain.model.user.UserRole;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,5 +19,5 @@ public class UserInfoDto {
     private UserPreferenceReadDto userPreference;
 
     private String token;
-    private String refreshToken;
+    private RefreshToken refreshToken;
 }

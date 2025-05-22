@@ -37,4 +37,9 @@ public class RefreshTokenRepo implements IRefreshTokenRepo {
     public void deleteAllByUserId(UUID userId) {
         refreshTokenJpaRepo.deleteAllByUserId(userId);
     }
+
+    @Override
+    public RefreshToken findByUserId(UUID userId) {
+        return refreshTokenJpaRepo.findByUserId(userId);
+    }
 }
