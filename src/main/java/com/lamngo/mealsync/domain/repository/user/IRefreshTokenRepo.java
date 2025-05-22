@@ -10,4 +10,5 @@ public interface IRefreshTokenRepo {
     void deleteById(UUID id);
     void deleteByUserId(UUID userId);
     void deleteAllByUserId(UUID userId);
+    RefreshToken findByUserId(UUID userId);
 }

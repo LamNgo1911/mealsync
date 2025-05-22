@@ -9,7 +9,7 @@ public interface IAuthService {
     UserReadDto register(UserCreateDto userCreateDto);
     UserInfoDto login(UserLoginDto userLoginDto);
     void logout(String token);
-    void refreshToken(String token);
+    UserInfoDto refreshToken (String token);
     boolean validateToken(String token);
     void changePassword(String email, String oldPassword, String newPassword);
 }
