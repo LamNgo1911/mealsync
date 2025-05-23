@@ -3,6 +3,7 @@ package com.lamngo.mealsync.presentation.controller;
 import com.lamngo.mealsync.application.service.AI.IngredientRecognitionService;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,6 +20,7 @@ public class IngredientRecognitionController {
     }
 
     @PostMapping("/detect")
+    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
     public ResponseEntity<SuccessResponseEntity<List<String>>> recognizeIngredients(@RequestParam("image") MultipartFile image) {
         List<String> ingredients = ingredientRecognitionService.recognizeIngredients(image);
         SuccessResponseEntity<List<String>> body = new SuccessResponseEntity<>();

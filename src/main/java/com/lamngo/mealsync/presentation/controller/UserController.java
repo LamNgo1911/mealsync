@@ -4,7 +4,6 @@ import com.lamngo.mealsync.application.dto.user.*;
 import com.lamngo.mealsync.application.service.user.UserService;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

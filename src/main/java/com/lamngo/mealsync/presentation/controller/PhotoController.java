@@ -5,6 +5,7 @@ import com.lamngo.mealsync.application.service.AI.ImageGeneratorService;
 import com.lamngo.mealsync.application.service.AWS.S3Service;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +26,7 @@ public class PhotoController {
     }
 
     @PostMapping("/generate")
+    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
     public ResponseEntity<SuccessResponseEntity<String>>generateAndUploadImage(@RequestBody PhotoRecipeRequest request) {
 
         String apiResponse = imageGeneratorService.generateImage(request.getRecipeName(), request.getIngredients(), request.getDescription());

@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,6 +38,7 @@ public class RecipeController {
     }
 
     @PostMapping("/generate-recipes")
+    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
     public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> generateRecipesFromIngredients(
             @RequestBody @Valid GenerateRecipeRequest request) {
         List<String> ingredients = request.getIngredients();
@@ -53,6 +55,7 @@ public class RecipeController {
 
     // Save recipe with user
     @PostMapping("/save")
+    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
     public ResponseEntity<SuccessResponseEntity<UserRecipeReadDto>> saveRecipeWithUser(@RequestBody @Valid
             UserRecipeCreateDto userRecipeCreateDto) {
         logger.info("Saving recipe with user: {}", userRecipeCreateDto);
@@ -64,6 +67,7 @@ public class RecipeController {
 
     // CRUD endpoints for RecipeService
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
     public ResponseEntity<SuccessResponseEntity<RecipeReadDto>> createRecipe(@RequestBody @Valid RecipeCreateDto recipeCreateDto) {
         RecipeReadDto created = recipeService.createRecipe(recipeCreateDto);
         SuccessResponseEntity<RecipeReadDto> body = new SuccessResponseEntity<>();
@@ -72,6 +76,7 @@ public class RecipeController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
     public ResponseEntity<SuccessResponseEntity<RecipeReadDto>> getRecipeById(@PathVariable("id") String id) {
         RecipeReadDto recipe = recipeService.getRecipeById(UUID.fromString(id));
         SuccessResponseEntity<RecipeReadDto> body = new SuccessResponseEntity<>();
@@ -80,6 +85,7 @@ public class RecipeController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PaginationResponse<RecipeReadDto>> getAllRecipes(
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "2") int limit) {
@@ -89,6 +95,7 @@ public class RecipeController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<SuccessResponseEntity<RecipeReadDto>> updateRecipe(@PathVariable("id") String id, @RequestBody @Valid RecipeUpdateDto updateDto) {
         RecipeReadDto updated = recipeService.updateRecipe(UUID.fromString(id), updateDto);
         SuccessResponseEntity<RecipeReadDto> body = new SuccessResponseEntity<>();
@@ -97,6 +104,7 @@ public class RecipeController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteRecipe(@PathVariable("id") String id) {
         recipeService.deleteRecipe(UUID.fromString(id));
         return ResponseEntity.noContent().build();

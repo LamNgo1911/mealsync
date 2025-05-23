@@ -1,0 +1,5 @@
+package com.lamngo.mealsync.application.dto.user;
+
+public class TokenDto {
+    private String idToken;
+}
