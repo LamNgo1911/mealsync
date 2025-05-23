@@ -78,6 +78,7 @@ public class AuthService implements IAuthService {
     }
 
     @Override
+    @Transactional
     public UserInfoDto login(UserLoginDto userLoginDto) {
         String email = userLoginDto.getEmail();
         String password = userLoginDto.getPassword();
