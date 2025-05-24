@@ -7,10 +7,12 @@ import com.lamngo.mealsync.domain.repository.user.IUserRepo;
 import com.lamngo.mealsync.presentation.error.BadRequestException;
 import com.lamngo.mealsync.presentation.error.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.UUID;
 
+@Service
 public class RefreshTokenService {
     @Value("${JWT_REFRESH_EXPIRATION}")
     private long JwtRefreshExpirationMs;
@@ -36,12 +38,12 @@ public class RefreshTokenService {
         return refreshTokenRepo.save(refreshToken);
     }
 
-    public RefreshToken verifyExpiration(RefreshToken token) {
+    public boolean verifyExpiration(RefreshToken token) {
         if (token.getExpiryDate().isBefore(Instant.now())) {
             refreshTokenRepo.deleteById(token.getId());
-            throw new BadRequestException("Refresh token expired. Please log in again.");
+            return false;
         }
-        return token;
+        return true;
     }
 
     public void deleteByUserId(UUID userId) {

@@ -150,8 +150,14 @@ public class AuthService implements IAuthService {
     public UserInfoDto refreshToken(String refreshTokenStr) {
         RefreshToken refreshToken = refreshTokenRepo.findByToken(refreshTokenStr);
 
+        if (refreshToken == null) {
+            throw new BadRequestException("Refresh token is not valid");
+        }
 
-        refreshTokenService.verifyExpiration(refreshToken);
+        // Verify the expiration of the refresh token
+        if (!refreshTokenService.verifyExpiration(refreshToken)) {
+            throw new BadRequestException("Refresh token is expired");
+        }
 
         User user = refreshToken.getUser();
         String newAccessToken = jwtTokenProvider.generateToken(user);
