@@ -2,9 +2,11 @@ package com.lamngo.mealsync.infrastructure.repository.user;
 
 import com.lamngo.mealsync.domain.model.user.RefreshToken;
 import com.lamngo.mealsync.domain.repository.user.IRefreshTokenRepo;
+import org.springframework.stereotype.Repository;
 
 import java.util.UUID;
 
+@Repository
 public class RefreshTokenRepo implements IRefreshTokenRepo {
     private final RefreshTokenJpaRepo refreshTokenJpaRepo;
 
