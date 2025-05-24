@@ -27,6 +27,11 @@ public class GoogleVerifierService {
                 .build();
     }
 
+    // Setter for test injection
+    void setVerifier(GoogleIdTokenVerifier verifier) {
+        this.verifier = verifier;
+    }
+
     public GoogleIdToken.Payload verify(String idTokenString) {
         try {
             GoogleIdToken idToken = verifier.verify(idTokenString);
