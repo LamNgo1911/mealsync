@@ -53,7 +53,6 @@ public class S3Service {
     }
 
     public String uploadImage(byte[] imageBytes, String originalImageName) {
-        System.out.println("Image byte length: " + imageBytes.length);
         try {
             String key = "recipes/" + UUID.randomUUID().toString() + ".png";
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
