@@ -40,7 +40,7 @@ public class IngredientRecognitionService {
         }
 
         try {
-            List<String> ingredients = callGoogleVision(imgBytes);
+            List<String> ingredients = new ArrayList<>(callGoogleVision(imgBytes));
 
             boolean containsFood = ingredients.stream()
                     .anyMatch(label -> label.toLowerCase().contains("food"));
@@ -61,7 +61,7 @@ public class IngredientRecognitionService {
         }
     }
 
-    private List<String> callGoogleVision(final ByteString imgBytes) throws IngredientRecognitionServiceException {
+    public List<String> callGoogleVision(final ByteString imgBytes) throws IngredientRecognitionServiceException {
         try {
             final Image img = Image.newBuilder().setContent(imgBytes).build();
 

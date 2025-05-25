@@ -87,7 +87,7 @@ public class GeminiService {
         }
     }
 
-    private List<RecipeReadDto> fetchRecipesFromGemini(List<String> ingredients, UserPreference userPreference) {
+    public List<RecipeReadDto> fetchRecipesFromGemini(List<String> ingredients, UserPreference userPreference) {
         try {
             if (geminiApiBaseUrl == null || !geminiApiBaseUrl.startsWith("https://")
                     || geminiApiKey == null || geminiApiKey.isEmpty() ) {
@@ -249,7 +249,7 @@ public class GeminiService {
     }
 
     //    Adds imageUrl to the given RecipeReadDto using AI and S3 services.
-    private void addImageToRecipe(RecipeReadDto dto) {
+    public void addImageToRecipe(RecipeReadDto dto) {
         try {
             String prompt = dto.getName();
             List<String> ingredientNames = dto.getIngredients() != null ? dto.getIngredients().stream().map(i -> i.getName()).toList() : List.of();
@@ -271,7 +271,7 @@ public class GeminiService {
         }
     }
 
-    private String generateIngredientKey(String recipeName) {
+    public String generateIngredientKey(String recipeName) {
         if (recipeName == null) return null;
         return recipeName.trim().toLowerCase().replaceAll("[^a-z0-9\\s]", "").replaceAll("\\s+", "_");
     }

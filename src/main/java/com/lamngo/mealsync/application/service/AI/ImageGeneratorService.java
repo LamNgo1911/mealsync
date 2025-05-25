@@ -43,7 +43,7 @@ public class ImageGeneratorService {
                 .build();
     }
 
-    private String callStabilityAiAPI(String prompt) {
+    public String callStabilityAiAPI(String prompt) {
         try {
             String response = webClient.post()
                     .bodyValue(Map.of(
