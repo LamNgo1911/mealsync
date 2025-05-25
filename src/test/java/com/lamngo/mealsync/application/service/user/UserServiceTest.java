@@ -41,4 +41,18 @@ public class UserServiceTest {
         // Verify the result
         assertEquals(List.of(userReadDto), users);
     }
+
+    @Test
+    void findUserById_success() {
+        User user = new User();
+        UserReadDto userReadDto = new UserReadDto();
+        // Mock the expected behavior
+        when(userRepo.findById(any())).thenReturn(java.util.Optional.of(user));
+        when(userMapper.toUserReadDto(any())).thenReturn(userReadDto);
+
+        UserReadDto result = userService.findUserById(user.getId());
+        // Verify the result
+        assertEquals(userReadDto, result);
+    }
+
 }
