@@ -26,12 +26,13 @@ public class UserService implements IUserService {
 
     private final UserPreferenceMapper _userPreferenceMapper;
 
-    @Autowired
-    UserMapper _userMapper;
+    private final UserMapper _userMapper;
 
-    public UserService(IUserRepo iUserRepo, UserPreferenceMapper userPreferenceMapper) {
+
+    public UserService(IUserRepo iUserRepo, UserPreferenceMapper userPreferenceMapper, UserMapper userMapper) {
         this._iUserRepo = iUserRepo;
         this._userPreferenceMapper = userPreferenceMapper;
+        this._userMapper = userMapper;
     }
 
 
