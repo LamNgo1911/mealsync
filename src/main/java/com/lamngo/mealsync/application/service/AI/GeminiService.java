@@ -56,11 +56,11 @@ public class GeminiService {
     private final S3Service s3Service;
 
     public GeminiService(
-            @Autowired RecipeMapper recipeMapper,
-            @Autowired IRecipeRepo recipeRepo,
-            @Autowired IRecipeIngredient recipeIngredientRepo,
-            @Autowired ImageGeneratorService imageGeneratorService,
-            @Autowired S3Service s3Service) {
+             RecipeMapper recipeMapper,
+             IRecipeRepo recipeRepo,
+             IRecipeIngredient recipeIngredientRepo,
+             ImageGeneratorService imageGeneratorService,
+             S3Service s3Service) {
         this.recipeMapper = recipeMapper;
         this.recipeRepo = recipeRepo;
         this.imageGeneratorService = imageGeneratorService;

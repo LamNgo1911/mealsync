@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,10 +48,23 @@ public class UserServiceTest {
         User user = new User();
         UserReadDto userReadDto = new UserReadDto();
         // Mock the expected behavior
-        when(userRepo.findById(any())).thenReturn(java.util.Optional.of(user));
+        when(userRepo.findById(any())).thenReturn(Optional.of(user));
         when(userMapper.toUserReadDto(any())).thenReturn(userReadDto);
 
         UserReadDto result = userService.findUserById(user.getId());
+        // Verify the result
+        assertEquals(userReadDto, result);
+    }
+
+    @Test
+    void findUserByEmail_success() {
+        User user = new User();
+        UserReadDto userReadDto = new UserReadDto();
+        // Mock the expected behavior
+        when(userRepo.findByEmail(any())).thenReturn(Optional.of(user));
+        when(userMapper.toUserReadDto(any())).thenReturn(userReadDto);
+
+        UserReadDto result = userService.findUserByEmail(user.getEmail());
         // Verify the result
         assertEquals(userReadDto, result);
     }
