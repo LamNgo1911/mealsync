@@ -5,6 +5,7 @@ import com.lamngo.mealsync.application.mapper.user.UserMapper;
 import com.lamngo.mealsync.application.mapper.user.UserPreferenceMapper;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
+import com.lamngo.mealsync.presentation.error.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -13,8 +14,10 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -54,6 +57,17 @@ public class UserServiceTest {
         UserReadDto result = userService.findUserById(user.getId());
         // Verify the result
         assertEquals(userReadDto, result);
+    }
+
+    @Test
+    void findUserById_notFound() {
+        UUID userId = UUID.randomUUID();
+        // Mock the expected behavior
+        when(userRepo.findById(userId)).thenReturn(Optional.empty());
+
+       assertThrows(ResourceNotFoundException.class, () -> {
+            userService.findUserById(userId);
+        });
     }
 
     @Test
