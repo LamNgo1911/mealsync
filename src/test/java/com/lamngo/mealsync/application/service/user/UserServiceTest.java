@@ -83,4 +83,14 @@ public class UserServiceTest {
         assertEquals(userReadDto, result);
     }
 
+    @Test
+    void findUserByEmail_notFound() {
+        String email = "zV0Hq@example.com";
+        // Mock the expected behavior
+        when(userRepo.findByEmail(email)).thenReturn(Optional.empty());
+        assertThrows(ResourceNotFoundException.class, () -> {
+            userService.findUserByEmail(email);
+        });
+    }
+
 }
