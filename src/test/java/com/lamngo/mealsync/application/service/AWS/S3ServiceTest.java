@@ -2,6 +2,7 @@ package com.lamngo.mealsync.application.service.AWS;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -18,20 +19,18 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class S3ServiceTest {
+    @Mock
     private S3Client s3Client;
+    @Mock
     private S3Presigner s3Presigner;
+    @InjectMocks
     private S3Service s3Service;
 
     @BeforeEach
     void setUp() {
-        s3Client = mock(S3Client.class);
-        s3Presigner = mock(S3Presigner.class);
-        // Provide dummy values for region, accessKeyId, secretAccessKey
-        s3Service = new S3Service("us-east-1", "dummyAccessKey", "dummySecretKey");
-        // Override internal clients with mocks
-        org.springframework.test.util.ReflectionTestUtils.setField(s3Service, "s3Client", s3Client);
-        org.springframework.test.util.ReflectionTestUtils.setField(s3Service, "s3Presigner", s3Presigner);
-        org.springframework.test.util.ReflectionTestUtils.setField(s3Service, "bucketName", "test-bucket");
+        MockitoAnnotations.openMocks(this);
+        // Set bucketName via reflection since it's injected by @Value
+        ReflectionTestUtils.setField(s3Service, "bucketName", "test-bucket");
     }
 
     @Test
@@ -40,7 +39,7 @@ class S3ServiceTest {
         String originalImageName = "test.png";
 
         // Mock S3Client putObject
-        when(s3Client.putObject(any(PutObjectRequest.class), any(software.amazon.awssdk.core.sync.RequestBody.class))).thenReturn(null);
+        doNothing().when(s3Client).putObject(any(PutObjectRequest.class), any(software.amazon.awssdk.core.sync.RequestBody.class));
 
         // Mock presigned URL
         URL fakeUrl = new URL("https://example.com/fake-presigned-url");
