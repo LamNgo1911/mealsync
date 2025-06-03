@@ -93,7 +93,7 @@ GEMINI_API_KEY=your_gemini_api_key
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/yourusername/mealsync.git
+   git clone https://github.com/LamNgo1911/mealsync
    cd mealsync
    ```
 
