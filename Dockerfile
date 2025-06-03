@@ -1,43 +1,20 @@
 # ---------- Stage 1: Build ----------
-FROM eclipse-temurin:21-jdk-alpine as builder
+FROM maven:3.9.6-eclipse-temurin-22-alpine AS BUILDER
 
-# Set working directory inside container
 WORKDIR /app
 
-# Copy build files first for dependency caching
 COPY pom.xml .
-COPY .mvn .mvn
-COPY mvnw .
-
-# Download dependencies (cached unless pom.xml changes)
-RUN ./mvnw dependency:go-offline -B
-
-# Copy the rest of the project
 COPY src ./src
 
-# Build the application
-RUN ./mvnw clean package -DskipTests
+RUN mvn clean package -DskipTests
 
 # ---------- Stage 2: Run ----------
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:22-jre-alpine AS RUNNER
 
-# Create a non-root user for security (optional but recommended)
-RUN addgroup --system app && adduser --system --ingroup app appuser
-
-# Set working directory
 WORKDIR /app
 
-# Copy the JAR file from the builder stage
-COPY --from=builder /app/target/*.jar app.jar
+COPY --from=BUILDER /app/target/mealsync-0.0.1-SNAPSHOT.jar /app/mealsync.jar
 
-# Change ownership to non-root user
-RUN chown -R appuser:app /app
+EXPOSE 8083
 
-# Run the app as a non-root user
-USER appuser
-
-# Run the application
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
-
-# Expose the port used by the Spring Boot app
-EXPOSE 8080
+CMD ["java", "-jar", "mealsync.jar"]
