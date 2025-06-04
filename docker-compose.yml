@@ -1,5 +1,3 @@
-version: "3"
-
 services:
   postgres:
     image: postgres:15
@@ -13,7 +11,7 @@ services:
     volumes:
       - mealsync-db-data:/var/lib/postgresql/data
   mealsync-app:
-    image: $${DOCKER_HUB_USERNAME}/mealsync-app:latest
+    image: ${DOCKER_HUB_USERNAME}/mealsync-app:latest
     build:
       context: .
     container_name: mealsync-app
