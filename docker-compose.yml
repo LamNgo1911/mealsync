@@ -10,10 +10,9 @@ services:
       - POSTGRES_DB=${POSTGRES_Docker_DB}
     volumes:
       - mealsync-db-data:/var/lib/postgresql/data
+
   mealsync-app:
-    image: lamngo1911/mealsync-app:latest
-    build:
-      context: .
+    image: ${DOCKER_HUB_USERNAME}/mealsync-app:latest
     container_name: mealsync-app
     depends_on:
       - postgres
@@ -26,4 +25,4 @@ services:
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
 
 volumes:
-  mealsync-db-data: {}
+  mealsync-db-data:
