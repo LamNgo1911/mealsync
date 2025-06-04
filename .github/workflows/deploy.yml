@@ -30,6 +30,7 @@ jobs:
 
       - name: Upload env.properties to EC2
         run: |
+          echo "${{ secrets.ENV_PROPERTIES }}" > env.properties
           scp -o StrictHostKeyChecking=no env.properties ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/mealsync/env.properties
 
       - name: Deploy to EC2
