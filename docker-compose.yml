@@ -12,6 +12,7 @@ services:
       - POSTGRES_DB=${POSTGRES_Docker_DB}
 
   mealsync-app:
+    image: $${DOCKER_HUB_USERNAME}/mealsync-app:latest
     build:
       context: .
     container_name: mealsync-app
