@@ -28,10 +28,17 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/mealsync-app:latest
 
+      - name: Create env.properties file
+        run: echo "${{ secrets.ENV_PROPERTIES }}" > env.properties
+
       - name: Upload env.properties to EC2
-        run: |
-          echo "${{ secrets.ENV_PROPERTIES }}" > env.properties
-          scp -o StrictHostKeyChecking=no env.properties ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/mealsync/env.properties
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_KEY }}
+          source: "env.properties"
+          target: "mealsync/"
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.0
