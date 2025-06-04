@@ -35,7 +35,7 @@ jobs:
           username: ${{secrets.EC2_USERNAME}}
           key: ${{secrets.EC2_KEY}}
           script: |
-            git clone https://github.com/lamngo/mealsync.git
+            git clone https://github.com/LamNgo1911/mealsync.git
             cd mealsync
             docker compose down 
             docker compose up -d
