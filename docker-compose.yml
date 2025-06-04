@@ -23,6 +23,8 @@ services:
       - SPRING_DATASOURCE_USERNAME=${POSTGRES_Docker_USER}
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_Docker_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+    volumes:
+      - ./env.properties:/app/env.properties
 
 volumes:
   mealsync-db-data:
