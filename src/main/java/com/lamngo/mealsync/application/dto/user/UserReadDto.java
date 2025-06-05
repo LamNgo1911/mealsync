@@ -13,4 +13,5 @@ public class UserReadDto {
     private String name;
     private UserRole role;
     private UserPreferenceReadDto userPreference;
+    private RefreshTokenReadDto refreshToken;
 }
