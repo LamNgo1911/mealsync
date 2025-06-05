@@ -2,6 +2,65 @@
 
 A robust Spring Boot application for meal planning and recipe synchronization with AI-powered features.
 
+## 🔒 Environment Variables & Secrets
+
+Sensitive information (such as database credentials and Docker Hub username) is stored in a `.env` file, which is loaded automatically by Docker Compose.
+
+- **Never commit your real `.env` to version control.**
+- Example `.env` content:
+
+```env
+POSTGRES_Docker_USER=postgres
+POSTGRES_Docker_PASSWORD=your_password
+POSTGRES_Docker_DB=mealsync
+DB_PORT=5432
+DOCKER_HUB_USERNAME=your_dockerhub_username
+```
+
+- Update `.env` with your own secrets before running `docker-compose up` or deploying.
+- The `.env` file is referenced in both `docker-compose.yml` and the CI/CD pipeline for secure configuration.
+
+## 📦 Deployment & Hosting
+
+- Docker images are pushed to Docker Hub and deployed to AWS EC2 using GitHub Actions and Docker Compose.
+- The production backend is available at: http://44.203.134.136:8081/api/v1
+
+## 📚 API Routes (v1)
+
+Below is a summary of main routes (all prefixed with `/api/v1`):
+
+### Auth
+- `POST /users/register` — Register a new user
+- `POST /users/login` — User login
+- `POST /users/login/google` — Google OAuth login
+
+### Users
+- `GET /users` — List all users (admin only)
+- `GET /users/{id}` — Get user by ID
+- `DELETE /users/{id}` — Delete user (admin only)
+- `PUT /users/{id}` — Update user (admin or self)
+- `PUT /users/{id}/preference` — Update user preference
+
+### Recipes
+- `POST /recipes/generate-recipes` — AI-generate recipes from ingredients
+- `POST /recipes/save` — Save recipe to user
+- `POST /recipes` — Create a recipe
+- `GET /recipes/{id}` — Get recipe by ID
+- `GET /recipes` — List recipes (paginated)
+- `PUT /recipes/{id}` — Update recipe
+- `DELETE /recipes/{id}` — Delete recipe
+
+### Ingredient Recognition
+- `POST /ingredient-recognition/detect` — Detect ingredients from an image
+
+### Photos
+- `POST /photos/generate` — Generate and upload a recipe image
+
+---
+- All endpoints return a standard `SuccessResponseEntity<T>` wrapper.
+- Most endpoints require authentication; see your security config for details.
+- Full API docs: http://44.203.134.136:8081/swagger-ui.html
+
 ## 📋 Overview
 
 MealSync is a backend service that enables users to discover, save, and manage recipes with advanced features including ingredient recognition, AI-generated recipe images, and personalized meal planning.
@@ -51,10 +110,8 @@ MealSync follows a clean architecture pattern with clear separation of concerns:
 
 ## 📦 Prerequisites
 
-- Java 22 or higher
-- Maven 3.8+
-- PostgreSQL 14+
-- Docker (optional, for containerization)
+- Docker & Docker Compose (for local and production deployment)
+- (For local dev) Java 22+, Maven 3.8+, PostgreSQL 14+
 
 ## 🔧 Environment Variables
 
@@ -87,9 +144,20 @@ GOOGLE_APPLICATION_CREDENTIALS=path/to/your/google-credentials.json
 GEMINI_API_KEY=your_gemini_api_key
 ```
 
+## 🐳 Running with Docker & Docker Compose
+
+You can run MealSync and all dependencies (e.g., PostgreSQL) using Docker Compose:
+
+```bash
+docker-compose up --build
+```
+
+- The backend will be available at `http://localhost:8081` by default.
+- Environment variables are managed via `.env` and `docker-compose.yml`.
+
 ## 🚀 Getting Started
 
-### Running Locally
+### Running Locally (Java)
 
 1. Clone the repository
    ```bash
@@ -110,17 +178,36 @@ GEMINI_API_KEY=your_gemini_api_key
    ```
    The application will be available at `http://localhost:8081`
 
-### Using Docker
+### Using Docker Compose
 
-1. Build the Docker image
+1. Make sure your `.env` file is set up (see above).
+2. Start all services:
    ```bash
-   docker build -t mealsync .
+   docker-compose up --build
    ```
+   The backend will be available at `http://localhost:8081`.
 
-2. Run the container
-   ```bash
-   docker run -p 8081:8081 --env-file .env mealsync
-   ```
+## 🚀 Deployment (CI/CD & Production)
+
+This project uses **GitHub Actions** for CI/CD and automatic deployment to an AWS EC2 instance:
+
+- On every push to `main`, GitHub Actions builds, tests, and deploys the Docker image to your EC2 server.
+- The deployment is managed via SSH and Docker Compose on the remote server.
+- See `.github/workflows/deploy.yml` for details.
+
+### Production URL
+
+The deployed backend is available at:
+
+```
+http://44.203.134.136:8081/api/v1
+```
+
+API documentation (Swagger UI) can be accessed at:
+
+```
+http://44.203.134.136:8081/swagger-ui.html
+```
 
 ## 🧪 Testing
 
@@ -141,10 +228,23 @@ http://localhost:8081/swagger-ui.html
 This project is set up for continuous integration and deployment using:
 
 - **GitHub Actions**: Automated build, test, and deployment pipeline
-- **Docker**: Containerization for consistent deployment
-- **AWS**: Cloud hosting platform
+- **Docker & Docker Compose**: Containerization for consistent deployment
+- **AWS EC2**: Cloud hosting platform
 
-The CI/CD pipeline automatically builds and tests the application on each push to the main branch, and deploys to AWS when tests pass.
+The CI/CD pipeline automatically builds and tests the application on each push to the main branch, and deploys to AWS EC2 when tests pass.
+
+### Production URL
+
+The backend is deployed at:
+
+```
+http://44.203.134.136:8081/api/v1
+```
+
+API docs:
+```
+http://44.203.134.136:8081/swagger-ui.html
+```
 
 ## 🔐 Security
 
