@@ -19,5 +19,5 @@ public class UserInfoDto {
     private UserPreferenceReadDto userPreference;
 
     private String token;
-    private RefreshToken refreshToken;
+    private RefreshTokenReadDto refreshToken;
 }

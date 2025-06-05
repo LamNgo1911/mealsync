@@ -10,12 +10,13 @@ import java.util.List;
 
 @Mapper(
         componentModel = "spring",
-        uses = { UserPreferenceMapper.class }
+        uses = { UserPreferenceMapper.class, RefreshTokenMapper.class }
 )
 public interface UserMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "userPreference", ignore = true)
+    @Mapping(target = "refreshToken", ignore = true)
     @Mapping(target = "mealPlans", ignore = true)
     @Mapping(target = "authorities", ignore = true)
     @Mapping(target = "enabled", ignore = true)
@@ -34,6 +35,7 @@ public interface UserMapper {
     @Mapping(target = "email", ignore = true)
     @Mapping(target = "role", ignore = true)
     @Mapping(target = "userPreference", ignore = true)
+    @Mapping(target = "refreshToken", ignore = true)
     @Mapping(target = "mealPlans", ignore = true)
     @Mapping(target = "authorities", ignore = true)
     @Mapping(target = "enabled", ignore = true)
