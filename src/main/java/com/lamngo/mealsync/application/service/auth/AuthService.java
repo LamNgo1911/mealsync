@@ -100,7 +100,7 @@ public class AuthService implements IAuthService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         String token = jwtTokenProvider.generateToken(userDetails);
-        refreshTokenService.createRefreshToken(user.getId());
+        RefreshTokenReadDto refreshToken = refreshTokenService.createRefreshToken(user.getId());
 
         UserReadDto userReadDto = userMapper.toUserReadDto(user);
 
@@ -111,7 +111,7 @@ public class AuthService implements IAuthService {
                 .role(user.getRole())
                 .userPreference(userReadDto.getUserPreference())
                 .token(token)
-                .refreshToken(userReadDto.getRefreshToken())
+                .refreshToken(refreshToken)
                 .build();
     }
 
@@ -161,7 +161,7 @@ public class AuthService implements IAuthService {
 
         User user = refreshToken.getUser();
         String newAccessToken = jwtTokenProvider.generateToken(user);
-        refreshTokenService.createRefreshToken(user.getId());
+        RefreshTokenReadDto newRefreshToken = refreshTokenService.createRefreshToken(user.getId());
 
         UserReadDto userReadDto = userMapper.toUserReadDto(user);
 
@@ -172,7 +172,7 @@ public class AuthService implements IAuthService {
                 .role(user.getRole())
                 .userPreference(userReadDto.getUserPreference())
                 .token(newAccessToken)
-                .refreshToken(userReadDto.getRefreshToken())
+                .refreshToken(newRefreshToken)
                 .build();
     }
 }

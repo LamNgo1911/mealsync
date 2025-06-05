@@ -1,5 +1,7 @@
 package com.lamngo.mealsync.application.service.auth;
 
+import com.lamngo.mealsync.application.dto.user.RefreshTokenReadDto;
+import com.lamngo.mealsync.application.mapper.user.RefreshTokenMapper;
 import com.lamngo.mealsync.domain.model.user.RefreshToken;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.repository.user.IRefreshTokenRepo;
@@ -23,13 +25,15 @@ class RefreshTokenServiceTest {
     private IRefreshTokenRepo refreshTokenRepo;
     @Mock
     private IUserRepo userRepo;
+    @Mock
+    private RefreshTokenMapper refreshTokenMapper;
     @InjectMocks
     private RefreshTokenService refreshTokenService;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        refreshTokenService = new RefreshTokenService(refreshTokenRepo, userRepo);
+        refreshTokenService = new RefreshTokenService(refreshTokenRepo, userRepo, refreshTokenMapper);
     }
 
     @Test
@@ -40,7 +44,9 @@ class RefreshTokenServiceTest {
         when(userRepo.findById(userId)).thenReturn(Optional.of(user));
         RefreshToken savedToken = new RefreshToken();
         when(refreshTokenRepo.save(any(RefreshToken.class))).thenReturn(savedToken);
-        RefreshToken result = refreshTokenService.createRefreshToken(userId);
+        RefreshTokenReadDto dto = new RefreshTokenReadDto();
+        when(refreshTokenMapper.toRefreshTokenReadDto(any(RefreshToken.class))).thenReturn(dto);
+        RefreshTokenReadDto result = refreshTokenService.createRefreshToken(userId);
         assertNotNull(result);
         verify(refreshTokenRepo).save(any(RefreshToken.class));
     }
