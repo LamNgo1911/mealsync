@@ -23,8 +23,9 @@ services:
       - SPRING_DATASOURCE_USERNAME=${POSTGRES_Docker_USER}
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_Docker_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_CONFIG_LOCATION=classpath:/application.properties,file:/app/env.properties
     volumes:
-      - ./env.properties:/app/env.properties
+      - /home/ubuntu/mealsync/env.properties:/app/env.properties
 
 volumes:
   mealsync-db-data:
