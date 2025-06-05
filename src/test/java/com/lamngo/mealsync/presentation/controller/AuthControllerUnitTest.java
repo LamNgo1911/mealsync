@@ -87,8 +87,8 @@ class AuthControllerUnitTest {
         user.setRole(UserRole.USER);
         when(userRepo.findByEmail("test@example.com")).thenReturn(Optional.of(user));
         when(jwtTokenProvider.generateToken(user)).thenReturn("access_token");
-        RefreshToken refreshToken = new RefreshToken();
-        when(refreshTokenService.createRefreshToken(user.getId())).thenReturn(refreshToken);
+        RefreshTokenReadDto refreshTokenDto = new RefreshTokenReadDto();
+        when(refreshTokenService.createRefreshToken(user.getId())).thenReturn(refreshTokenDto);
         UserReadDto userReadDto = new UserReadDto();
         userReadDto.setUserPreference(null);
         when(userMapper.toUserReadDto(user)).thenReturn(userReadDto);

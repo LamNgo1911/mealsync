@@ -1,6 +1,7 @@
 package com.lamngo.mealsync.application.service.auth;
 
 import com.lamngo.mealsync.application.dto.user.*;
+import com.lamngo.mealsync.application.mapper.user.RefreshTokenMapper;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
 import com.lamngo.mealsync.domain.model.user.*;
 import com.lamngo.mealsync.domain.repository.user.IRefreshTokenRepo;
@@ -32,6 +33,7 @@ class AuthServiceTest {
     @Mock private RefreshTokenService refreshTokenService;
     @Mock private IRefreshTokenRepo refreshTokenRepo;
     @Mock private UserMapper userMapper;
+    @Mock private RefreshTokenMapper refreshTokenMapper;
     @InjectMocks private AuthService authService;
 
     @BeforeEach
@@ -39,6 +41,7 @@ class AuthServiceTest {
         MockitoAnnotations.openMocks(this);
         authService = new AuthService(authenticationManager, jwtTokenProvider, userRepo, passwordEncoder, refreshTokenService, refreshTokenRepo);
         authService.userMapper = userMapper;
+
     }
 
     @Test
@@ -105,7 +108,7 @@ class AuthServiceTest {
         User user = new User(); user.setEmail(dto.getEmail()); user.setId(UUID.randomUUID()); user.setName("Test"); user.setRole(UserRole.USER);
         when(userRepo.findByEmail(dto.getEmail())).thenReturn(Optional.of(user));
         when(jwtTokenProvider.generateToken(any())).thenReturn("token");
-        when(refreshTokenService.createRefreshToken(UUID.randomUUID())).thenReturn(new RefreshToken());
+        when(refreshTokenService.createRefreshToken(UUID.randomUUID())).thenReturn(new RefreshTokenReadDto());
         UserReadDto userReadDto = new UserReadDto();
         userReadDto.setUserPreference(new UserPreferenceReadDto());
         when(userMapper.toUserReadDto(any(User.class))).thenReturn(userReadDto);
@@ -184,9 +187,9 @@ class AuthServiceTest {
         when(refreshTokenRepo.findByToken(any())).thenReturn(refreshToken);
         when(refreshTokenService.verifyExpiration(refreshToken)).thenReturn(true);
         String expectedToken = "token";
-        RefreshToken newRefreshToken = new RefreshToken();
+        RefreshTokenReadDto newRefreshToken = new RefreshTokenReadDto(); // Mock the refresh token read dto here
         when(jwtTokenProvider.generateToken(any(User.class))).thenReturn(expectedToken);
-        when(refreshTokenService.createRefreshToken(user.getId())).thenReturn(newRefreshToken);
+        when(refreshTokenService.createRefreshToken(user.getId())).thenReturn(new RefreshTokenReadDto());
         UserReadDto userReadDto = new UserReadDto();
         UserPreferenceReadDto userPreferenceReadDto = new UserPreferenceReadDto();
         userReadDto.setUserPreference(userPreferenceReadDto);

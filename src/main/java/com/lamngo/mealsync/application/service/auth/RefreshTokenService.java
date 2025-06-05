@@ -1,5 +1,7 @@
 package com.lamngo.mealsync.application.service.auth;
 
+import com.lamngo.mealsync.application.dto.user.RefreshTokenReadDto;
+import com.lamngo.mealsync.application.mapper.user.RefreshTokenMapper;
 import com.lamngo.mealsync.domain.model.user.RefreshToken;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.repository.user.IRefreshTokenRepo;
@@ -21,12 +23,15 @@ public class RefreshTokenService {
 
     private final IUserRepo userRepo;
 
-    public RefreshTokenService(IRefreshTokenRepo refreshTokenRepo, IUserRepo userRepo) {
+    private final RefreshTokenMapper refreshTokenMapper;
+
+    public RefreshTokenService(IRefreshTokenRepo refreshTokenRepo, IUserRepo userRepo, RefreshTokenMapper refreshTokenMapper) {
         this.refreshTokenRepo = refreshTokenRepo;
         this.userRepo = userRepo;
+        this.refreshTokenMapper = refreshTokenMapper;
     }
 
-    public RefreshToken createRefreshToken(UUID userId) {
+    public RefreshTokenReadDto createRefreshToken(UUID userId) {
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -35,7 +40,11 @@ public class RefreshTokenService {
         refreshToken.setToken(UUID.randomUUID().toString());
         refreshToken.setExpiryDate(Instant.now().plusMillis(JwtRefreshExpirationMs));
 
-        return refreshTokenRepo.save(refreshToken);
+
+        refreshTokenRepo.save(refreshToken);
+        System.out.println(refreshToken);
+        System.out.println(refreshTokenMapper.toRefreshTokenReadDto(refreshToken));
+        return refreshTokenMapper.toRefreshTokenReadDto(refreshToken);
     }
 
     public boolean verifyExpiration(RefreshToken token) {

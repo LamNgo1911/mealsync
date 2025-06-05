@@ -83,7 +83,7 @@ public class AuthController {
         });
 
         String accessToken = jwtTokenProvider.generateToken(user);
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
+        RefreshTokenReadDto newRefreshToken = refreshTokenService.createRefreshToken(user.getId());
 
         UserReadDto userReadDto = userMapper.toUserReadDto(user);
 
@@ -94,7 +94,7 @@ public class AuthController {
         userInfoDto.setRole(user.getRole());
         userInfoDto.setUserPreference(userReadDto.getUserPreference());
         userInfoDto.setToken(accessToken);
-        userInfoDto.setRefreshToken(refreshToken);
+        userInfoDto.setRefreshToken(newRefreshToken);
         SuccessResponseEntity<UserInfoDto> body = new SuccessResponseEntity<>();
         body.setData(userInfoDto);
         return ResponseEntity.ok(body);
