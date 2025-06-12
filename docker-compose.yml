@@ -1,31 +1,14 @@
 services:
-  postgres:
-    image: postgres:15
-    container_name: mealsync-db
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=${POSTGRES_Docker_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_Docker_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_Docker_DB}
-    volumes:
-      - mealsync-db-data:/var/lib/postgresql/data
-
   mealsync-app:
     image: ${DOCKER_HUB_USERNAME}/mealsync-app:latest
     container_name: mealsync-app
-    depends_on:
-      - postgres
     ports:
       - "8081:8081"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:${DB_PORT}/${POSTGRES_Docker_DB}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-instance-mealsync.c5go6284y0dd.eu-north-1.rds.amazonaws.com:${DB_PORT}/${POSTGRES_Docker_DB}
       - SPRING_DATASOURCE_USERNAME=${POSTGRES_Docker_USER}
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_Docker_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_CONFIG_LOCATION=classpath:/application.properties,file:/app/env.properties
     volumes:
       - /home/ubuntu/mealsync/env.properties:/app/env.properties
-
-volumes:
-  mealsync-db-data:
