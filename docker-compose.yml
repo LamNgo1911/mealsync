@@ -5,9 +5,9 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-instance-mealsync.c5go6284y0dd.eu-north-1.rds.amazonaws.com:${DB_PORT}/${POSTGRES_Docker_DB}
-      - SPRING_DATASOURCE_USERNAME=${POSTGRES_Docker_USER}
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_Docker_PASSWORD}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://${RDS_ENDPOINT}:${RDS_PORT}/${RDS_DB_NAME}
+      - SPRING_DATASOURCE_USERNAME=${RDS_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${RDS_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_CONFIG_LOCATION=classpath:/application.properties,file:/app/env.properties
     volumes:
