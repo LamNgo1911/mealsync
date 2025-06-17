@@ -2,8 +2,7 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+The following table lists the versions of this project currently supported with security updates:
 
 | Version | Supported          |
 | ------- | ------------------ |
@@ -14,8 +13,11 @@ currently being supported with security updates.
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+If you discover a security vulnerability, please report it by opening a GitHub issue.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+- We aim to acknowledge your report within 3 business days.
+- We will provide updates on the status of your report at least once a week until it is resolved or declined.
+- If accepted, we will work with you to coordinate a fix and public disclosure.
+- If declined, we will explain the reason for the decision.
+
+Thank you for helping keep Mealsync secure!
