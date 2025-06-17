@@ -10,10 +10,11 @@ Sensitive information (such as database credentials and Docker Hub username) is 
 - Example `.env` content:
 
 ```env
-POSTGRES_Docker_USER=postgres
-POSTGRES_Docker_PASSWORD=your_password
-POSTGRES_Docker_DB=mealsync
-DB_PORT=5432
+RDS_USERNAME=postgres
+RDS_PASSWORD=your_password
+RDS_DB_NAME=mealsync
+RDS_PORT=5432
+RDS_ENDPOINT=your_rds_endpoint
 DOCKER_HUB_USERNAME=your_dockerhub_username
 ```
 
@@ -23,7 +24,7 @@ DOCKER_HUB_USERNAME=your_dockerhub_username
 ## 📦 Deployment & Hosting
 
 - Docker images are pushed to Docker Hub and deployed to AWS EC2 using GitHub Actions and Docker Compose.
-- The production backend is available at: http://44.203.134.136:8081/api/v1
+- The production backend is available at: http://13.49.27.132:8081/api/v1
 
 ## 📚 API Routes (v1)
 
@@ -59,7 +60,7 @@ Below is a summary of main routes (all prefixed with `/api/v1`):
 ---
 - All endpoints return a standard `SuccessResponseEntity<T>` wrapper.
 - Most endpoints require authentication; see your security config for details.
-- Full API docs: http://44.203.134.136:8081/swagger-ui.html
+- Full API docs: http://13.49.27.132:8081/swagger-ui.html
 
 ## 📋 Overview
 
@@ -200,13 +201,13 @@ This project uses **GitHub Actions** for CI/CD and automatic deployment to an AW
 The deployed backend is available at:
 
 ```
-http://44.203.134.136:8081/api/v1
+http://13.49.27.132:8081/api/v1
 ```
 
 API documentation (Swagger UI) can be accessed at:
 
 ```
-http://44.203.134.136:8081/swagger-ui.html
+http://13.49.27.132:8081/swagger-ui.html
 ```
 
 ## 🧪 Testing
@@ -229,6 +230,7 @@ This project is set up for continuous integration and deployment using:
 
 - **GitHub Actions**: Automated build, test, and deployment pipeline
 - **Docker & Docker Compose**: Containerization for consistent deployment
+- **AWS RDS**: Relational Database Service
 - **AWS EC2**: Cloud hosting platform
 
 The CI/CD pipeline automatically builds and tests the application on each push to the main branch, and deploys to AWS EC2 when tests pass.
@@ -238,12 +240,12 @@ The CI/CD pipeline automatically builds and tests the application on each push t
 The backend is deployed at:
 
 ```
-http://44.203.134.136:8081/api/v1
+http://13.49.27.132:8081/api/v1
 ```
 
 API docs:
 ```
-http://44.203.134.136:8081/swagger-ui.html
+http://13.49.27.132:8081/swagger-ui.html
 ```
 
 ## 🔐 Security
