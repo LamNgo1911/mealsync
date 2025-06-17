@@ -32,8 +32,8 @@ jobs:
       - name: Create .env and env.properties from env.template
         run: |
           mkdir -p generated
-          envsubst < env.template > generated/.env
-          envsubst < env.template > generated/env.properties
+          envsubst < env/env.template > generated/.env
+          envsubst < env/env.template > generated/env.properties
         env:
           DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
 
