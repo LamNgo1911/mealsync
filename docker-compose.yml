@@ -5,7 +5,7 @@ services:
     ports:
       - "8081:8081"
     env_file:
-      - .env
+      - ./generated/.env
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://${RDS_ENDPOINT}:${RDS_PORT}/${RDS_DB_NAME}
       - SPRING_DATASOURCE_USERNAME=${RDS_USERNAME}
@@ -13,4 +13,4 @@ services:
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_CONFIG_LOCATION=classpath:/application.properties,file:/app/env.properties
     volumes:
-      - ./env.properties:/app/env.properties
+      - ./generated/env.properties:/app/env.properties
