@@ -74,6 +74,7 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           source: "generated/.env,generated/env.properties"
           target: "~/mealsync"
+          strip_components: 1
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.0
