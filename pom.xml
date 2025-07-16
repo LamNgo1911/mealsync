@@ -13,7 +13,7 @@
     <name>MealSync</name>
     <description>A meal planning and synchronization application.</description>
     <properties>
-        <java.version>22</java.version>
+        <java.version>21</java.version>
     </properties>
     <dependencies>
         <!-- Spring Data JPA for database access -->

@@ -120,9 +120,11 @@ The following environment variables need to be set:
 
 ```
 # Database Configuration
-SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/mealsync
-SPRING_DATASOURCE_USERNAME=postgres
-SPRING_DATASOURCE_PASSWORD=yourpassword
+POSTGRES_ENDPOINT=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB_NAME=your_database_name
+POSTGRES_USER=your_database_username
+POSTGRES_PASSWORD=your_database_password
 
 # JWT Configuration
 JWT_SECRET=your_jwt_secret_key

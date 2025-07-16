@@ -14,7 +14,7 @@ import java.security.Key;
 import java.util.Date;
 import java.util.function.Function;
 
-@Service
+@Component
 public class JwtTokenProvider {
     private static final Logger logger = LoggerFactory.getLogger(JwtTokenProvider.class);
     // Implementation of JWT token generation and validation
