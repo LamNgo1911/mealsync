@@ -1,7 +1,7 @@
 package com.lamngo.mealsync.infrastructure.config;
 
 import com.lamngo.mealsync.infrastructure.security.CustomUserDetailsService;
-import com.lamngo.mealsync.infrastructure.security.JWTAuthenticationFilter;
+import com.lamngo.mealsync.infrastructure.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -22,10 +22,10 @@ import org.springframework.http.HttpMethod;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    private final JWTAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomUserDetailsService customUserDetailsService;
 
-    public SecurityConfig(JWTAuthenticationFilter jwtAuthenticationFilter, CustomUserDetailsService customUserDetailsService) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, CustomUserDetailsService customUserDetailsService) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.customUserDetailsService = customUserDetailsService;
     }

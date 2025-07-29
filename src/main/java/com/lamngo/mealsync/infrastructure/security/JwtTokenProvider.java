@@ -17,7 +17,7 @@ import java.util.function.Function;
 @Component
 public class JwtTokenProvider {
     private static final Logger logger = LoggerFactory.getLogger(JwtTokenProvider.class);
-    // Implementation of JWT token generation and validation
+
     @Value("${JWT_SECRET}")
     private String jwtSecret;
 
@@ -45,21 +45,21 @@ public class JwtTokenProvider {
                     .compact();
         } catch (Exception e) {
             logger.error("Error generating JWT token: {}", e.getMessage());
-            throw new RuntimeException("Failed to generate JWT token", e); // Wrap for better handling
+            throw new RuntimeException("Failed to generate JWT token", e);
         }
     }
 
     public String extractEmail(String token) {
-        return extractClaim(token, Claims::getSubject); // Extract email from token
+        return extractClaim(token, Claims::getSubject);
     }
 
     public boolean validateToken(String token, UserDetails userDetails) {
         try {
-            final String email = extractEmail(token); // Avoid duplicate extraction
+            final String email = extractEmail(token);
             return email.equals(userDetails.getUsername()) && !isTokenExpired(token);
         } catch (Exception e) {
             logger.error("Error validating JWT token: {}", e.getMessage());
-            return false; // Or throw an exception, depending on your needs
+            return false;
         }
     }
 
