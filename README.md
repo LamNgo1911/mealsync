@@ -91,7 +91,7 @@ MealSync is a backend service that enables users to discover, save, and manage r
 ## 🛠️ Tech Stack
 
 - **Framework**: Spring Boot 3.4.3
-- **Language**: Java 22
+- **Language**: Java 21
 - **Database**: PostgreSQL
 - **Security**: Spring Security with JWT
 - **Documentation**: SpringDoc OpenAPI
