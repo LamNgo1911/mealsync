@@ -1,20 +1,17 @@
 package com.lamngo.mealsync.application.service.AI;
 
-import com.google.cloud.vision.v1.AnnotateImageRequest;
-import com.google.cloud.vision.v1.AnnotateImageResponse;
-import com.google.cloud.vision.v1.BatchAnnotateImagesResponse;
-import com.google.cloud.vision.v1.EntityAnnotation;
-import com.google.cloud.vision.v1.Feature;
-import com.google.cloud.vision.v1.Image;
-import com.google.cloud.vision.v1.ImageAnnotatorClient;
+import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.vision.v1.*;
 import com.google.protobuf.ByteString;
 import com.lamngo.mealsync.application.data.KnownIngredients;
 import com.lamngo.mealsync.presentation.error.IngredientRecognitionServiceException;
+import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,6 +20,9 @@ import java.util.List;
 @Service
 public class IngredientRecognitionService {
     private static final Logger logger = LoggerFactory.getLogger(IngredientRecognitionService.class);
+
+    @Value("${google.vision.credentials.path}")
+    private String credentialsPath;
 
     public List<String> recognizeIngredients(MultipartFile imageFile) throws IngredientRecognitionServiceException {
         try {
@@ -71,7 +71,15 @@ public class IngredientRecognitionService {
                     .setImage(img)
                     .build();
 
-            try (ImageAnnotatorClient client = ImageAnnotatorClient.create()) {
+            // ✅ Load credentials dynamically
+            GoogleCredentials credentials = GoogleCredentials.fromStream(new FileInputStream(credentialsPath))
+                    .createScoped(Collections.singletonList("https://www.googleapis.com/auth/cloud-platform"));
+
+            ImageAnnotatorSettings settings = ImageAnnotatorSettings.newBuilder()
+                    .setCredentialsProvider(() -> credentials)
+                    .build();
+
+            try (ImageAnnotatorClient client = ImageAnnotatorClient.create(settings)) {
                 final List<AnnotateImageRequest> requests = Collections.singletonList(request);
                 final BatchAnnotateImagesResponse response = client.batchAnnotateImages(requests);
                 final List<AnnotateImageResponse> responses = response.getResponsesList();

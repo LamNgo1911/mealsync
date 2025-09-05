@@ -96,8 +96,7 @@ public class AuthService implements IAuthService {
         }
 
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-        User user = userRepo.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        User user = (User) userDetails;
 
         String token = jwtTokenProvider.generateToken(userDetails);
         RefreshTokenReadDto refreshToken = refreshTokenService.createRefreshToken(user.getId());

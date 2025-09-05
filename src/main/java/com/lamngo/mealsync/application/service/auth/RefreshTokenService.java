@@ -8,6 +8,7 @@ import com.lamngo.mealsync.domain.repository.user.IRefreshTokenRepo;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
 import com.lamngo.mealsync.presentation.error.BadRequestException;
 import com.lamngo.mealsync.presentation.error.ResourceNotFoundException;
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +16,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Service
+@Transactional
 public class RefreshTokenService {
     @Value("${JWT_REFRESH_EXPIRATION}")
     private long JwtRefreshExpirationMs;
@@ -34,11 +36,18 @@ public class RefreshTokenService {
     public RefreshTokenReadDto createRefreshToken(UUID userId) {
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        refreshTokenRepo.deleteByUserId(userId);
-        RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setUser(user);
+
+       // Find an existing token or create a new one (UPSERT pattern)
+        RefreshToken refreshToken = refreshTokenRepo.findByUserId(userId);
+        if (refreshToken == null) {
+            refreshToken = new RefreshToken();
+            refreshToken.setUser(user);
+        }
+
+        // Update the token and expiry date
         refreshToken.setToken(UUID.randomUUID().toString());
         refreshToken.setExpiryDate(Instant.now().plusMillis(JwtRefreshExpirationMs));
+
 
 
         refreshTokenRepo.save(refreshToken);
