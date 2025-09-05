@@ -34,7 +34,7 @@ public class RefreshTokenService {
     public RefreshTokenReadDto createRefreshToken(UUID userId) {
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
+        refreshTokenRepo.deleteByUserId(userId);
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUser(user);
         refreshToken.setToken(UUID.randomUUID().toString());
