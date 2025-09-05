@@ -49,8 +49,8 @@ public class ImageGeneratorService {
                     .bodyValue(Map.of(
                             "text_prompts", List.of(Map.of("text", prompt)),
                             "cfg_scale", 7,
-                            "height", 512,
-                            "width", 512,
+                            "height", 1024,
+                            "width", 1024,
                             "samples", 1,
                             "steps", 30
                     ))
