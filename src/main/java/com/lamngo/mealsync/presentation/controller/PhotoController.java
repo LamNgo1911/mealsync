@@ -26,7 +26,7 @@ public class PhotoController {
     }
 
     @PostMapping("/generate")
-    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<String>>generateAndUploadImage(@RequestBody PhotoRecipeRequest request) {
 
         String apiResponse = imageGeneratorService.generateImage(request.getRecipeName(), request.getIngredients(), request.getDescription());

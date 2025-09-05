@@ -38,7 +38,7 @@ public class RecipeController {
     }
 
     @PostMapping("/generate-recipes")
-    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> generateRecipesFromIngredients(
             @RequestBody @Valid GenerateRecipeRequest request) {
         List<String> ingredients = request.getIngredients();
@@ -55,7 +55,7 @@ public class RecipeController {
 
     // Save recipe with user
     @PostMapping("/save")
-    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
+    @PreAuthorize("hasRole('ADMIN') or #userRecipeCreateDto.userId == authentication.principal.id")
     public ResponseEntity<SuccessResponseEntity<UserRecipeReadDto>> saveRecipeWithUser(@RequestBody @Valid
             UserRecipeCreateDto userRecipeCreateDto) {
         logger.info("Saving recipe with user: {}", userRecipeCreateDto);
@@ -67,7 +67,7 @@ public class RecipeController {
 
     // CRUD endpoints for RecipeService
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<RecipeReadDto>> createRecipe(@RequestBody @Valid RecipeCreateDto recipeCreateDto) {
         RecipeReadDto created = recipeService.createRecipe(recipeCreateDto);
         SuccessResponseEntity<RecipeReadDto> body = new SuccessResponseEntity<>();
@@ -76,7 +76,7 @@ public class RecipeController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<RecipeReadDto>> getRecipeById(@PathVariable("id") String id) {
         RecipeReadDto recipe = recipeService.getRecipeById(UUID.fromString(id));
         SuccessResponseEntity<RecipeReadDto> body = new SuccessResponseEntity<>();
