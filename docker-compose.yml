@@ -10,7 +10,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://${RDS_ENDPOINT}:${RDS_PORT}/${RDS_DB_NAME}
       - SPRING_DATASOURCE_USERNAME=${RDS_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${RDS_PASSWORD}
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=create-drop
       - SPRING_CONFIG_LOCATION=classpath:/application.properties,file:/app/env.properties
       - GOOGLE_APPLICATION_CREDENTIALS=/app/keys/mealsync-451912-80d962e81ab0.json
     volumes:
