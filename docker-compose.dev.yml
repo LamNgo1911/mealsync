@@ -1,4 +1,16 @@
 services:
+  postgres:
+    image: postgres:15
+    container_name: mealsync-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: mealsync
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   mealsync-app:
     image: ${DOCKER_HUB_USERNAME}/mealsync-app:latest
     container_name: mealsync-app
@@ -11,7 +23,10 @@ services:
       - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=create-drop
+      - SPRING_CONFIG_LOCATION=optional:classpath:/application.properties,optional:file:/app/env.properties
       - GOOGLE_APPLICATION_CREDENTIALS=/app/mealsync-451912-80d962e81ab0.json
     volumes:
-      - ./env.properties:/app/env.properties
+      - ./src/main/resources/env.properties:/app/env.properties
       - /home/liam/Downloads/app_keys/mealsync-451912-80d962e81ab0.json:/app/mealsync-451912-80d962e81ab0.json:ro
+volumes:
+  postgres_data:
