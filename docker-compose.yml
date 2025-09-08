@@ -15,4 +15,4 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/app/keys/mealsync-451912-80d962e81ab0.json
     volumes:
       - ./env.properties:/app/env.properties
-      - /home/liam/Downloads/app_keys/mealsync-451912-80d962e81ab0.json:/app/keys/mealsync-451912-80d962e81ab0.json:ro
+      - ./mealsync-451912-80d962e81ab0.json:/app/keys/mealsync-451912-80d962e81ab0.json:ro
