@@ -60,7 +60,6 @@ Below is a summary of main routes (all prefixed with `/api/v1`):
 ---
 - All endpoints return a standard `SuccessResponseEntity<T>` wrapper.
 - Most endpoints require authentication; see your security config for details.
-- Full API docs: http://13.49.27.132:8081/swagger-ui.html
 
 ## 📋 Overview
 
@@ -91,14 +90,15 @@ MealSync is a backend service that enables users to discover, save, and manage r
 ## 🛠️ Tech Stack
 
 - **Framework**: Spring Boot 3.4.3
-- **Language**: Java 21
-- **Database**: PostgreSQL
-- **Security**: Spring Security with JWT
-- **Documentation**: SpringDoc OpenAPI
-- **Mapping**: MapStruct
+- **Language**: Java 21 (compile target as per pom.xml)
+- **Database**: PostgreSQL 42.7.2
+- **Security**: Spring Security with JWT 0.12.6
+- **Mapping**: MapStruct 1.5.5.Final
 - **Build Tool**: Maven
-- **Cloud Services**: AWS S3, Google Cloud Vision
-- **External APIs**: Stability AI, Gemini AI
+- **Cloud Services**: AWS S3, Google Cloud Vision 3.22.0
+- **External APIs**: Stability AI, Google Gemini AI
+- **Authentication**: JWT, Google OAuth
+- **HTTP Client**: OkHttp 4.11.0, WebFlux
 
 ## 🏗️ Architecture
 
@@ -112,7 +112,7 @@ MealSync follows a clean architecture pattern with clear separation of concerns:
 ## 📦 Prerequisites
 
 - Docker & Docker Compose (for local and production deployment)
-- (For local dev) Java 22+, Maven 3.8+, PostgreSQL 14+
+- (For local dev) Java 21+, Maven 3.8+, PostgreSQL 14+
 
 ## 🔧 Environment Variables
 
@@ -205,25 +205,11 @@ The deployed backend is available at:
 ```
 http://13.49.27.132:8081/api/v1
 ```
-
-API documentation (Swagger UI) can be accessed at:
-
-```
-http://13.49.27.132:8081/swagger-ui.html
-```
-
 ## 🧪 Testing
 
 Run the tests with Maven:
 ```bash
 ./mvnw test
-```
-
-## 📚 API Documentation
-
-When the application is running, access the API documentation at:
-```
-http://localhost:8081/swagger-ui.html
 ```
 
 ## 🚀 Deployment
@@ -243,11 +229,6 @@ The backend is deployed at:
 
 ```
 http://13.49.27.132:8081/api/v1
-```
-
-API docs:
-```
-http://13.49.27.132:8081/swagger-ui.html
 ```
 
 ## 🔐 Security
