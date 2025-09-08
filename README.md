@@ -10,11 +10,11 @@ Sensitive information (such as database credentials and Docker Hub username) is 
 - Example `.env` content:
 
 ```env
-RDS_USERNAME=postgres
-RDS_PASSWORD=your_password
-RDS_DB_NAME=mealsync
-RDS_PORT=5432
-RDS_ENDPOINT=your_rds_endpoint
+POSTGRES_ENDPOINT=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB_NAME=mealsync_db
+POSTGRES_USER=your_database_username
+POSTGRES_PASSWORD=your_database_password
 DOCKER_HUB_USERNAME=your_dockerhub_username
 ```
 
@@ -150,12 +150,6 @@ GOOGLE_APPLICATION_CREDENTIALS=path/to/your/google-credentials.json
 
 ## 🐳 Running with Docker & Docker Compose
 
-You can run MealSync and all dependencies (e.g., PostgreSQL) using Docker Compose:
-
-```bash
-docker-compose up --build
-```
-
 - The backend will be available at `http://localhost:8081` by default.
 - Environment variables are managed via `.env` and `docker-compose.yml`.
 
@@ -187,7 +181,7 @@ docker-compose up --build
 1. Make sure your `.env` file is set up (see above).
 2. Start all services:
    ```bash
-   docker-compose up --build
+   docker compose -f docker-compose.prod.yml up
    ```
    The backend will be available at `http://localhost:8081`.
 
