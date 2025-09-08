@@ -89,6 +89,6 @@ jobs:
           script: |
             cd ~/mealsync || git clone https://github.com/LamNgo1911/mealsync.git ~/mealsync
             git pull origin main
-            docker compose down
-            docker compose pull
-            docker compose up -d
+            docker compose -f docker-compose.prod.yml down
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
