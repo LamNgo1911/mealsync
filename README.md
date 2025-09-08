@@ -130,6 +130,10 @@ POSTGRES_PASSWORD=your_database_password
 JWT_SECRET=your_jwt_secret_key
 JWT_EXPIRATION_MS=86400000
 
+# Gemini API Configuration
+GEMINI_API_BASE_URL=your_gemini_api_url
+GEMINI_API_KEY=your_gemini_api_key
+
 # AWS Configuration
 AWS_ACCESS_KEY=your_aws_access_key
 AWS_SECRET_KEY=your_aws_secret_key
@@ -138,13 +142,10 @@ AWS_BUCKET_NAME=your_bucket_name
 
 # Stability AI Configuration
 STABILITY_API_KEY=your_stability_api_key
-STABILITY_API_URL=https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image
+STABILITY_API_URL=your_stability_api_url
 
 # Google Cloud Vision Configuration
 GOOGLE_APPLICATION_CREDENTIALS=path/to/your/google-credentials.json
-
-# Gemini AI Configuration
-GEMINI_API_KEY=your_gemini_api_key
 ```
 
 ## 🐳 Running with Docker & Docker Compose
