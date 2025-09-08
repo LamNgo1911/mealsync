@@ -12,7 +12,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${RDS_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=create-drop
       - SPRING_CONFIG_LOCATION=classpath:/application.properties,file:/app/env.properties
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/keys/mealsync-451912-80d962e81ab0.json
+      - GOOGLE_VISION_CREDENTIALS_PATH=/app/mealsync-451912-80d962e81ab0.json
     volumes:
       - ./env.properties:/app/env.properties
-      - ./mealsync-451912-80d962e81ab0.json:/app/keys/mealsync-451912-80d962e81ab0.json:ro
+      - ./mealsync-451912-80d962e81ab0.json:/app/mealsync-451912-80d962e81ab0.json:ro
