@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -21,7 +22,7 @@ import java.util.List;
 public class IngredientRecognitionService {
     private static final Logger logger = LoggerFactory.getLogger(IngredientRecognitionService.class);
 
-    @Value("${google.vision.credentials.path}")
+    @Value("${GOOGLE_APPLICATION_CREDENTIALS}")
     private String credentialsPath;
 
     public List<String> recognizeIngredients(MultipartFile imageFile) throws IngredientRecognitionServiceException {
@@ -70,6 +71,11 @@ public class IngredientRecognitionService {
                     .addFeatures(feat)
                     .setImage(img)
                     .build();
+
+            File credFile = new File(credentialsPath);
+            if (!credFile.exists()) {
+                logger.error("Credentials file does not exist at path: {}", credentialsPath);
+            }
 
             // ✅ Load credentials dynamically
             GoogleCredentials credentials = GoogleCredentials.fromStream(new FileInputStream(credentialsPath))

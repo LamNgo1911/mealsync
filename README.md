@@ -181,7 +181,7 @@ GOOGLE_APPLICATION_CREDENTIALS=path/to/your/google-credentials.json
 1. Make sure your `.env` file is set up (see above).
 2. Start all services:
    ```bash
-   docker compose -f docker-compose.prod.yml up
+   docker compose -f docker-compose.dev.yml up
    ```
    The backend will be available at `http://localhost:8081`.
 

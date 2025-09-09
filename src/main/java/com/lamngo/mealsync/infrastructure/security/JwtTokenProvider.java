@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Service;
 
 import java.security.Key;
 import java.util.Date;
@@ -37,11 +36,12 @@ public class JwtTokenProvider {
 
     public String generateToken(UserDetails userDetails) {
         try {
+
             return Jwts.builder()
                     .setSubject(userDetails.getUsername())
                     .setIssuedAt(new Date())
                     .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
-                    .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                    .signWith(getSigningKey())
                     .compact();
         } catch (Exception e) {
             logger.error("Error generating JWT token: {}", e.getMessage());
@@ -69,18 +69,19 @@ public class JwtTokenProvider {
 
     private <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         try {
-            Claims claims = Jwts.parser() // Use parserBuilder()
+
+            Claims claims = Jwts.parser()
                     .setSigningKey(getSigningKey())
                     .build()
-                    .parseClaimsJws(token)
-                    .getBody();
+                    .parseSignedClaims(token)
+                    .getPayload();
             return claimsResolver.apply(claims);
         } catch (ExpiredJwtException e) {
             logger.warn("Token expired: {}", e.getMessage());
             throw e;
         } catch (JwtException e) {
             logger.error("Error extracting claim: {}", e.getMessage());
-            throw new RuntimeException("Error extracting claim from JWT", e); // Wrap
+            throw new RuntimeException("Error extracting claim from JWT", e);
         }
     }
 }
