@@ -12,6 +12,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   mealsync-app:
+    # This section tells Docker Compose to build the image from the Dockerfile
+    build:
+      context: .
     image: ${DOCKER_HUB_USERNAME}/mealsync-app:latest
     container_name: mealsync-app
     ports:
@@ -29,5 +32,6 @@ services:
     volumes:
       - ./src/main/resources/env.properties:/app/env.properties
       - /home/liam/Downloads/app_keys/mealsync-451912-80d962e81ab0.json:/app/mealsync-451912-80d962e81ab0.json:ro
+
 volumes:
   postgres_data:

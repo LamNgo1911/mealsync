@@ -1,5 +1,7 @@
 services:
   mealsync-app:
+    build:
+      context: .
     image: ${DOCKER_HUB_USERNAME}/mealsync-app:latest
     container_name: mealsync-app
     ports:
@@ -10,7 +12,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://${RDS_ENDPOINT}:${RDS_PORT}/${RDS_DB_NAME}
       - SPRING_DATASOURCE_USERNAME=${RDS_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${RDS_PASSWORD}
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=create-drop
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - GOOGLE_APPLICATION_CREDENTIALS=/app/mealsync-451912-80d962e81ab0.json
     volumes:
       - ./env.properties:/app/env.properties
