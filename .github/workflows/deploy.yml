@@ -87,8 +87,17 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_KEY }}
           script: |
-            cd ~/mealsync || git clone https://github.com/LamNgo1911/mealsync.git ~/mealsync
-            git pull origin main
+            if [ -d "$HOME/mealsync/.git" ]; then
+              echo "Repository exists. Pulling latest changes."
+              cd $HOME/mealsync
+              git pull origin main
+            else
+              echo "Repository does not exist. Cloning."
+              git clone https://github.com/LamNgo1911/mealsync.git $HOME/mealsync
+              cd $HOME/mealsync
+            fi
+            
+            echo "Restarting Docker containers..."
             docker compose -f docker-compose.prod.yml down
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
