@@ -47,6 +47,11 @@ public class User implements UserDetails {
     @Column(nullable = false, length = 20) // Length based on expected Role names
     private UserRole role;
 
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private UserStatus status = UserStatus.ACTIVE; // Default status is ACTIVE
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private UserPreference userPreference;
 
@@ -61,7 +66,7 @@ public class User implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true; // Assuming all users are enabled by default
+        return status == UserStatus.ACTIVE;
     }
 
     @Override
@@ -71,12 +76,12 @@ public class User implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
-        return true; // Assuming accounts are not locked by default
+        return status != UserStatus.BANNED;
     }
 
     @Override
     public boolean isAccountNonExpired() {
-        return true; // Assuming accounts are not expired by default
+        return status != UserStatus.INACTIVE;
     }
 
     @Override

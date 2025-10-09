@@ -15,9 +15,11 @@ import java.util.List;
 public interface UserMapper {
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "status", constant = "ACTIVE")
     @Mapping(target = "userPreference", ignore = true)
     @Mapping(target = "refreshToken", ignore = true)
     @Mapping(target = "mealPlans", ignore = true)
+    @Mapping(target = "userRecipes", ignore = true)
     @Mapping(target = "authorities", ignore = true)
     @Mapping(target = "enabled", ignore = true)
     @Mapping(target = "accountNonExpired", ignore = true)
@@ -34,9 +36,11 @@ public interface UserMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "email", ignore = true)
     @Mapping(target = "role", ignore = true)
+    @Mapping(target = "status", ignore = true)
     @Mapping(target = "userPreference", ignore = true)
     @Mapping(target = "refreshToken", ignore = true)
     @Mapping(target = "mealPlans", ignore = true)
+    @Mapping(target = "userRecipes", ignore = true)
     @Mapping(target = "authorities", ignore = true)
     @Mapping(target = "enabled", ignore = true)
     @Mapping(target = "accountNonExpired", ignore = true)
