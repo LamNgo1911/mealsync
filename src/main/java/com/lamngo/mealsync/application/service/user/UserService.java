@@ -13,8 +13,6 @@ import com.lamngo.mealsync.domain.model.user.UserStatus;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
 import com.lamngo.mealsync.presentation.error.ResourceNotFoundException;
 import jakarta.transaction.Transactional;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
