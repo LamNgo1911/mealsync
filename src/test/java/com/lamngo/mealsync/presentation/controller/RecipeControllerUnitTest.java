@@ -83,7 +83,7 @@ class RecipeControllerUnitTest {
                 .hasNext(false)
                 .build();
         when(recipeService.getAllRecipes(anyInt(), anyInt())).thenReturn(page);
-        ResponseEntity<PaginationResponse<RecipeReadDto>> resp = controller.getAllRecipes(0, 2);
+        ResponseEntity<PaginationResponse<RecipeReadDto>> resp = controller.getAllRecipes(0, 2, null, null, null, null, null, null);
         assertEquals(200, resp.getStatusCodeValue());
         assertEquals(page, resp.getBody());
     }

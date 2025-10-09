@@ -87,9 +87,31 @@ public class RecipeController {
     @GetMapping
     public ResponseEntity<PaginationResponse<RecipeReadDto>> getAllRecipes(
             @RequestParam(defaultValue = "0") int offset,
-            @RequestParam(defaultValue = "2") int limit) {
+            @RequestParam(defaultValue = "2") int limit,
+            @RequestParam(required = false) List<String> cuisines,
+            @RequestParam(required = false) List<String> tags,
+            @RequestParam(required = false) List<String> ingredients,
+            @RequestParam(required = false) String difficulty,
+            @RequestParam(required = false) Integer maxTotalTime,
+            @RequestParam(required = false) Integer minServings) {
 
-        PaginationResponse<RecipeReadDto> response = recipeService.getAllRecipes(limit, offset);
+        PaginationResponse<RecipeReadDto> response;
+
+        // Check if any filter is applied
+        boolean hasFilters = (cuisines != null && !cuisines.isEmpty()) ||
+                           (tags != null && !tags.isEmpty()) ||
+                           (ingredients != null && !ingredients.isEmpty()) ||
+                           difficulty != null ||
+                           maxTotalTime != null ||
+                           minServings != null;
+
+        if (hasFilters) {
+            response = recipeService.getAllRecipes(limit, offset, cuisines, tags, ingredients,
+                                                   difficulty, maxTotalTime, minServings);
+        } else {
+            response = recipeService.getAllRecipes(limit, offset);
+        }
+
         return ResponseEntity.ok(response);
     }
 

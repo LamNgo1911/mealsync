@@ -63,7 +63,7 @@ public class RecipeService implements IRecipeService {
                     ingredient.setName(dto.getName());
                     ingredient.setQuantity(dto.getQuantity());
                     ingredient.setUnit(dto.getUnit());
-                    ingredient.setRecipe(recipe); // associate with recipe
+                    ingredient.setRecipe(recipe);
                     return ingredient;
                 })
                 .toList();
@@ -83,6 +83,24 @@ public class RecipeService implements IRecipeService {
     public PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset) {
         OffsetPage page = new OffsetPage(limit, offset);
         Page<Recipe> recipePage = recipeRepo.getAllRecipes(page);
+        List<RecipeReadDto> recipeReadDtos = recipePage.getContent().stream()
+                .map(recipeMapper::toRecipeReadDto)
+                .collect(Collectors.toList());
+        return PaginationResponse.<RecipeReadDto>builder()
+                .data(recipeReadDtos)
+                .offset(offset)
+                .limit(limit)
+                .totalElements(recipePage.getTotalElements())
+                .hasNext(recipePage.hasNext())
+                .build();
+    }
+
+    @Override
+    public PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset, List<String> cuisines, List<String> tags,
+                                                            List<String> ingredients, String difficulty,
+                                                            Integer maxTotalTime, Integer minServings) {
+        OffsetPage page = new OffsetPage(limit, offset);
+        Page<Recipe> recipePage = recipeRepo.getAllRecipesFiltered(page, cuisines, tags, ingredients, difficulty, maxTotalTime, minServings);
         List<RecipeReadDto> recipeReadDtos = recipePage.getContent().stream()
                 .map(recipeMapper::toRecipeReadDto)
                 .collect(Collectors.toList());
