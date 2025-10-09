@@ -85,13 +85,39 @@ public class RecipeController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PaginationResponse<RecipeReadDto>> getAllRecipes(
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "2") int limit) {
 
         PaginationResponse<RecipeReadDto> response = recipeService.getAllRecipes(limit, offset);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/recommended")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> getRecommendedRecipes(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
+            @RequestParam(defaultValue = "10") int limit) {
+
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        List<RecipeReadDto> recommendedRecipes = recipeService.getRecommendedRecipes(userId, limit);
+
+        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
+        body.setData(recommendedRecipes);
+        return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/saved")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> getSavedRecipes(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails) {
+
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        List<UserRecipeReadDto> savedRecipes = recipeService.getSavedRecipesByUserId(userId);
+
+        SuccessResponseEntity<List<UserRecipeReadDto>> body = new SuccessResponseEntity<>();
+        body.setData(savedRecipes);
+        return ResponseEntity.ok(body);
     }
 
     @PutMapping("/{id}")

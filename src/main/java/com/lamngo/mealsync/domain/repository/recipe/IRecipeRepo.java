@@ -15,4 +15,6 @@ public interface IRecipeRepo {
     void deleteRecipe(UUID id);
     Optional<Recipe> findByIngredientKey(String ingredientKey);
     long countAllRecipes();
+    List<Recipe> findRecipesByCuisines(List<String> cuisines, int limit);
+    List<Recipe> findAllRecipesForRecommendation(int limit);
 }

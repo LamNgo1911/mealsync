@@ -39,16 +39,18 @@ public class RecipeService implements IRecipeService {
     private final UserRecipeMapper userRecipeMapper;
     private final IUserRepo userRepo;
     private final RecipeIngredientMapper recipeIngredientMapper;
+    private final RecipeRecommendationService recommendationService;
 
     public RecipeService(IRecipeRepo recipeRepo, RecipeMapper recipeMapper,
                          IUserRecipeRepo userRecipeRepo, UserRecipeMapper userRecipeMapper, IUserRepo userRepo,
-                         RecipeIngredientMapper recipeIngredientMapper) {
+                         RecipeIngredientMapper recipeIngredientMapper, RecipeRecommendationService recommendationService) {
         this.recipeRepo = recipeRepo;
         this.recipeMapper = recipeMapper;
         this.userRecipeRepo = userRecipeRepo;
         this.userRecipeMapper = userRecipeMapper;
         this.userRepo = userRepo;
         this.recipeIngredientMapper = recipeIngredientMapper;
+        this.recommendationService = recommendationService;
     }
 
     @Override
@@ -128,5 +130,28 @@ public class RecipeService implements IRecipeService {
         userRecipe.setRecipe(recipe);
         UserRecipe savedUserRecipe = userRecipeRepo.saveUserRecipe(userRecipe);
         return userRecipeMapper.toUserRecipeReadDto(savedUserRecipe);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RecipeReadDto> getRecommendedRecipes(UUID userId, int limit) {
+        User user = userRepo.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        List<Recipe> recommendedRecipes = recommendationService.getRecommendedRecipes(user, limit);
+
+        return recommendedRecipes.stream()
+                .map(recipeMapper::toRecipeReadDto)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId) {
+        List<UserRecipe> userRecipes = userRecipeRepo.getUserRecipesByUserId(userId);
+
+        return userRecipes.stream()
+                .map(userRecipeMapper::toUserRecipeReadDto)
+                .toList();
     }
 }

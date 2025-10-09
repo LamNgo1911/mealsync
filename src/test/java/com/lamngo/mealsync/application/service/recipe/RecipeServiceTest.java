@@ -30,6 +30,7 @@ class RecipeServiceTest {
     private UserRecipeMapper userRecipeMapper;
     private IUserRepo userRepo;
     private RecipeIngredientMapper recipeIngredientMapper;
+    private RecipeRecommendationService recommendationService;
     private RecipeService recipeService;
 
     @BeforeEach
@@ -40,7 +41,8 @@ class RecipeServiceTest {
         userRecipeMapper = mock(UserRecipeMapper.class);
         userRepo = mock(IUserRepo.class);
         recipeIngredientMapper = mock(RecipeIngredientMapper.class);
-        recipeService = new RecipeService(recipeRepo, recipeMapper, userRecipeRepo, userRecipeMapper, userRepo, recipeIngredientMapper);
+        recommendationService = mock(RecipeRecommendationService.class);
+        recipeService = new RecipeService(recipeRepo, recipeMapper, userRecipeRepo, userRecipeMapper, userRepo, recipeIngredientMapper, recommendationService);
     }
 
     @Test

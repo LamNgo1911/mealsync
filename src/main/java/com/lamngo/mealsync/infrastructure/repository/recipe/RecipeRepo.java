@@ -47,4 +47,17 @@ public class RecipeRepo implements IRecipeRepo {
     public long countAllRecipes() {
         return _recipeJpaRepo.count();
     }
+
+    @Override
+    public List<Recipe> findRecipesByCuisines(List<String> cuisines, int limit) {
+        List<String> lowerCaseCuisines = cuisines.stream()
+                .map(String::toLowerCase)
+                .toList();
+        return _recipeJpaRepo.findByCuisineInIgnoreCase(lowerCaseCuisines, PageRequest.of(0, limit));
+    }
+
+    @Override
+    public List<Recipe> findAllRecipesForRecommendation(int limit) {
+        return _recipeJpaRepo.findAll(PageRequest.of(0, limit)).getContent();
+    }
 }
