@@ -79,6 +79,7 @@ jobs:
           source: "generated/.env generated/env.properties generated/mealsync-451912-80d962e81ab0.json"
           target: "~/mealsync"
           strip_components: 1
+          debug: true
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.0
