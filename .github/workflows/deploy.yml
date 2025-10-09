@@ -29,76 +29,46 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/mealsync-app:latest
 
-      - name: Generate env files and Google credentials
+      - name: Create .env, env.properties, and decode Google credentials
         run: |
-          GENERATED_DIR="$GITHUB_WORKSPACE/generated"
-          mkdir -p "$GENERATED_DIR"
-
-          # Verify template exists
-          if [ ! -f "$GITHUB_WORKSPACE/env/env.template" ]; then
-            echo "ERROR: env/env.template not found"
-            exit 1
-          fi
-
-          # Generate .env and env.properties
-          envsubst < "$GITHUB_WORKSPACE/env/env.template" > "$GENERATED_DIR/.env"
-          envsubst < "$GITHUB_WORKSPACE/env/env.template" > "$GENERATED_DIR/env.properties"
-
-          # Check generated files
-          for f in .env env.properties; do
-            if [ ! -s "$GENERATED_DIR/$f" ]; then
-              echo "ERROR: $f is empty or missing"
-              exit 1
-            fi
-          done
-
-          # Decode Google credentials
-          if [ -z "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" ]; then
-            echo "ERROR: GOOGLE_CREDENTIALS_JSON secret is empty"
-            exit 1
-          fi
-          echo "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" | base64 -d > "$GENERATED_DIR/mealsync-451912-80d962e81ab0.json"
-
-          # Verify credentials file
-          if [ ! -s "$GENERATED_DIR/mealsync-451912-80d962e81ab0.json" ]; then
-            echo "ERROR: Google credentials JSON is empty"
-            exit 1
-          fi
-
-          # List files for debug
-          ls -la "$GENERATED_DIR"
+          mkdir -p generated
+          # Generate env files
+          envsubst < env/env.template > generated/.env
+          envsubst < env/env.template > generated/env.properties
+          
+          # Decode Google credentials from GitHub secret
+          echo "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" | base64 -d > generated/mealsync-451912-80d962e81ab0.json
         env:
           DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+
           RDS_ENDPOINT: ${{ secrets.RDS_ENDPOINT }}
           RDS_PORT: ${{ secrets.RDS_PORT }}
           RDS_DB_NAME: ${{ secrets.RDS_DB_NAME }}
           RDS_USERNAME: ${{ secrets.RDS_USERNAME }}
           RDS_PASSWORD: ${{ secrets.RDS_PASSWORD }}
+
           POSTGRES_ENDPOINT: ${{ secrets.POSTGRES_ENDPOINT }}
           POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
           POSTGRES_DB_NAME: ${{ secrets.POSTGRES_DB_NAME }}
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           JWT_EXPIRATION: ${{ secrets.JWT_EXPIRATION }}
           JWT_REFRESH_EXPIRATION: ${{ secrets.JWT_REFRESH_EXPIRATION }}
+
           GEMINI_API_BASE_URL: ${{ secrets.GEMINI_API_BASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           AWS_S3_BUCKET_NAME: ${{ secrets.AWS_S3_BUCKET_NAME }}
+
           STABILITY_API_KEY: ${{ secrets.STABILITY_API_KEY }}
           STABILITY_API_URL: ${{ secrets.STABILITY_API_URL }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
 
-      - name: Ensure EC2 target folder exists
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_KEY }}
-          script: mkdir -p ~/mealsync
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
 
       - name: Upload files to EC2
         uses: appleboy/scp-action@v0.1.4
@@ -106,10 +76,9 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_KEY }}
-          source: "$GITHUB_WORKSPACE/generated/.env $GITHUB_WORKSPACE/generated/env.properties $GITHUB_WORKSPACE/generated/mealsync-451912-80d962e81ab0.json"
+          source: "generated/.env,generated/env.properties,generated/mealsync-451912-80d962e81ab0.json"
           target: "~/mealsync"
           strip_components: 1
-          debug: true
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.0
