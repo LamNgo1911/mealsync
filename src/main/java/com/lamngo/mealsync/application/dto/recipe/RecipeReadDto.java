@@ -27,6 +27,10 @@ public class RecipeReadDto {
     private Integer cookingTime;
     private Integer totalTime;
     private Integer servings;
+    private Double calories;
+    private Double protein;
+    private Double carbohydrates;
+    private Double fat;
     private String difficulty;
     private List<String> tags;
     private String source;

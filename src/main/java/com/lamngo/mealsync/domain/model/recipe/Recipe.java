@@ -84,6 +84,26 @@ public class Recipe {
     @Column(nullable = false)
     private Integer servings;
 
+    @NotNull(message = "Calories are required")
+    @Min(value = 0, message = "Calories cannot be negative")
+    @Column(nullable = false)
+    private Double calories; // kcal per serving
+
+    @NotNull(message = "Protein is required")
+    @Min(value = 0, message = "Protein cannot be negative")
+    @Column(nullable = false)
+    private Double protein; // grams per serving
+
+    @NotNull(message = "Carbohydrates are required")
+    @Min(value = 0, message = "Carbohydrates cannot be negative")
+    @Column(nullable = false)
+    private Double carbohydrates; // grams per serving
+
+    @NotNull(message = "Fat is required")
+    @Min(value = 0, message = "Fat cannot be negative")
+    @Column(nullable = false)
+    private Double fat; // grams per serving
+
     @NotBlank(message = "Difficulty is required")
     @Size(max = 20, message = "Difficulty cannot exceed 20 characters")
     @Column(nullable = false, length = 20)

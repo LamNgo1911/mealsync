@@ -10,9 +10,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RecipeIngredientReadDto {
-
     private String name;
     private String quantity;
     private String unit;
-
 }

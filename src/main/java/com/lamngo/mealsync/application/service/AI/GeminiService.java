@@ -202,6 +202,10 @@ public class GeminiService {
                             recipe.setCookingTime(obj.optInt("cookingTime", 0));
                             recipe.setTotalTime(obj.optInt("totalTime", 0));
                             recipe.setServings(obj.optInt("servings", 1));
+                            recipe.setCalories(obj.optDouble("calories", 0.0));
+                            recipe.setProtein(obj.optDouble("protein", 0.0));
+                            recipe.setCarbohydrates(obj.optDouble("carbohydrates", 0.0));
+                            recipe.setFat(obj.optDouble("fat", 0.0));
                             recipe.setDifficulty(obj.optString("difficulty", ""));
 
                             // Tags

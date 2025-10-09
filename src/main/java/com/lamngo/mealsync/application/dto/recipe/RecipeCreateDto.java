@@ -56,6 +56,18 @@ public class RecipeCreateDto {
     @Min(value = 1, message = "Servings must be at least 1")
     private Integer servings;
 
+    @Min(value = 0, message = "Calories cannot be negative")
+    private Double calories;
+
+    @Min(value = 0, message = "Protein cannot be negative")
+    private Double protein;
+
+    @Min(value = 0, message = "Carbohydrates cannot be negative")
+    private Double carbohydrates;
+
+    @Min(value = 0, message = "Fat cannot be negative")
+    private Double fat;
+
     @Size(max = 50, message = "Difficulty cannot exceed 50 characters")
     private String difficulty;
 
