@@ -100,8 +100,9 @@ public class GeminiService {
                     ", favorite cuisines: " + userPreference.getFavoriteCuisines() +
                     ", disliked ingredients: " + userPreference.getDislikedIngredients() + "." +
                     " Generate exactly 2 creative recipes and respond with ONLY a valid JSON array. Do not include any text or explanation. Each recipe should have the following fields: " +
-                    "name, instructions (as a string array, one step per item), cuisine, description, preparationTime, cookingTime, totalTime, servings, difficulty, tags, " +
-                    "and ingredients (with name, quantity, unit).";
+                    "name, instructions (as a string array, one step per item), cuisine, description, preparationTime, cookingTime, totalTime, servings, " +
+                    "calories (kcal per serving), protein (grams per serving), carbohydrates (grams per serving), fat (grams per serving), " +
+                    "difficulty, tags, and ingredients (with name, quantity, unit).";
 
             JSONObject requestBody = new JSONObject();
             requestBody.put("contents", new JSONArray()
