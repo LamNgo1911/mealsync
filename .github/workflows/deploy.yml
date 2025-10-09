@@ -29,15 +29,41 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/mealsync-app:latest
 
-      - name: Create .env, env.properties, and decode Google credentials
+      - name: Generate env files and Google credentials
         run: |
           mkdir -p generated
-          # Generate env files
+          
+          # Verify env template exists
+          if [ ! -f env/env.template ]; then
+            echo "ERROR: env/env.template not found"
+            exit 1
+          fi
+
+          # Generate .env and env.properties
           envsubst < env/env.template > generated/.env
           envsubst < env/env.template > generated/env.properties
-          
-          # Decode Google credentials from GitHub secret
+
+          # Check files were generated
+          if [ ! -s generated/.env ] || [ ! -s generated/env.properties ]; then
+            echo "ERROR: Generated .env or env.properties is empty"
+            exit 1
+          fi
+
+          # Decode Google credentials
+          if [ -z "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" ]; then
+            echo "ERROR: GOOGLE_CREDENTIALS_JSON secret is empty"
+            exit 1
+          fi
           echo "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" | base64 -d > generated/mealsync-451912-80d962e81ab0.json
+
+          # Verify file exists
+          if [ ! -s generated/mealsync-451912-80d962e81ab0.json ]; then
+            echo "ERROR: Google credentials JSON is empty"
+            exit 1
+          fi
+
+          # List generated files
+          ls -la generated/
         env:
           DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
 
@@ -69,6 +95,14 @@ jobs:
           STABILITY_API_URL: ${{ secrets.STABILITY_API_URL }}
 
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+
+      - name: Ensure target folder exists on EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_KEY }}
+          script: mkdir -p ~/mealsync
 
       - name: Upload files to EC2
         uses: appleboy/scp-action@v0.1.4
