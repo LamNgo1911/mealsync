@@ -132,10 +132,11 @@ public class RecipeController {
     @GetMapping("/saved")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> getSavedRecipes(
-            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails) {
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
+            @RequestParam(defaultValue = "10") int limit) {
 
         UUID userId = UUID.fromString(userDetails.getUsername());
-        List<UserRecipeReadDto> savedRecipes = recipeService.getSavedRecipesByUserId(userId);
+        List<UserRecipeReadDto> savedRecipes = recipeService.getSavedRecipesByUserId(userId, limit);
 
         SuccessResponseEntity<List<UserRecipeReadDto>> body = new SuccessResponseEntity<>();
         body.setData(savedRecipes);

@@ -21,5 +21,5 @@ public interface IRecipeService {
     void deleteRecipe(UUID id);
     UserRecipeReadDto addRecipeToUser(UUID userId, UUID recipeId);
     List<RecipeReadDto> getRecommendedRecipes(UUID userId, int limit);
-    List<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId);
+    List<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId, int limit);
 }

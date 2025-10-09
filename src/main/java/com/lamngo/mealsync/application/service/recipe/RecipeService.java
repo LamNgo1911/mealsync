@@ -165,10 +165,11 @@ public class RecipeService implements IRecipeService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId) {
+    public List<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId, int limit) {
         List<UserRecipe> userRecipes = userRecipeRepo.getUserRecipesByUserId(userId);
 
         return userRecipes.stream()
+                .limit(limit)
                 .map(userRecipeMapper::toUserRecipeReadDto)
                 .toList();
     }
