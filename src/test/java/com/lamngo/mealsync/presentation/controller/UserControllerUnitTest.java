@@ -2,6 +2,8 @@ package com.lamngo.mealsync.presentation.controller;
 
 import com.lamngo.mealsync.application.dto.user.*;
 import com.lamngo.mealsync.application.service.user.UserService;
+import com.lamngo.mealsync.domain.model.user.UserRole;
+import com.lamngo.mealsync.domain.model.user.UserStatus;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,7 +34,7 @@ class UserControllerUnitTest {
     void getAllUsers_success() {
         List<UserReadDto> users = List.of(new UserReadDto());
         when(userService.getAllUsers()).thenReturn(users);
-        ResponseEntity<SuccessResponseEntity<List<UserReadDto>>> response = controller.getAllUsers();
+        ResponseEntity<SuccessResponseEntity<List<UserReadDto>>> response = controller.getAllUsers(UserRole.USER, UserStatus.ACTIVE);
         assertEquals(200, response.getStatusCodeValue());
         assertEquals(users, response.getBody().getData());
     }

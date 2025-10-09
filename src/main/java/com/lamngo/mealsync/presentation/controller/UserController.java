@@ -2,6 +2,8 @@ package com.lamngo.mealsync.presentation.controller;
 
 import com.lamngo.mealsync.application.dto.user.*;
 import com.lamngo.mealsync.application.service.user.UserService;
+import com.lamngo.mealsync.domain.model.user.UserRole;
+import com.lamngo.mealsync.domain.model.user.UserStatus;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -25,8 +27,17 @@ public class UserController {
     // Only users with the ADMIN role can access this endpoint
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<SuccessResponseEntity<List<UserReadDto>>> getAllUsers() {
-        List<UserReadDto> users = userService.getAllUsers();
+    public ResponseEntity<SuccessResponseEntity<List<UserReadDto>>> getAllUsers(
+            @RequestParam(required = false) UserRole role,
+            @RequestParam(required = false) UserStatus status) {
+
+        List<UserReadDto> users;
+        if (role != null || status != null) {
+            users = userService.getAllUsers(role, status);
+        } else {
+            users = userService.getAllUsers();
+        }
+
         SuccessResponseEntity<List<UserReadDto>> body = new SuccessResponseEntity<>();
         body.setData(users);
         return ResponseEntity.ok(body);

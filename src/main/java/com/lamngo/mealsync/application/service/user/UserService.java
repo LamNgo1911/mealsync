@@ -8,6 +8,8 @@ import com.lamngo.mealsync.application.mapper.user.UserMapper;
 import com.lamngo.mealsync.application.mapper.user.UserPreferenceMapper;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
+import com.lamngo.mealsync.domain.model.user.UserRole;
+import com.lamngo.mealsync.domain.model.user.UserStatus;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
 import com.lamngo.mealsync.presentation.error.ResourceNotFoundException;
 import jakarta.transaction.Transactional;
@@ -39,6 +41,14 @@ public class UserService implements IUserService {
     @Override
     public List<UserReadDto> getAllUsers() {
         List<User> users = _iUserRepo.findAll();
+        return users.stream()
+                .map(_userMapper::toUserReadDto)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<UserReadDto> getAllUsers(UserRole role, UserStatus status) {
+        List<User> users = _iUserRepo.findByRoleAndStatus(role, status);
         return users.stream()
                 .map(_userMapper::toUserReadDto)
                 .collect(Collectors.toList());
