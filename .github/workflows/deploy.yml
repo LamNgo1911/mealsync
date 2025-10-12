@@ -13,7 +13,7 @@ env:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -37,7 +37,6 @@ jobs:
             --show-version \
             --errors \
             --fail-fast
-
       - name: Build Application
         run: mvn clean package -DskipTests -B
 
@@ -58,7 +57,6 @@ jobs:
           tags: |
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
-
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
@@ -102,109 +100,23 @@ jobs:
 
       - name: Upload artifacts to EC2
         run: |
-          echo "Setting up SSH key..."
           echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
           chmod 600 /tmp/ec2_key
           
-          echo "Diagnosing SSH service issue..."
-          # Test multiple aspects to identify the specific problem
-
-          # Test 1: Basic connectivity (already know this works)
-          echo "✓ TCP connectivity confirmed"
-
-          # Test 2: Check if SSH daemon process exists
-          if timeout 10 ssh -i /tmp/ec2_key \
+          ssh -i /tmp/ec2_key \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
-              -o ConnectTimeout=5 \
-              -o BatchMode=yes \
-              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-              "pgrep -f sshd | head -5"; then
-            echo "✓ SSH daemon process exists"
-          else
-            echo "❌ SSH daemon process not found"
-          fi
-
-          # Test 3: Check system resources that might affect SSH
-          if timeout 10 ssh -i /tmp/ec2_key \
-              -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              -o ConnectTimeout=5 \
-              -o BatchMode=yes \
-              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-              "echo 'Disk:' && df -h / | tail -1 && echo 'Memory:' && free -h | grep Mem"; then
-            echo "✓ System resources accessible"
-          else
-            echo "❌ Cannot check system resources"
-          fi
-
-          # Test 4: Try to restart SSH service
-          if timeout 15 ssh -i /tmp/ec2_key \
-              -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              -o ConnectTimeout=5 \
-              -o BatchMode=yes \
-              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-              "sudo systemctl restart sshd && sleep 3 && systemctl is-active sshd"; then
-            echo "✓ SSH service restarted successfully"
-          else
-            echo "❌ SSH service restart failed"
-          fi
-
-          # Test 5: Final connectivity test
-          if timeout 10 ssh -i /tmp/ec2_key \
-              -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              -o ConnectTimeout=5 \
-              -o BatchMode=yes \
-              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-              "echo 'SSH connectivity restored'"; then
-            echo "✅ SSH connectivity restored!"
-          else
-            echo "❌ SSH still not responding"
-            echo ""
-            echo "🚨 Manual Intervention Required:"
-            echo ""
-            echo "The SSH service appears to be in a bad state."
-            echo "You need to access the instance through AWS Console:"
-            echo ""
-            echo "1. Go to EC2 Console → Instances"
-            echo "2. Select your instance"
-            echo "3. Click 'Connect' → 'Session Manager'"
-            echo "4. Run these commands in Session Manager:"
-            echo "   sudo systemctl status sshd"
-            echo "   sudo systemctl stop sshd"
-            echo "   sudo systemctl start sshd"
-            echo "   sudo systemctl enable sshd"
-            echo "   sudo reboot"
-            echo ""
-            echo "5. After reboot, test SSH connectivity again"
-            exit 1
-          fi
-
-          echo "Creating directory on EC2..."
-          timeout 60 ssh -i /tmp/ec2_key \
-              -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              -o ConnectTimeout=30 \
-              -o ServerAliveInterval=60 \
               ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
               "mkdir -p ~/mealsync && chmod 755 ~/mealsync"
           
-          echo "Uploading configuration files..."
-          # Use faster compression and better timeout handling
           tar -czf - -C generated . | \
-            timeout 300 ssh -i /tmp/ec2_key \
+            ssh -i /tmp/ec2_key \
                 -o StrictHostKeyChecking=no \
                 -o UserKnownHostsFile=/dev/null \
-                -o ConnectTimeout=60 \
-                -o ServerAliveInterval=30 \
                 ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
                 "tar -xzf - -C ~/mealsync/"
           
-          echo "Cleaning up temporary files..."
           rm -f /tmp/ec2_key
-          echo "✅ Configuration upload completed"
 
   deploy-production:
     needs: build-and-test
