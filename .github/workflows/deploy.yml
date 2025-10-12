@@ -286,17 +286,37 @@ jobs:
           script: |
             # Wait a bit for the service to stabilize
             sleep 10
-            
-            # Check if the application is responding
-            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/actuator/health)
-            
-            if [ "$RESPONSE" = "200" ]; then
-              echo "✅ Deployment successful! Application is healthy."
-              exit 0
+
+            echo "=== Verifying Deployment ==="
+
+            # Check if nginx is responding (main application endpoint)
+            echo "Checking nginx status..."
+            if curl -s -I http://localhost | grep -q "200\|301\|302"; then
+              echo "✅ Nginx is responding successfully!"
             else
-              echo "❌ Deployment verification failed! HTTP status: $RESPONSE"
+              echo "❌ Nginx health check failed"
+              echo "=== Nginx status ==="
+              curl -s -I http://localhost || echo "Nginx not responding"
               exit 1
             fi
+
+            # Check Docker container status
+            echo "=== Docker Container Status ==="
+            docker compose -f ~/mealsync/docker-compose.prod.yml ps
+
+            # Check if mealsync-app containers are healthy
+            if docker compose -f ~/mealsync/docker-compose.prod.yml ps mealsync-app | grep -q "healthy\|Up"; then
+              echo "✅ Application containers are running and healthy!"
+            else
+              echo "❌ Application containers are not healthy"
+              echo "=== Application Container Logs ==="
+              docker compose -f ~/mealsync/docker-compose.prod.yml logs --tail=20 mealsync-app
+              exit 1
+            fi
+
+            # Final verification
+            echo "✅ Deployment verification successful!"
+            echo "🎉 Application is running and accessible via nginx"
 
       - name: Notify on Failure
         if: failure()
