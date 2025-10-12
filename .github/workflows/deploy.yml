@@ -28,8 +28,6 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/mealsync-app:latest
-          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/mealsync-app:cache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/mealsync-app:cache,mode=max
 
       - name: Create .env, env.properties, and decode Google credentials
         run: |
@@ -62,44 +60,62 @@ jobs:
           STABILITY_API_URL: ${{ secrets.STABILITY_API_URL }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
 
-      - name: Setup SSH key
+      - name: Verify generated files
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_KEY }}" > ~/.ssh/ec2_key
-          chmod 600 ~/.ssh/ec2_key
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "Files to upload:"
+          ls -lah generated/
 
-      - name: Upload files and deploy to EC2
+      # NEW: Add cleanup BEFORE deployment
+      - name: Pre-deployment cleanup
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            echo "Cleaning old Docker images..."
+            docker image prune -af --filter "until=48h"
+
+      - name: Upload files to EC2
         run: |
-          # Create directory and upload files in one connection
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "mkdir -p ~/mealsync" && \
-          tar -czf - -C generated . | ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "tar -xzf - -C ~/mealsync/" && \
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
-            set -e
+          echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
+          chmod 600 /tmp/ec2_key
+          
+          ssh -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+              "mkdir -p ~/mealsync && chmod 755 ~/mealsync"
+          
+          tar -czf - -C generated . | \
+            ssh -i /tmp/ec2_key \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+                "tar -xzf - -C ~/mealsync/"
+          
+          rm -f /tmp/ec2_key
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            cd ~/mealsync || git clone https://github.com/LamNgo1911/mealsync.git ~/mealsync
             cd ~/mealsync
-          
-            # Clone repo if it doesn't exist
-            if [ ! -d ".git" ]; then
-              git clone https://github.com/LamNgo1911/mealsync.git temp_repo
-              mv temp_repo/.git .
-              mv temp_repo/* .
-              rm -rf temp_repo
-            fi
-          
-            # Pull latest changes
             git pull origin main
-          
-            # Deploy with zero-downtime strategy
+            docker compose -f docker-compose.prod.yml down
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
-          
-            # Clean up old images
-            docker image prune -af --filter "until=24h"
-          
+            
+            # NEW: Cleanup after deployment
+            docker image prune -af
+            
             echo "Deployment complete!"
             docker compose -f docker-compose.prod.yml ps
-          EOF
-
-      - name: Cleanup
-        if: always()
-        run: rm -rf ~/.ssh/ec2_key
+            
+            # NEW: Show disk usage
+            echo "Disk usage:"
+            df -h / | grep -v tmpfs
