@@ -2,7 +2,10 @@ package com.lamngo.mealsync;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.TestPropertySource;
+import com.lamngo.mealsync.application.service.AWS.S3Service;
+import com.lamngo.mealsync.application.service.AI.GeminiService;
 
 @SpringBootTest
 @TestPropertySource(properties = {
@@ -10,15 +13,31 @@ import org.springframework.test.context.TestPropertySource;
 	"spring.datasource.driver-class-name=org.h2.Driver",
 	"spring.jpa.hibernate.ddl-auto=create-drop",
 	"spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
-	"GOOGLE_APPLICATION_CREDENTIALS=",
+	"google.vision.credentials.path=",
 	"JWT_SECRET=test-secret-key-for-testing-purposes-only-minimum-256-bits",
 	"JWT_EXPIRATION=86400000",
-	"JWT_REFRESH_EXPIRATION=604800000"
+	"JWT_REFRESH_EXPIRATION=604800000",
+	"GEMINI_API_BASE_URL=http://localhost",
+	"GEMINI_API_KEY=test-key",
+	"AWS_ACCESS_KEY_ID=test-key",
+	"AWS_SECRET_ACCESS_KEY=test-secret",
+	"AWS_REGION=us-east-1",
+	"AWS_S3_BUCKET_NAME=test-bucket",
+	"STABILITY_API_KEY=test-key",
+	"STABILITY_API_URL=http://localhost"
 })
 class MealSyncApplicationTests {
 
+	// Mock external services to avoid initialization issues
+	@MockitoBean(name = "s3Service")
+	private S3Service s3Service;
+	
+	@MockitoBean(name = "geminiService")
+	private GeminiService geminiService;
+
 	@Test
 	void contextLoads() {
+		// Context loads successfully with mocked external services
 	}
 
 }
