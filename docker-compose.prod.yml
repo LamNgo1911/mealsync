@@ -18,7 +18,6 @@ services:
 
   mealsync-app:
     image: ${DOCKER_HUB_USERNAME}/mealsync-app:latest
-    container_name: mealsync-app
     env_file:
       - .env
     environment:
