@@ -24,7 +24,8 @@ import com.lamngo.mealsync.application.service.AI.GeminiService;
 	"AWS_REGION=us-east-1",
 	"AWS_S3_BUCKET_NAME=test-bucket",
 	"STABILITY_API_KEY=test-key",
-	"STABILITY_API_URL=http://localhost"
+	"STABILITY_API_URL=http://localhost",
+	"GOOGLE_CLIENT_ID=test-client-id"
 })
 class MealSyncApplicationTests {
 
