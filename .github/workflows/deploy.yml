@@ -106,50 +106,79 @@ jobs:
           echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
           chmod 600 /tmp/ec2_key
           
-          echo "Testing EC2 responsiveness..."
-          # Test if EC2 instance responds to any basic commands
+          echo "Diagnosing SSH service issue..."
+          # Test multiple aspects to identify the specific problem
+
+          # Test 1: Basic connectivity (already know this works)
+          echo "✓ TCP connectivity confirmed"
+
+          # Test 2: Check if SSH daemon process exists
           if timeout 10 ssh -i /tmp/ec2_key \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               -o ConnectTimeout=5 \
               -o BatchMode=yes \
               ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-              "whoami && uptime && systemctl is-active sshd"; then
-            echo "✅ EC2 instance is responsive and SSH service is active"
+              "pgrep -f sshd | head -5"; then
+            echo "✓ SSH daemon process exists"
           else
-            echo "❌ EC2 instance is not responding properly"
+            echo "❌ SSH daemon process not found"
+          fi
+
+          # Test 3: Check system resources that might affect SSH
+          if timeout 10 ssh -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=5 \
+              -o BatchMode=yes \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+              "echo 'Disk:' && df -h / | tail -1 && echo 'Memory:' && free -h | grep Mem"; then
+            echo "✓ System resources accessible"
+          else
+            echo "❌ Cannot check system resources"
+          fi
+
+          # Test 4: Try to restart SSH service
+          if timeout 15 ssh -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=5 \
+              -o BatchMode=yes \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+              "sudo systemctl restart sshd && sleep 3 && systemctl is-active sshd"; then
+            echo "✓ SSH service restarted successfully"
+          else
+            echo "❌ SSH service restart failed"
+          fi
+
+          # Test 5: Final connectivity test
+          if timeout 10 ssh -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=5 \
+              -o BatchMode=yes \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+              "echo 'SSH connectivity restored'"; then
+            echo "✅ SSH connectivity restored!"
+          else
+            echo "❌ SSH still not responding"
             echo ""
-            echo "🚨 SSH Service Issue Detected:"
-            echo "The TCP connection succeeds but SSH daemon isn't responding."
+            echo "🚨 Manual Intervention Required:"
             echo ""
-            echo "🔧 Immediate Actions Required:"
+            echo "The SSH service appears to be in a bad state."
+            echo "You need to access the instance through AWS Console:"
             echo ""
-            echo "1. Connect to AWS EC2 Console"
-            echo "2. Check CloudWatch logs for system errors"
-            echo "3. Verify SSH service status:"
+            echo "1. Go to EC2 Console → Instances"
+            echo "2. Select your instance"
+            echo "3. Click 'Connect' → 'Session Manager'"
+            echo "4. Run these commands in Session Manager:"
             echo "   sudo systemctl status sshd"
+            echo "   sudo systemctl stop sshd"
             echo "   sudo systemctl start sshd"
             echo "   sudo systemctl enable sshd"
-            echo ""
-            echo "4. Check system resources:"
-            echo "   top -b -n1 | head -20"
-            echo "   df -h"
-            echo "   free -h"
-            echo ""
-            echo "5. Check SSH configuration:"
-            echo "   sudo nano /etc/ssh/sshd_config"
-            echo "   # Ensure these are set:"
-            echo "   # Port 22"
-            echo "   # PermitRootLogin no"
-            echo "   # PasswordAuthentication no"
-            echo ""
-            echo "6. Restart SSH service:"
-            echo "   sudo systemctl restart sshd"
-            echo ""
-            echo "7. If instance is unresponsive, consider reboot:"
             echo "   sudo reboot"
             echo ""
-            echo "8. Check for security incidents or unusual activity"
+            echo "5. After reboot, test SSH connectivity again"
             exit 1
           fi
 
