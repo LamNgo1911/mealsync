@@ -1,5 +1,5 @@
 # ---------- Stage 1: Build ----------
-FROM maven:3.9.6-eclipse-temurin-22-alpine AS BUILDER
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS BUILDER
 
 WORKDIR /app
 
@@ -16,15 +16,15 @@ COPY src ./src
 RUN mvn clean package -DskipTests -B
 
 # ---------- Stage 2: Run ----------
-FROM eclipse-temurin:22-jre-alpine AS RUNNER
+FROM eclipse-temurin:21-jre-alpine AS RUNNER
 
 # Add non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
 
 WORKDIR /app
 
-# Copy JAR from builder stage
-COPY --from=BUILDER /app/target/mealsync-0.0.1-SNAPSHOT.jar /app/mealsync.jar
+# Copy JAR from builder stage (use correct JAR name)
+COPY --from=BUILDER /app/target/*.jar /app/mealsync.jar
 
 # Change ownership to non-root user
 RUN chown -R spring:spring /app
@@ -44,6 +44,7 @@ ENTRYPOINT ["java", \
     "-XX:MaxRAMPercentage=75.0", \
     "-XX:+UseG1GC", \
     "-XX:+ExitOnOutOfMemoryError", \
+    "-XX:+UseStringDeduplication", \
     "-Djava.security.egd=file:/dev/./urandom", \
     "-jar", \
     "mealsync.jar"]

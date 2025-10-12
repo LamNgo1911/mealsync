@@ -102,23 +102,33 @@ jobs:
 
       - name: Upload artifacts to EC2
         run: |
+          echo "Setting up SSH key..."
           echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
           chmod 600 /tmp/ec2_key
           
-          ssh -i /tmp/ec2_key \
+          echo "Creating directory on EC2..."
+          timeout 60 ssh -i /tmp/ec2_key \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=30 \
+              -o ServerAliveInterval=60 \
               ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
               "mkdir -p ~/mealsync && chmod 755 ~/mealsync"
           
+          echo "Uploading configuration files..."
+          # Use faster compression and better timeout handling
           tar -czf - -C generated . | \
-            ssh -i /tmp/ec2_key \
+            timeout 300 ssh -i /tmp/ec2_key \
                 -o StrictHostKeyChecking=no \
                 -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=60 \
+                -o ServerAliveInterval=30 \
                 ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
                 "tar -xzf - -C ~/mealsync/"
           
+          echo "Cleaning up temporary files..."
           rm -f /tmp/ec2_key
+          echo "✅ Configuration upload completed"
 
   deploy-production:
     needs: build-and-test
