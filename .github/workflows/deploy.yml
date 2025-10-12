@@ -106,23 +106,45 @@ jobs:
           echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
           chmod 600 /tmp/ec2_key
           
-          echo "Testing EC2 connectivity first..."
-          # Test basic connectivity before attempting operations
-          if ssh -i /tmp/ec2_key \
+          echo "Advanced EC2 connectivity test..."
+          # Test with verbose output for debugging
+          if timeout 15 ssh -i /tmp/ec2_key \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
-              -o ConnectTimeout=10 \
+              -o ConnectTimeout=5 \
               -o BatchMode=yes \
+              -v \
               ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-              "echo 'EC2 connection successful'"; then
+              "echo 'Connection successful' && uptime"; then
             echo "✅ EC2 connectivity verified"
           else
-            echo "❌ Cannot connect to EC2 instance"
-            echo "Please check:"
-            echo "1. EC2 instance is running (not stopped)"
-            echo "2. Security group allows SSH (port 22)"
-            echo "3. SSH key is correct and not expired"
-            echo "4. EC2 instance has internet connectivity"
+            echo "❌ Advanced connectivity test failed"
+            echo ""
+            echo "🔍 Detailed Troubleshooting Steps:"
+            echo ""
+            echo "1. Test SSH from your local machine:"
+            echo "   ssh -i your-local-key.pem ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}"
+            echo ""
+            echo "2. Check if SSH service is running on EC2:"
+            echo "   sudo systemctl status ssh"
+            echo "   sudo systemctl status sshd"
+            echo ""
+            echo "3. Verify SSH key format in GitHub secrets:"
+            echo "   - Ensure key starts with '-----BEGIN'"
+            echo "   - Check for proper line endings"
+            echo "   - Try regenerating the key pair"
+            echo ""
+            echo "4. Check VPC and Network configuration:"
+            echo "   - Verify instance is in public subnet"
+            echo "   - Check route tables for internet gateway"
+            echo "   - Verify NACL rules allow port 22"
+            echo ""
+            echo "5. Test different ports:"
+            echo "   nc -zv ${{ secrets.EC2_HOST }} 22"
+            echo ""
+            echo "6. Check GitHub Actions outbound IPs:"
+            echo "   - GitHub may be blocked by your security group"
+            echo "   - Consider allowing 0.0.0.0/0 temporarily for testing"
             exit 1
           fi
 
