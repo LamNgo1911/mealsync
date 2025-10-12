@@ -106,6 +106,26 @@ jobs:
           echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
           chmod 600 /tmp/ec2_key
           
+          echo "Testing EC2 connectivity first..."
+          # Test basic connectivity before attempting operations
+          if ssh -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=10 \
+              -o BatchMode=yes \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+              "echo 'EC2 connection successful'"; then
+            echo "✅ EC2 connectivity verified"
+          else
+            echo "❌ Cannot connect to EC2 instance"
+            echo "Please check:"
+            echo "1. EC2 instance is running (not stopped)"
+            echo "2. Security group allows SSH (port 22)"
+            echo "3. SSH key is correct and not expired"
+            echo "4. EC2 instance has internet connectivity"
+            exit 1
+          fi
+
           echo "Creating directory on EC2..."
           timeout 60 ssh -i /tmp/ec2_key \
               -o StrictHostKeyChecking=no \
