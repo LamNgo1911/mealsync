@@ -76,7 +76,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_KEY }}
-          source: "generated/.env generated/env.properties generated/mealsync-451912-80d962e81ab0.json"
+          source: "generated/*"
           target: "~/mealsync"
           strip_components: 1
 
