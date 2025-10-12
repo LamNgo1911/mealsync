@@ -33,7 +33,8 @@ class UserControllerUnitTest {
     @Test
     void getAllUsers_success() {
         List<UserReadDto> users = List.of(new UserReadDto());
-        when(userService.getAllUsers()).thenReturn(users);
+        // Mock the service method with the actual parameters being passed
+        when(userService.getAllUsers(UserRole.USER, UserStatus.ACTIVE)).thenReturn(users);
         ResponseEntity<SuccessResponseEntity<List<UserReadDto>>> response = controller.getAllUsers(UserRole.USER, UserStatus.ACTIVE);
         assertEquals(200, response.getStatusCodeValue());
         assertEquals(users, response.getBody().getData());
