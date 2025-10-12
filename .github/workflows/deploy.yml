@@ -106,45 +106,50 @@ jobs:
           echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
           chmod 600 /tmp/ec2_key
           
-          echo "Advanced EC2 connectivity test..."
-          # Test with verbose output for debugging
-          if timeout 15 ssh -i /tmp/ec2_key \
+          echo "Testing EC2 responsiveness..."
+          # Test if EC2 instance responds to any basic commands
+          if timeout 10 ssh -i /tmp/ec2_key \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               -o ConnectTimeout=5 \
               -o BatchMode=yes \
-              -v \
               ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-              "echo 'Connection successful' && uptime"; then
-            echo "✅ EC2 connectivity verified"
+              "whoami && uptime && systemctl is-active sshd"; then
+            echo "✅ EC2 instance is responsive and SSH service is active"
           else
-            echo "❌ Advanced connectivity test failed"
+            echo "❌ EC2 instance is not responding properly"
             echo ""
-            echo "🔍 Detailed Troubleshooting Steps:"
+            echo "🚨 SSH Service Issue Detected:"
+            echo "The TCP connection succeeds but SSH daemon isn't responding."
             echo ""
-            echo "1. Test SSH from your local machine:"
-            echo "   ssh -i your-local-key.pem ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}"
+            echo "🔧 Immediate Actions Required:"
             echo ""
-            echo "2. Check if SSH service is running on EC2:"
-            echo "   sudo systemctl status ssh"
+            echo "1. Connect to AWS EC2 Console"
+            echo "2. Check CloudWatch logs for system errors"
+            echo "3. Verify SSH service status:"
             echo "   sudo systemctl status sshd"
+            echo "   sudo systemctl start sshd"
+            echo "   sudo systemctl enable sshd"
             echo ""
-            echo "3. Verify SSH key format in GitHub secrets:"
-            echo "   - Ensure key starts with '-----BEGIN'"
-            echo "   - Check for proper line endings"
-            echo "   - Try regenerating the key pair"
+            echo "4. Check system resources:"
+            echo "   top -b -n1 | head -20"
+            echo "   df -h"
+            echo "   free -h"
             echo ""
-            echo "4. Check VPC and Network configuration:"
-            echo "   - Verify instance is in public subnet"
-            echo "   - Check route tables for internet gateway"
-            echo "   - Verify NACL rules allow port 22"
+            echo "5. Check SSH configuration:"
+            echo "   sudo nano /etc/ssh/sshd_config"
+            echo "   # Ensure these are set:"
+            echo "   # Port 22"
+            echo "   # PermitRootLogin no"
+            echo "   # PasswordAuthentication no"
             echo ""
-            echo "5. Test different ports:"
-            echo "   nc -zv ${{ secrets.EC2_HOST }} 22"
+            echo "6. Restart SSH service:"
+            echo "   sudo systemctl restart sshd"
             echo ""
-            echo "6. Check GitHub Actions outbound IPs:"
-            echo "   - GitHub may be blocked by your security group"
-            echo "   - Consider allowing 0.0.0.0/0 temporarily for testing"
+            echo "7. If instance is unresponsive, consider reboot:"
+            echo "   sudo reboot"
+            echo ""
+            echo "8. Check for security incidents or unusual activity"
             exit 1
           fi
 
