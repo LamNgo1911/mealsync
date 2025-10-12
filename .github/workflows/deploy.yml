@@ -70,7 +70,7 @@ jobs:
 
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
 
-      - name: Create mealsync directory on EC2
+      - name: Prepare EC2 directory
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -79,6 +79,8 @@ jobs:
           script: |
             mkdir -p ~/mealsync
             chmod 755 ~/mealsync
+            pwd
+            ls -la ~/
 
       - name: Upload files to EC2
         uses: appleboy/scp-action@v0.1.4
@@ -86,10 +88,10 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_KEY }}
-          source: "generated/*"
-          target: "./mealsync"
+          source: "generated/.env,generated/env.properties,generated/mealsync-451912-80d962e81ab0.json"
+          target: "/home/${{ secrets.EC2_USERNAME }}/mealsync/"
           strip_components: 1
-          debug: true
+          overwrite: true
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.0
