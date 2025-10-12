@@ -70,28 +70,46 @@ jobs:
 
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
 
-      - name: Prepare EC2 directory
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            mkdir -p ~/mealsync
-            chmod 755 ~/mealsync
-            pwd
-            ls -la ~/
+      - name: Verify generated files
+        run: |
+          echo "Files to upload:"
+          ls -lah generated/
+          echo "File count: $(ls -1 generated/ | wc -l)"
 
       - name: Upload files to EC2
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_KEY }}
-          source: "generated/.env,generated/env.properties,generated/mealsync-451912-80d962e81ab0.json"
-          target: "/home/${{ secrets.EC2_USERNAME }}/mealsync/"
-          strip_components: 1
-          overwrite: true
+        run: |
+          # Save SSH key
+          echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
+          chmod 600 /tmp/ec2_key
+          
+          # Ensure directory exists
+          echo "Creating mealsync directory on EC2..."
+          ssh -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+              "mkdir -p ~/mealsync && chmod 755 ~/mealsync"
+          
+          # Transfer files using tar stream
+          echo "Transferring files to EC2..."
+          tar -czf - -C generated . | \
+            ssh -i /tmp/ec2_key \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+                "tar -xzf - -C ~/mealsync/"
+          
+          # Verify files were transferred
+          echo "Verifying transfer..."
+          ssh -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+              "ls -lah ~/mealsync/"
+          
+          # Clean up
+          rm -f /tmp/ec2_key
+          echo "Upload complete!"
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.0
@@ -101,7 +119,10 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             cd ~/mealsync || git clone https://github.com/LamNgo1911/mealsync.git ~/mealsync
+            cd ~/mealsync
             git pull origin main
             docker compose -f docker-compose.prod.yml down
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
+            echo "Deployment complete!"
+            docker compose -f docker-compose.prod.yml ps
