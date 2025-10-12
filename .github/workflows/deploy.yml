@@ -150,42 +150,111 @@ jobs:
             git pull origin main || true
             
             # Pull new Docker image
-            echo "Pulling new Docker image..."
             docker pull ${{ env.DOCKER_IMAGE }}:latest
             
             # Check if containers are running
             if docker compose -f docker-compose.prod.yml ps | grep -q "mealsync-app"; then
               echo "Performing rolling update..."
-              
-              # Scale up with new version (blue-green approach)
               echo "Starting new container..."
               docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=2 mealsync-app
-              
+
+              # Wait a bit for containers to start
+
+              echo "Waiting for containers to initialize..."
+              sleep 30
+
+              # Show initial container status
+
+              echo "=== Initial Container Status ==="
+
+              docker compose -f docker-compose.prod.yml ps
+
               # Wait for new container to be healthy
+
               echo "Waiting for new container to be healthy..."
-              TIMEOUT=${{ env.HEALTH_CHECK_TIMEOUT }}
-              ELAPSED=0
+              TIMEOUT=300  # Increased to 5 minutes
+
               
               while [ $ELAPSED -lt $TIMEOUT ]; do
+
+                echo "Checking container health... ($ELAPSED/$TIMEOUT seconds)"
+
+                # Show current container status
+
+                echo "=== Current Container Status ==="
+
+                docker compose -f docker-compose.prod.yml ps
+
+                
+                # Check if any container is healthy
+
                 if docker compose -f docker-compose.prod.yml ps mealsync-app | grep -q "healthy"; then
+
                   echo "New container is healthy!"
                   break
+
                 fi
-                sleep 5
-                ELAPSED=$((ELAPSED + 5))
-                echo "Waiting... ($ELAPSED/$TIMEOUT seconds)"
+
+                
+
+                # Fallback: Check if port 8081 is responding (basic connectivity check)
+
+                if curl -s http://localhost:8081/actuator/health > /dev/null 2>&1; then
+
+                  echo "Application is responding on port 8081!"
+
+                  break
+
+                fi
+
+                
+
+                # Check if containers are still running (not exited)
+
+                if ! docker compose -f docker-compose.prod.yml ps mealsync-app | grep -q "Up"; then
+
+                  echo "Container has stopped! Checking logs..."
+                  echo "=== Container Logs ==="
+
+                  docker compose -f docker-compose.prod.yml logs --tail=50 mealsync-app
+
+                  echo "Deployment failed! Check container logs above."
+
+                  exit 1
+
+                fi
+
+                
+                sleep 10
+
+                ELAPSED=$((ELAPSED + 10))
+
+                echo "Still waiting... ($ELAPSED/$TIMEOUT seconds)"
+
               done
+
               
               if [ $ELAPSED -ge $TIMEOUT ]; then
-                echo "Health check timeout! Rolling back..."
+
+                echo "Health check timeout! Checking final status and logs..."
+                echo "=== Final Container Status ==="
+
+                docker compose -f docker-compose.prod.yml ps
+
+                echo "=== Container Logs ==="
+
+                docker compose -f docker-compose.prod.yml logs --tail=100 mealsync-app
+
+                echo "Rolling back due to health check timeout..."
                 docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=1 mealsync-app
+
                 exit 1
+
               fi
               
               # Gracefully stop old container
               echo "Stopping old container gracefully..."
               docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=1 --remove-orphans mealsync-app
-              
               # Wait for graceful shutdown
               sleep 10
               
