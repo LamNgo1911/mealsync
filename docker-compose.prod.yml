@@ -1,11 +1,24 @@
 services:
+  # Nginx reverse proxy for load balancing and SSL termination
+  nginx:
+    image: nginx:alpine
+    container_name: mealsync-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      mealsync-app:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - mealsync-network
+
   mealsync-app:
-    build:
-      context: .
     image: ${DOCKER_HUB_USERNAME}/mealsync-app:latest
     container_name: mealsync-app
-    ports:
-      - "8081:8081"
     env_file:
       - .env
     environment:
@@ -14,6 +27,28 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${RDS_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - GOOGLE_APPLICATION_CREDENTIALS=/app/mealsync-451912-80d962e81ab0.json
+      - JAVA_OPTS=-Xmx1g -Xms512m
     volumes:
-      - ./env.properties:/app/env.properties
+      - ./env.properties:/app/env.properties:ro
       - ./mealsync-451912-80d962e81ab0.json:/app/mealsync-451912-80d962e81ab0.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    networks:
+      - mealsync-network
+
+networks:
+  mealsync-network:
+    driver: bridge

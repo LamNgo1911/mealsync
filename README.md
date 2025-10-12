@@ -153,6 +153,25 @@ GOOGLE_APPLICATION_CREDENTIALS=path/to/your/google-credentials.json
 - The backend will be available at `http://localhost:8081` by default.
 - Environment variables are managed via `.env` and `docker-compose.yml`.
 
+### Quick Start
+
+**Development**:
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+**Staging**:
+```bash
+docker compose -f docker-compose.staging.yml up -d
+```
+
+**Production**:
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+For detailed infrastructure documentation, see [docs/README.md](docs/README.md).
+
 ## 🚀 Getting Started
 
 ### Running Locally (Java)
@@ -215,6 +234,8 @@ This project is set up for continuous integration and deployment using:
 - **Docker & Docker Compose**: Containerization for consistent deployment
 - **AWS RDS**: Relational Database Service
 - **AWS EC2**: Cloud hosting platform
+- **Zero-Downtime Deployment**: Rolling updates with health checks
+- **Nginx**: Reverse proxy with load balancing
 
 The CI/CD pipeline automatically builds and tests the application on each push to the main branch, and deploys to AWS EC2 when tests pass.
 
@@ -224,6 +245,27 @@ The backend is deployed at:
 
 ```
 http://13.49.27.132:8081/api/v1
+```
+
+### Infrastructure Documentation
+
+For comprehensive infrastructure guides:
+
+- **[Infrastructure Overview](docs/INFRASTRUCTURE.md)** - Architecture, Docker best practices, deployment strategies
+- **[Scaling Guide](docs/SCALING_GUIDE.md)** - How to scale from 500 to 10,000+ users
+- **[Deployment Cheat Sheet](docs/DEPLOYMENT_CHEATSHEET.md)** - Quick reference for common tasks
+
+### Helper Scripts
+
+```bash
+# Initial server setup (run once on new server)
+sudo ./scripts/initial-setup.sh
+
+# Set up SSL certificate
+sudo ./scripts/setup-ssl.sh yourdomain.com
+
+# Monitor application status
+./scripts/monitor.sh
 ```
 
 ## 🔐 Security

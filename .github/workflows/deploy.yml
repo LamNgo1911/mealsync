@@ -1,17 +1,35 @@
-name: Deploy Docker Image to EC2
+name: Zero-Downtime Deployment to Production
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKER_HUB_USERNAME }}/mealsync-app
+  HEALTH_CHECK_TIMEOUT: 120  # seconds
 
 jobs:
-  deploy:
+  build-and-test:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Set up JDK 22
+        uses: actions/setup-java@v4
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run Tests
+        run: mvn test -B
+
+      - name: Build Application
+        run: mvn clean package -DskipTests -B
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -22,14 +40,26 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/mealsync-app:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
 
-      - name: Create .env, env.properties, and decode Google credentials
+      - name: Create deployment artifacts
         run: |
           mkdir -p generated
           envsubst < env/env.template > generated/.env
@@ -60,23 +90,7 @@ jobs:
           STABILITY_API_URL: ${{ secrets.STABILITY_API_URL }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
 
-      - name: Verify generated files
-        run: |
-          echo "Files to upload:"
-          ls -lah generated/
-
-      # NEW: Add cleanup BEFORE deployment
-      - name: Pre-deployment cleanup
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            echo "Cleaning old Docker images..."
-            docker image prune -af --filter "until=48h"
-
-      - name: Upload files to EC2
+      - name: Upload artifacts to EC2
         run: |
           echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
           chmod 600 /tmp/ec2_key
@@ -96,26 +110,123 @@ jobs:
           
           rm -f /tmp/ec2_key
 
-      - name: Deploy to EC2
+  deploy-production:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: http://${{ secrets.EC2_HOST }}
+    
+    steps:
+      - name: Checkout deployment scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts
+            docker-compose.prod.yml
+            nginx
+
+      - name: Deploy with Zero Downtime (Rolling Update)
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_KEY }}
           script: |
-            cd ~/mealsync || git clone https://github.com/LamNgo1911/mealsync.git ~/mealsync
-            cd ~/mealsync
-            git pull origin main
-            docker compose -f docker-compose.prod.yml down
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            set -e
             
-            # NEW: Cleanup after deployment
-            docker image prune -af
+            cd ~/mealsync || exit 1
             
-            echo "Deployment complete!"
+            # Pull latest code and configs
+            git pull origin main || true
+            
+            # Pull new Docker image
+            echo "Pulling new Docker image..."
+            docker pull ${{ env.DOCKER_IMAGE }}:latest
+            
+            # Check if containers are running
+            if docker compose -f docker-compose.prod.yml ps | grep -q "mealsync-app"; then
+              echo "Performing rolling update..."
+              
+              # Scale up with new version (blue-green approach)
+              echo "Starting new container..."
+              docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=2 mealsync-app
+              
+              # Wait for new container to be healthy
+              echo "Waiting for new container to be healthy..."
+              TIMEOUT=${{ env.HEALTH_CHECK_TIMEOUT }}
+              ELAPSED=0
+              
+              while [ $ELAPSED -lt $TIMEOUT ]; do
+                if docker compose -f docker-compose.prod.yml ps mealsync-app | grep -q "healthy"; then
+                  echo "New container is healthy!"
+                  break
+                fi
+                sleep 5
+                ELAPSED=$((ELAPSED + 5))
+                echo "Waiting... ($ELAPSED/$TIMEOUT seconds)"
+              done
+              
+              if [ $ELAPSED -ge $TIMEOUT ]; then
+                echo "Health check timeout! Rolling back..."
+                docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=1 mealsync-app
+                exit 1
+              fi
+              
+              # Gracefully stop old container
+              echo "Stopping old container gracefully..."
+              docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=1 --remove-orphans mealsync-app
+              
+              # Wait for graceful shutdown
+              sleep 10
+              
+            else
+              echo "First deployment, starting containers..."
+              docker compose -f docker-compose.prod.yml up -d
+            fi
+            
+            # Cleanup old images
+            echo "Cleaning up old Docker images..."
+            docker image prune -af --filter "until=48h"
+            
+            # Show deployment status
+            echo "=== Deployment Status ==="
             docker compose -f docker-compose.prod.yml ps
             
-            # NEW: Show disk usage
-            echo "Disk usage:"
+            echo "=== Container Health ==="
+            docker compose -f docker-compose.prod.yml exec -T mealsync-app wget -qO- http://localhost:8081/actuator/health || echo "Health check endpoint not responding"
+            
+            echo "=== Disk Usage ==="
             df -h / | grep -v tmpfs
+
+      - name: Verify Deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            # Wait a bit for the service to stabilize
+            sleep 10
+            
+            # Check if the application is responding
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/actuator/health)
+            
+            if [ "$RESPONSE" = "200" ]; then
+              echo "✅ Deployment successful! Application is healthy."
+              exit 0
+            else
+              echo "❌ Deployment verification failed! HTTP status: $RESPONSE"
+              exit 1
+            fi
+
+      - name: Notify on Failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            echo "Deployment failed! Checking logs..."
+            docker compose -f ~/mealsync/docker-compose.prod.yml logs --tail=50 mealsync-app

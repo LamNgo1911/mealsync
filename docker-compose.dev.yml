@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:15
-    container_name: mealsync-postgres
+    container_name: mealsync-postgres-dev
     ports:
       - "5431:5432"
     environment:
@@ -9,18 +9,27 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mealsync-network
 
   mealsync-app:
     # This section tells Docker Compose to build the image from the Dockerfile
     build:
       context: .
-    image: ${DOCKER_HUB_USERNAME}/mealsync-app:latest
-    container_name: mealsync-app
+      target: RUNNER
+    image: ${DOCKER_HUB_USERNAME}/mealsync-app:dev
+    container_name: mealsync-app-dev
     ports:
       - "8081:8081"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -29,9 +38,22 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=create-drop
       - GOOGLE_APPLICATION_CREDENTIALS=/app/mealsync-451912-80d962e81ab0.json
+      - SPRING_DEVTOOLS_RESTART_ENABLED=true
     volumes:
       - ./src/main/resources/env.properties:/app/env.properties
       - /home/liam/Downloads/app_keys/mealsync-451912-80d962e81ab0.json:/app/mealsync-451912-80d962e81ab0.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - mealsync-network
 
 volumes:
-  postgres_data:
+  postgres_dev_data:
+
+networks:
+  mealsync-network:
+    driver: bridge
