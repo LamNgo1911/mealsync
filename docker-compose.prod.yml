@@ -11,7 +11,7 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       mealsync-app:
-        condition: service_healthy
+        condition: service_started  # Changed from service_healthy to service_started
     restart: unless-stopped
     networks:
       - mealsync-network

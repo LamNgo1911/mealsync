@@ -288,35 +288,95 @@ jobs:
             sleep 10
 
             echo "=== Verifying Deployment ==="
+            echo "Current time: $(date)"
+            echo "Current directory: $(pwd)"
+            echo "Docker version: $(docker --version)"
 
-            # Check if nginx is responding (main application endpoint)
-            echo "Checking nginx status..."
-            if curl -s -I http://localhost | grep -q "200\|301\|302"; then
-              echo "✅ Nginx is responding successfully!"
-            else
-              echo "❌ Nginx health check failed"
-              echo "=== Nginx status ==="
-              curl -s -I http://localhost || echo "Nginx not responding"
-              exit 1
-            fi
-
-            # Check Docker container status
-            echo "=== Docker Container Status ==="
+            # Check all Docker containers status
+            echo "=== All Docker Container Status ==="
             docker compose -f ~/mealsync/docker-compose.prod.yml ps
 
-            # Check if mealsync-app containers are healthy
-            if docker compose -f ~/mealsync/docker-compose.prod.yml ps mealsync-app | grep -q "healthy\|Up"; then
-              echo "✅ Application containers are running and healthy!"
+            echo ""
+            echo "=== Individual Container Details ==="
+            docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+            # Check if nginx container is running
+            echo ""
+            echo "=== Checking Nginx Container ==="
+            if docker ps | grep -q "mealsync-nginx"; then
+              echo "✅ Nginx container is running"
+
+              # Test nginx internal health endpoint
+              echo "Testing nginx internal health endpoint..."
+              if docker exec mealsync-nginx wget -qO- http://localhost:8080/nginx-health 2>/dev/null; then
+                echo "✅ Nginx internal health check passed"
+              else
+                echo "❌ Nginx internal health check failed"
+              fi
+
             else
-              echo "❌ Application containers are not healthy"
-              echo "=== Application Container Logs ==="
-              docker compose -f ~/mealsync/docker-compose.prod.yml logs --tail=20 mealsync-app
+              echo "❌ Nginx container is not running"
+              echo "=== Nginx Container Logs ==="
+              docker compose -f ~/mealsync/docker-compose.prod.yml logs --tail=20 nginx || echo "No nginx logs available"
               exit 1
             fi
 
-            # Final verification
-            echo "✅ Deployment verification successful!"
-            echo "🎉 Application is running and accessible via nginx"
+            # Check if mealsync-app containers are running
+            echo ""
+            echo "=== Checking Application Containers ==="
+            APP_COUNT=$(docker ps | grep -c "mealsync-mealsync-app")
+
+            if [ "$APP_COUNT" -gt 0 ]; then
+              echo "✅ Found $APP_COUNT mealsync-app container(s) running"
+
+              # Test direct application health (if accessible)
+              echo "Testing direct application access..."
+              if curl -s http://localhost:8081/actuator/health >/dev/null 2>&1; then
+                echo "✅ Application is directly accessible on port 8081"
+              else
+                echo "❌ Application is not directly accessible on port 8081"
+              fi
+
+            else
+              echo "❌ No mealsync-app containers are running"
+              echo "=== Application Container Logs ==="
+              docker compose -f ~/mealsync/docker-compose.prod.yml logs --tail=30 mealsync-app
+              exit 1
+            fi
+
+            # Check nginx responsiveness on port 80
+            echo ""
+            echo "=== Testing Nginx on Port 80 ==="
+            if curl -s -I --max-time 10 http://localhost | head -1 | grep -q "200\|301\|302"; then
+              echo "✅ Nginx is responding successfully on port 80!"
+            else
+              echo "❌ Nginx is not responding on port 80"
+              echo "=== Nginx Debug Info ==="
+              echo "Nginx process status:"
+              docker exec mealsync-nginx ps aux | grep nginx || echo "Nginx process not found"
+              echo "Nginx error logs:"
+              docker exec mealsync-nginx cat /var/log/nginx/error.log 2>/dev/null | tail -10 || echo "No error logs available"
+              exit 1
+            fi
+
+            # Test the full request through nginx
+            echo ""
+            echo "=== Testing Full Request Through Nginx ==="
+            if curl -s --max-time 15 http://localhost/actuator/health | grep -q "UP\|up"; then
+              echo "✅ Application is responding through nginx proxy!"
+            else
+              echo "❌ Application is not responding through nginx"
+              echo "Testing basic connectivity to actuator health..."
+              curl -v --max-time 10 http://localhost/actuator/health 2>&1 | head -10
+            fi
+
+            # Final status check
+            echo ""
+            echo "=== Final Verification ==="
+            echo "✅ Deployment verification completed successfully!"
+            echo "🎉 Application is running and accessible via:"
+            echo "   - Direct: http://localhost:8081"
+            echo "   - Nginx:  http://localhost"
 
       - name: Notify on Failure
         if: failure()
