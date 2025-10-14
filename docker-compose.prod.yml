@@ -17,7 +17,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${RDS_USERNAME:-postgres} -d ${RDS_DB_NAME:-mealsync}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10  # increase retries to be more forgiving
     restart: unless-stopped
 
   # Application Service
@@ -37,15 +37,17 @@ services:
       - SPRING_PROFILES_ACTIVE=prod
       - GOOGLE_APPLICATION_CREDENTIALS=/app/mealsync-451912-80d962e81ab0.json
       - JAVA_OPTS=-Xmx1g -Xms512m
+      - SERVER_ADDRESS=0.0.0.0  # bind to all interfaces
+      - SERVER_PORT=8081
     volumes:
       - ./env.properties:/app/env.properties:ro
       - ./mealsync-451912-80d962e81ab0.json:/app/mealsync-451912-80d962e81ab0.json:ro
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1"]
       interval: 30s
       timeout: 15s
-      retries: 5
-      start_period: 180s
+      retries: 10
+      start_period: 300s  # give Spring Boot 5 minutes to start
     restart: unless-stopped
     deploy:
       resources:
@@ -58,7 +60,7 @@ services:
     networks:
       - mealsync-network
 
-  # Nginx reverse proxy for load balancing and SSL termination
+  # Nginx reverse proxy
   nginx:
     image: nginx:alpine
     container_name: mealsync-nginx
@@ -76,9 +78,9 @@ services:
     networks:
       - mealsync-network
 
+volumes:
+  postgres_data:
+
 networks:
   mealsync-network:
     driver: bridge
-
-volumes:
-  postgres_data:
