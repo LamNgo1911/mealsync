@@ -125,13 +125,6 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-    timeout-minutes: 30  # Set overall timeout to 30 minutes
-    
-    # Set default environment variables
-    env:
-      SSH_OPTS: "-o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
-      MAX_RETRIES: 3
-      RETRY_DELAY: 10  # seconds
 
     steps:
       - name: Checkout repository
@@ -145,46 +138,42 @@ jobs:
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
           SSH_KEY: ${{ secrets.EC2_KEY }}
         run: |
-          # Create a temporary SSH key file
+          # Create a temporary SSH key file with proper formatting
           SSH_KEY_FILE="$HOME/.ssh/ec2_key"
           mkdir -p "$(dirname "$SSH_KEY_FILE")"
-          echo "$SSH_KEY" > "$SSH_KEY_FILE"
+          # Ensure the key is properly formatted with newlines
+          echo "$SSH_KEY" | sed 's/\s*$//' > "$SSH_KEY_FILE"
+          echo "" >> "$SSH_KEY_FILE"  # Ensure there's a newline at the end
           chmod 600 "$SSH_KEY_FILE"
           
-          # Function to retry commands
-          function retry_command {
-              local cmd="$1"
-              local max_attempts=$2
-              local delay=$3
-              
-              echo "Running: $cmd"
-              local attempt=1
-              until $cmd; do
-                  if [ $attempt -ge $max_attempts ]; then
-                      echo "Command failed after $max_attempts attempts"
-                      return 1
-                  fi
-                  echo "Command failed. Attempt $attempt/$max_attempts. Retrying in $delay seconds..."
-                  sleep $delay
-                  ((attempt++))
-              done
-          }
+          # Test SSH connection first
+          echo "🔌 Testing SSH connection..."
+          if ! ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" -q "$EC2_USERNAME@$EC2_HOST" exit; then
+            echo "❌ SSH connection failed. Please check your EC2 instance and credentials."
+            exit 1
+          fi
           
-          # Create necessary directories on EC2 with retry
-          retry_command "ssh $SSH_OPTS -i \"$SSH_KEY_FILE\" \"$EC2_USERNAME@$EC2_HOST\" \"mkdir -p ~/mealsync/nginx"" $MAX_RETRIES $RETRY_DELAY
+          # Create necessary directories on EC2
+          echo "📂 Creating directories on EC2..."
+          ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" "$EC2_USERNAME@$EC2_HOST" \
+            "mkdir -p ~/mealsync/nginx" || {
+              echo "❌ Failed to create directories on EC2"
+              exit 1
+            }
           
-          # Copy files using rsync with retry
+          # Copy files using rsync with verbose output
           echo "📤 Transferring files to EC2..."
-          retry_command "rsync -avz -e \"ssh $SSH_OPTS -i $SSH_KEY_FILE\" \
+          rsync -avz --progress \
+            -e "ssh -o StrictHostKeyChecking=no -i $SSH_KEY_FILE" \
             --exclude='.git' \
             --include='docker-compose.prod.yml' \
             --include='nginx/' \
             --include='nginx/*' \
             --exclude='*' \
-            --timeout=300 \
-            --partial \
-            --progress \
-            ./ \"$EC2_USERNAME@$EC2_HOST:~/mealsync/\"" $MAX_RETRIES $RETRY_DELAY
+            ./ "$EC2_USERNAME@$EC2_HOST:~/mealsync/" || {
+              echo "❌ File transfer failed"
+              exit 1
+            }
           
           # Verify files were transferred
           echo "=== Verifying files on EC2 ==="
@@ -202,14 +191,7 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             set -e
-            
-            # Set environment variables
-            export COMPOSE_HTTP_TIMEOUT=300
-            export DOCKER_CLIENT_TIMEOUT=300
-            export COMPOSE_PARALLEL_LIMIT=1
-            
             echo "=== Starting deployment ==="
-            echo "Using Docker Compose timeout: $COMPOSE_HTTP_TIMEOUT seconds"
             
             # Check Docker status
             echo "=== Docker Status ==="
@@ -241,25 +223,13 @@ jobs:
             echo "🛑 Stopping any running containers..."
             docker compose -f docker-compose.prod.yml down || true
             
-            # Pull the latest image with retry
+            # Pull the latest image
             echo "🐳 Pulling latest Docker image..."
-            for i in {1..3}; do
-              if docker pull ${{ env.DOCKER_IMAGE }}:latest; then
-                echo "✅ Successfully pulled image"
-                break
-              else
-                if [ $i -eq 3 ]; then
-                  echo "❌ Failed to pull image after 3 attempts"
-                  exit 1
-                fi
-                echo "⚠️ Pull failed, retrying in 10 seconds (attempt $i/3)..."
-                sleep 10
-              fi
-            done
+            docker pull ${{ env.DOCKER_IMAGE }}:latest
             
-            # Start the service with health checks
+            # Start the service
             echo "🚀 Starting services..."
-            docker compose -f docker-compose.prod.yml up -d --wait --wait-timeout 300
+            docker compose -f docker-compose.prod.yml up -d
             
             # Wait for the service to be healthy
             echo "🩺 Waiting for container health..."
