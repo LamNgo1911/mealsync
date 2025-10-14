@@ -125,6 +125,13 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
+    timeout-minutes: 30  # Set overall timeout to 30 minutes
+    
+    # Set default environment variables
+    env:
+      SSH_OPTS: "-o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
+      MAX_RETRIES: 3
+      RETRY_DELAY: 10  # seconds
 
     steps:
       - name: Checkout repository
@@ -132,14 +139,60 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for all branches and tags
           
-      - name: List files in repository
+      - name: Transfer files to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          SSH_KEY: ${{ secrets.EC2_KEY }}
         run: |
-          echo "=== Repository Contents ==="
-          ls -la
-          echo "=== docker-compose.prod.yml exists? ==="
-          [ -f docker-compose.prod.yml ] && echo "Yes" || echo "No"
-          echo "=== nginx directory exists? ==="
-          [ -d nginx ] && echo "Yes" || echo "No"
+          # Create a temporary SSH key file
+          SSH_KEY_FILE="$HOME/.ssh/ec2_key"
+          mkdir -p "$(dirname "$SSH_KEY_FILE")"
+          echo "$SSH_KEY" > "$SSH_KEY_FILE"
+          chmod 600 "$SSH_KEY_FILE"
+          
+          # Function to retry commands
+          function retry_command {
+              local cmd="$1"
+              local max_attempts=$2
+              local delay=$3
+              
+              echo "Running: $cmd"
+              local attempt=1
+              until $cmd; do
+                  if [ $attempt -ge $max_attempts ]; then
+                      echo "Command failed after $max_attempts attempts"
+                      return 1
+                  fi
+                  echo "Command failed. Attempt $attempt/$max_attempts. Retrying in $delay seconds..."
+                  sleep $delay
+                  ((attempt++))
+              done
+          }
+          
+          # Create necessary directories on EC2 with retry
+          retry_command "ssh $SSH_OPTS -i \"$SSH_KEY_FILE\" \"$EC2_USERNAME@$EC2_HOST\" \"mkdir -p ~/mealsync/nginx"" $MAX_RETRIES $RETRY_DELAY
+          
+          # Copy files using rsync with retry
+          echo "📤 Transferring files to EC2..."
+          retry_command "rsync -avz -e \"ssh $SSH_OPTS -i $SSH_KEY_FILE\" \
+            --exclude='.git' \
+            --include='docker-compose.prod.yml' \
+            --include='nginx/' \
+            --include='nginx/*' \
+            --exclude='*' \
+            --timeout=300 \
+            --partial \
+            --progress \
+            ./ \"$EC2_USERNAME@$EC2_HOST:~/mealsync/\"" $MAX_RETRIES $RETRY_DELAY
+          
+          # Verify files were transferred
+          echo "=== Verifying files on EC2 ==="
+          ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" "$EC2_USERNAME@$EC2_HOST" \
+            "ls -la ~/mealsync/ && ls -la ~/mealsync/nginx/"
+          
+          # Clean up the SSH key
+          rm -f "$SSH_KEY_FILE"
 
       - name: Deploy with Zero Downtime (Rolling Update)
         uses: appleboy/ssh-action@v1.0.0
@@ -149,42 +202,36 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             set -e
+            
+            # Set environment variables
+            export COMPOSE_HTTP_TIMEOUT=300
+            export DOCKER_CLIENT_TIMEOUT=300
+            export COMPOSE_PARALLEL_LIMIT=1
+            
             echo "=== Starting deployment ==="
+            echo "Using Docker Compose timeout: $COMPOSE_HTTP_TIMEOUT seconds"
             
             # Check Docker status
             echo "=== Docker Status ==="
             docker --version
             docker compose version
             
-            # Create or update the application directory
-            if [ ! -d ~/mealsync ]; then
-              echo "📦 Creating mealsync directory..."
-              mkdir -p ~/mealsync
-            fi
-            
-            # Create target directory if it doesn't exist
-            mkdir -p ~/mealsync/nginx
-            
-            # Copy files with debug info
-            echo "📋 Copying deployment files..."
+            # Navigate to the deployment directory
+            cd ~/mealsync
             echo "Current directory: $(pwd)"
-            echo "Files in current directory:"
+            echo "Files in deployment directory:"
             ls -la
             
-            # Copy files with verification
-            if [ -f docker-compose.prod.yml ]; then
-              echo "Copying docker-compose.prod.yml..."
-              cp -v docker-compose.prod.yml ~/mealsync/
-            else
+            # Verify required files exist
+            if [ ! -f docker-compose.prod.yml ]; then
               echo "❌ Error: docker-compose.prod.yml not found in $(pwd)"
+              ls -la
               exit 1
             fi
             
-            if [ -d nginx ]; then
-              echo "Copying nginx directory..."
-              cp -rv nginx ~/mealsync/
-            else
+            if [ ! -d nginx ]; then
               echo "❌ Error: nginx directory not found in $(pwd)"
+              ls -la
               exit 1
             fi
             
@@ -194,13 +241,25 @@ jobs:
             echo "🛑 Stopping any running containers..."
             docker compose -f docker-compose.prod.yml down || true
             
-            # Pull the latest image
+            # Pull the latest image with retry
             echo "🐳 Pulling latest Docker image..."
-            docker pull ${{ env.DOCKER_IMAGE }}:latest
+            for i in {1..3}; do
+              if docker pull ${{ env.DOCKER_IMAGE }}:latest; then
+                echo "✅ Successfully pulled image"
+                break
+              else
+                if [ $i -eq 3 ]; then
+                  echo "❌ Failed to pull image after 3 attempts"
+                  exit 1
+                fi
+                echo "⚠️ Pull failed, retrying in 10 seconds (attempt $i/3)..."
+                sleep 10
+              fi
+            done
             
-            # Start the service
+            # Start the service with health checks
             echo "🚀 Starting services..."
-            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml up -d --wait --wait-timeout 300
             
             # Wait for the service to be healthy
             echo "🩺 Waiting for container health..."
