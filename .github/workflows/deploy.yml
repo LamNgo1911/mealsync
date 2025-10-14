@@ -127,14 +127,19 @@ jobs:
       name: production
 
     steps:
-      - name: Checkout deployment scripts
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          sparse-checkout: |
-            scripts/
-            docker-compose.prod.yml
-            nginx/
-            .env.template
+          fetch-depth: 0  # Fetch all history for all branches and tags
+          
+      - name: List files in repository
+        run: |
+          echo "=== Repository Contents ==="
+          ls -la
+          echo "=== docker-compose.prod.yml exists? ==="
+          [ -f docker-compose.prod.yml ] && echo "Yes" || echo "No"
+          echo "=== nginx directory exists? ==="
+          [ -d nginx ] && echo "Yes" || echo "No"
 
       - name: Deploy with Zero Downtime (Rolling Update)
         uses: appleboy/ssh-action@v1.0.0
@@ -157,10 +162,31 @@ jobs:
               mkdir -p ~/mealsync
             fi
             
-            # Copy necessary files
+            # Create target directory if it doesn't exist
+            mkdir -p ~/mealsync/nginx
+            
+            # Copy files with debug info
             echo "📋 Copying deployment files..."
-            cp -f docker-compose.prod.yml ~/mealsync/
-            cp -rf nginx ~/mealsync/
+            echo "Current directory: $(pwd)"
+            echo "Files in current directory:"
+            ls -la
+            
+            # Copy files with verification
+            if [ -f docker-compose.prod.yml ]; then
+              echo "Copying docker-compose.prod.yml..."
+              cp -v docker-compose.prod.yml ~/mealsync/
+            else
+              echo "❌ Error: docker-compose.prod.yml not found in $(pwd)"
+              exit 1
+            fi
+            
+            if [ -d nginx ]; then
+              echo "Copying nginx directory..."
+              cp -rv nginx ~/mealsync/
+            else
+              echo "❌ Error: nginx directory not found in $(pwd)"
+              exit 1
+            fi
             
             cd ~/mealsync
             
