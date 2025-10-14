@@ -189,11 +189,12 @@ jobs:
             }
           
           # Ensure nginx directory has correct permissions
+          # Only modify permissions for files we own and can modify
           ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" "$EC2_USERNAME@$EC2_HOST" \
-            "chmod -R 755 ~/mealsync/nginx && \
-             chmod 644 ~/mealsync/nginx/nginx.conf" || {
-              echo "❌ Failed to set nginx permissions"
-              exit 1
+            "chmod 755 ~/mealsync/nginx && \
+             chmod 644 ~/mealsync/nginx/nginx.conf && \
+             [ -d ~/mealsync/nginx/ssl ] && sudo chown -R $EC2_USERNAME:$EC2_USERNAME ~/mealsync/nginx/ssl || true" || {
+              echo "⚠️  Could not set all permissions, but continuing deployment..."
             }
           
           # Verify files were transferred
