@@ -4,16 +4,15 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
 
 env:
   DOCKER_IMAGE: ${{ secrets.DOCKER_HUB_USERNAME }}/mealsync-app
-  HEALTH_CHECK_TIMEOUT: 120  # seconds
+  HEALTH_CHECK_TIMEOUT: 300  # seconds
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -26,17 +25,8 @@ jobs:
           cache: maven
 
       - name: Run Tests
-        run: |
-          mvn test -B \
-            -Dmaven.test.failure.ignore=false \
-            -Dspring.test.context.cache.maxSize=4 \
-            -Dspring.main.banner-mode=off \
-            -Djava.awt.headless=true \
-            -Dfile.encoding=UTF-8 \
-            --batch-mode \
-            --show-version \
-            --errors \
-            --fail-fast
+        run: mvn test -B
+
       - name: Build Application
         run: mvn clean package -DskipTests -B
 
@@ -49,91 +39,34 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKER_IMAGE }}
-          tags: |
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.DOCKER_IMAGE }}:latest
           cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
-
-      - name: Create deployment artifacts
-        run: |
-          mkdir -p generated
-          envsubst < env/env.template > generated/.env
-          envsubst < env/env.template > generated/env.properties
-          echo "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" | base64 -d > generated/mealsync-451912-80d962e81ab0.json
-        env:
-          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-          RDS_ENDPOINT: ${{ secrets.RDS_ENDPOINT }}
-          RDS_PORT: ${{ secrets.RDS_PORT }}
-          RDS_DB_NAME: ${{ secrets.RDS_DB_NAME }}
-          RDS_USERNAME: ${{ secrets.RDS_USERNAME }}
-          RDS_PASSWORD: ${{ secrets.RDS_PASSWORD }}
-          POSTGRES_ENDPOINT: ${{ secrets.POSTGRES_ENDPOINT }}
-          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
-          POSTGRES_DB_NAME: ${{ secrets.POSTGRES_DB_NAME }}
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          JWT_EXPIRATION: ${{ secrets.JWT_EXPIRATION }}
-          JWT_REFRESH_EXPIRATION: ${{ secrets.JWT_REFRESH_EXPIRATION }}
-          GEMINI_API_BASE_URL: ${{ secrets.GEMINI_API_BASE_URL }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          AWS_S3_BUCKET_NAME: ${{ secrets.AWS_S3_BUCKET_NAME }}
-          STABILITY_API_KEY: ${{ secrets.STABILITY_API_KEY }}
-          STABILITY_API_URL: ${{ secrets.STABILITY_API_URL }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
 
       - name: Upload artifacts to EC2
         run: |
           echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
           chmod 600 /tmp/ec2_key
           
-          ssh -i /tmp/ec2_key \
-              -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-              "mkdir -p ~/mealsync && chmod 755 ~/mealsync"
+          ssh -i /tmp/ec2_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+            "mkdir -p ~/mealsync && chmod 755 ~/mealsync"
           
-          tar -czf - -C generated . | \
-            ssh -i /tmp/ec2_key \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-                "tar -xzf - -C ~/mealsync/"
+          tar -czf - -C generated . | ssh -i /tmp/ec2_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+            "tar -xzf - -C ~/mealsync/"
           
           rm -f /tmp/ec2_key
 
   deploy-production:
     needs: build-and-test
     runs-on: ubuntu-latest
-    environment:
-      name: production
-
+    environment: production
     steps:
-      - name: Checkout deployment scripts
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            scripts
-            docker-compose.prod.yml
-            nginx
-
-      - name: Deploy with Zero Downtime (Rolling Update)
+      - name: Deploy with Zero Downtime
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -141,241 +74,54 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             set -e
-            
             cd ~/mealsync || exit 1
-            
-            # Pull latest code and configs
-            git pull origin main || true
-            
-            # Pull new Docker image
-            docker pull ${{ env.DOCKER_IMAGE }}:latest
-            
-            # Check if containers are running
-            if docker compose -f docker-compose.prod.yml ps | grep -q "mealsync-app"; then
-              echo "Performing rolling update..."
-              echo "Starting new container..."
-              docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=2 mealsync-app
 
-              # Wait a bit for containers to start
-
-              echo "Waiting for containers to initialize..."
-              sleep 30
-
-              # Show initial container status
-
-              echo "=== Initial Container Status ==="
-
-              docker compose -f docker-compose.prod.yml ps
-
-              # Wait for new container to be healthy
-
-              echo "Waiting for new container to be healthy..."
-              TIMEOUT=300  # Increased to 5 minutes
-
-              
-              while [ $ELAPSED -lt $TIMEOUT ]; do
-
-                echo "Checking container health... ($ELAPSED/$TIMEOUT seconds)"
-
-                # Show current container status
-
-                echo "=== Current Container Status ==="
-
-                docker compose -f docker-compose.prod.yml ps
-
-                
-                # Check if any container is healthy
-
-                if docker compose -f docker-compose.prod.yml ps mealsync-app | grep -q "healthy"; then
-
-                  echo "New container is healthy!"
-                  break
-
-                fi
-
-                
-
-                # Fallback: Check if port 8081 is responding (basic connectivity check)
-
-                if curl -s http://localhost:8081/actuator/health > /dev/null 2>&1; then
-
-                  echo "Application is responding on port 8081!"
-
-                  break
-
-                fi
-
-                
-
-                # Check if containers are still running (not exited)
-
-                if ! docker compose -f docker-compose.prod.yml ps mealsync-app | grep -q "Up"; then
-
-                  echo "Container has stopped! Checking logs..."
-                  echo "=== Container Logs ==="
-
-                  docker compose -f docker-compose.prod.yml logs --tail=50 mealsync-app
-
-                  echo "Deployment failed! Check container logs above."
-
-                  exit 1
-
-                fi
-
-                
-                sleep 10
-
-                ELAPSED=$((ELAPSED + 10))
-
-                echo "Still waiting... ($ELAPSED/$TIMEOUT seconds)"
-
-              done
-
-              
-              if [ $ELAPSED -ge $TIMEOUT ]; then
-
-                echo "Health check timeout! Checking final status and logs..."
-                echo "=== Final Container Status ==="
-
-                docker compose -f docker-compose.prod.yml ps
-
-                echo "=== Container Logs ==="
-
-                docker compose -f docker-compose.prod.yml logs --tail=100 mealsync-app
-
-                echo "Rolling back due to health check timeout..."
-                docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=1 mealsync-app
-
-                exit 1
-
-              fi
-              
-              # Gracefully stop old container
-              echo "Stopping old container gracefully..."
-              docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=1 --remove-orphans mealsync-app
-              # Wait for graceful shutdown
-              sleep 10
-              
+            # Clone repo if missing
+            if [ ! -d .git ]; then
+              echo "Repo missing, initializing..."
+              git clone --depth=1 https://github.com/${{ github.repository }} . || true
             else
-              echo "First deployment, starting containers..."
-              docker compose -f docker-compose.prod.yml up -d
-            fi
-            
-            # Cleanup old images
-            echo "Cleaning up old Docker images..."
-            docker image prune -af --filter "until=48h"
-            
-            # Show deployment status
-            echo "=== Deployment Status ==="
-            docker compose -f docker-compose.prod.yml ps
-            
-            echo "=== Container Health ==="
-            docker compose -f docker-compose.prod.yml exec -T mealsync-app wget -qO- http://localhost:8081/actuator/health || echo "Health check endpoint not responding"
-            
-            echo "=== Disk Usage ==="
-            df -h / | grep -v tmpfs
-
-      - name: Verify Deployment
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            # Wait a bit for the service to stabilize
-            sleep 10
-
-            echo "=== Verifying Deployment ==="
-            echo "Current time: $(date)"
-            echo "Current directory: $(pwd)"
-
-            # Check all Docker containers status first
-            echo "=== All Docker Container Status ==="
-            docker compose -f ~/mealsync/docker-compose.prod.yml ps
-
-            # Check application container logs if it's restarting
-            echo ""
-            echo "=== Application Container Logs ==="
-            if docker compose -f ~/mealsync/docker-compose.prod.yml ps mealsync-app | grep -q "Restarting"; then
-              echo "Application container is restarting - checking logs..."
-              docker compose -f ~/mealsync/docker-compose.prod.yml logs --tail=50 mealsync-app
+              git pull origin main || true
             fi
 
-            # Check if nginx container is running
-            echo ""
-            echo "=== Checking Nginx Container ==="
-            if docker ps | grep -q "mealsync-nginx"; then
-              echo "✅ Nginx container is running"
-
-              # Test nginx internal health endpoint
-              echo "Testing nginx internal health endpoint..."
-              if docker exec mealsync-nginx wget -qO- http://localhost:8080/nginx-health 2>/dev/null; then
-                echo "✅ Nginx internal health check passed"
-              else
-                echo "❌ Nginx internal health check failed"
-                echo "Nginx error logs:"
-                docker exec mealsync-nginx cat /var/log/nginx/error.log 2>/dev/null | tail -10 || echo "No error logs"
-              fi
-
-            else
-              echo "❌ Nginx container is not running"
-              echo "=== Nginx Container Logs ==="
-              docker compose -f ~/mealsync/docker-compose.prod.yml logs --tail=20 nginx || echo "No nginx logs available"
-            fi
-
-            # Check if mealsync-app containers are running
-            echo ""
-            echo "=== Checking Application Containers ==="
-            APP_COUNT=$(docker ps | grep -c "mealsync-mealsync-app")
-
-            if [ "$APP_COUNT" -gt 0 ]; then
-              echo "✅ Found $APP_COUNT mealsync-app container(s) running"
-
-              # Test direct application health (if accessible)
-              echo "Testing direct application access..."
-              if curl -s http://localhost:8081/actuator/health >/dev/null 2>&1; then
-                echo "✅ Application is directly accessible on port 8081"
-              else
-                echo "❌ Application is not directly accessible on port 8081"
-                echo "Application container logs:"
-                docker compose -f ~/mealsync/docker-compose.prod.yml logs --tail=20 mealsync-app
-              fi
-
-            else
-              echo "❌ No mealsync-app containers are running"
-              echo "This might be due to application startup failures"
-              echo "=== Application Container Logs ==="
-              docker compose -f ~/mealsync/docker-compose.prod.yml logs --tail=50 mealsync-app
-            fi
-
-            # Check nginx responsiveness on port 80 (even if app is failing)
-            echo ""
-            echo "=== Testing Nginx on Port 80 ==="
-            if curl -s -I --max-time 10 http://localhost | head -1 | grep -q "200\|301\|302"; then
-              echo "✅ Nginx is responding successfully on port 80!"
-            else
-              echo "❌ Nginx is not responding on port 80"
-              echo "This suggests nginx startup issues"
-            fi
-
-            # Final assessment
-            echo ""
-            echo "=== Deployment Assessment ==="
-            if docker ps | grep -q "mealsync-nginx" && curl -s -I --max-time 5 http://localhost >/dev/null 2>&1; then
-              echo "✅ Deployment appears successful - nginx is running and responding"
-            else
-              echo "❌ Deployment has issues - checking final status"
-              docker compose -f ~/mealsync/docker-compose.prod.yml ps
+            # Check docker-compose file
+            if [ ! -f docker-compose.prod.yml ]; then
+              echo "ERROR: docker-compose.prod.yml not found!"
               exit 1
             fi
 
-      - name: Notify on Failure
-        if: failure()
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            echo "Deployment failed! Checking logs..."
-            docker compose -f ~/mealsync/docker-compose.prod.yml logs --tail=50 mealsync-app
+            # Pull latest Docker image
+            docker pull ${{ env.DOCKER_IMAGE }}:latest
+
+            # Initialize health check timer
+            ELAPSED=0
+            TIMEOUT=${{ env.HEALTH_CHECK_TIMEOUT }}
+
+            # Start / rolling update
+            if docker compose -f docker-compose.prod.yml ps | grep -q "mealsync-app"; then
+              echo "Performing rolling update..."
+              docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=2 mealsync-app
+            else
+              echo "First deployment..."
+              docker compose -f docker-compose.prod.yml up -d
+            fi
+
+            # Wait for healthy containers
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              if docker compose -f docker-compose.prod.yml ps mealsync-app | grep -q "healthy"; then
+                echo "Container healthy!"
+                break
+              fi
+              sleep 5
+              ELAPSED=$((ELAPSED + 5))
+            done
+
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "Health check timeout, rolling back..."
+              docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=1 mealsync-app
+              exit 1
+            fi
+
+            # Cleanup old images
+            docker image prune -af --filter "until=48h"
+            echo "Deployment complete."
