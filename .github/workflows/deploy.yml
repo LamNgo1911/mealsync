@@ -8,7 +8,7 @@ on:
 
 env:
   DOCKER_IMAGE: ${{ secrets.DOCKER_HUB_USERNAME }}/mealsync-app
-  HEALTH_CHECK_TIMEOUT: 300  # seconds
+  HEALTH_CHECK_TIMEOUT: 300 # seconds
 
 jobs:
   build-and-test:
@@ -44,22 +44,10 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ env.DOCKER_IMAGE }}:latest
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:latest
           cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
-
-      - name: Upload artifacts to EC2
-        run: |
-          echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
-          chmod 600 /tmp/ec2_key
-          
-          ssh -i /tmp/ec2_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-            "mkdir -p ~/mealsync && chmod 755 ~/mealsync"
-          
-          tar -czf - -C generated . | ssh -i /tmp/ec2_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-            "tar -xzf - -C ~/mealsync/"
-          
-          rm -f /tmp/ec2_key
 
   deploy-production:
     needs: build-and-test
@@ -74,42 +62,68 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             set -e
-            cd ~/mealsync || exit 1
+            echo "=== Starting Deployment ==="
 
-            # Clone repo if missing
-            if [ ! -d .git ]; then
-              echo "Repo missing, initializing..."
-              git clone --depth=1 https://github.com/${{ github.repository }} . || true
-            else
-              git pull origin main || true
+            # Ensure docker & git exist
+            if ! command -v docker &>/dev/null; then
+              echo "Installing Docker..."
+              sudo apt-get update -y
+              sudo apt-get install -y docker.io docker-compose-plugin
             fi
 
-            # Check docker-compose file
+            if ! command -v git &>/dev/null; then
+              echo "Installing Git..."
+              sudo apt-get update -y
+              sudo apt-get install -y git
+            fi
+
+            # Move into deployment folder
+            cd ~
+
+            if [ ! -d mealsync ]; then
+              echo "📦 Cloning repository (fresh)..."
+              git clone https://github.com/${{ github.repository }} mealsync
+              cd mealsync
+            else
+              cd mealsync
+              if [ ! -d .git ]; then
+                echo "⚠️ No .git folder found — recloning repo"
+                cd ..
+                rm -rf mealsync
+                git clone https://github.com/${{ github.repository }} mealsync
+                cd mealsync
+              else
+                echo "🔄 Pulling latest code..."
+                git fetch origin main
+                git reset --hard origin/main
+              fi
+            fi
+
+            # Verify docker-compose file
             if [ ! -f docker-compose.prod.yml ]; then
-              echo "ERROR: docker-compose.prod.yml not found!"
+              echo "❌ ERROR: docker-compose.prod.yml not found!"
+              ls -la
               exit 1
             fi
 
-            # Pull latest Docker image
+            echo "✅ Repository ready. Pulling latest image..."
             docker pull ${{ env.DOCKER_IMAGE }}:latest
 
-            # Initialize health check timer
             ELAPSED=0
             TIMEOUT=${{ env.HEALTH_CHECK_TIMEOUT }}
 
-            # Start / rolling update
             if docker compose -f docker-compose.prod.yml ps | grep -q "mealsync-app"; then
-              echo "Performing rolling update..."
+              echo "🚀 Performing rolling update..."
               docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=2 mealsync-app
             else
-              echo "First deployment..."
+              echo "🆕 First-time deployment..."
               docker compose -f docker-compose.prod.yml up -d
             fi
 
-            # Wait for healthy containers
+            echo "🩺 Waiting for containers to become healthy..."
             while [ $ELAPSED -lt $TIMEOUT ]; do
               if docker compose -f docker-compose.prod.yml ps mealsync-app | grep -q "healthy"; then
-                echo "Container healthy!"
+                echo "✅ Application is healthy!"
                 break
               fi
               sleep 5
@@ -117,11 +131,12 @@ jobs:
             done
 
             if [ $ELAPSED -ge $TIMEOUT ]; then
-              echo "Health check timeout, rolling back..."
+              echo "❌ Health check timeout, rolling back..."
               docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=1 mealsync-app
               exit 1
             fi
 
-            # Cleanup old images
+            echo "🧹 Cleaning up old images..."
             docker image prune -af --filter "until=48h"
-            echo "Deployment complete."
+
+            echo "✅ Deployment complete!"
