@@ -161,17 +161,36 @@ jobs:
               exit 1
             }
           
-          # Copy files using rsync with verbose output
+          # Create nginx directory and copy files with proper permissions
           echo "📤 Transferring files to EC2..."
+          
+          # Create nginx directory first
+          ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" "$EC2_USERNAME@$EC2_HOST" \
+            "mkdir -p ~/mealsync/nginx/ssl"
+          
+          # Transfer docker-compose.prod.yml
           rsync -avz --progress \
             -e "ssh -o StrictHostKeyChecking=no -i $SSH_KEY_FILE" \
-            --exclude='.git' \
-            --include='docker-compose.prod.yml' \
-            --include='nginx/' \
-            --include='nginx/*' \
-            --exclude='*' \
-            ./ "$EC2_USERNAME@$EC2_HOST:~/mealsync/" || {
-              echo "❌ File transfer failed"
+            --chmod=644 \
+            ./docker-compose.prod.yml "$EC2_USERNAME@$EC2_HOST:~/mealsync/" || {
+              echo "❌ Failed to transfer docker-compose.prod.yml"
+              exit 1
+            }
+          
+          # Transfer nginx config
+          rsync -avz --progress \
+            -e "ssh -o StrictHostKeyChecking=no -i $SSH_KEY_FILE" \
+            --chmod=644 \
+            ./nginx/nginx.conf "$EC2_USERNAME@$EC2_HOST:~/mealsync/nginx/" || {
+              echo "❌ Failed to transfer nginx.conf"
+              exit 1
+            }
+            
+          # Ensure nginx directory has correct permissions
+          ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" "$EC2_USERNAME@$EC2_HOST" \
+            "chmod -R 755 ~/mealsync/nginx && \
+             chmod 644 ~/mealsync/nginx/nginx.conf" || {
+              echo "❌ Failed to set nginx permissions"
               exit 1
             }
           
