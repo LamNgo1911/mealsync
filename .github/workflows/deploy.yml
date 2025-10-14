@@ -130,7 +130,6 @@ jobs:
       - name: Checkout deployment scripts
         uses: actions/checkout@v4
         with:
-          sparse-checkout: |
             scripts
             docker-compose.prod.yml
             nginx
@@ -143,66 +142,61 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             set -e
-
             echo "=== Starting deployment ==="
-
-            # Ensure mealsync directory and repo exist
+            
+            # Check Docker status
+            echo "=== Docker Status ==="
+            docker --version
+            docker compose version
+            
+            # Create or update the application directory
             if [ ! -d ~/mealsync ]; then
-              echo "📦 mealsync directory missing, cloning..."
-              git clone https://github.com/LamNgo1911/mealsync.git ~/mealsync
+              echo "📦 Creating mealsync directory..."
+              mkdir -p ~/mealsync
             fi
-
+            
+            # Copy necessary files
+            echo "📋 Copying deployment files..."
+            cp -f docker-compose.prod.yml ~/mealsync/
+            cp -rf nginx ~/mealsync/
+            
             cd ~/mealsync
-
-            if [ ! -d .git ]; then
-              echo "⚠️ No .git found — recloning repository..."
-              cd ~
-              rm -rf mealsync
-              git clone https://github.com/LamNgo1911/mealsync.git ~/mealsync
-              cd ~/mealsync
-            else
-              echo "🔄 Pulling latest code..."
-              git fetch origin main
-              git reset --hard origin/main || true
-            fi
-
-            # Verify docker-compose file
-            if [ ! -f docker-compose.prod.yml ]; then
-              echo "❌ ERROR: docker-compose.prod.yml not found!"
-              exit 1
-            fi
-
-            echo "✅ Repository ready. Pulling Docker image..."
+            
+            # Stop and remove any existing containers
+            echo "🛑 Stopping any running containers..."
+            docker compose -f docker-compose.prod.yml down || true
+            
+            # Pull the latest image
+            echo "🐳 Pulling latest Docker image..."
             docker pull ${{ env.DOCKER_IMAGE }}:latest
-
-            ELAPSED=0
-            TIMEOUT=${{ env.HEALTH_CHECK_TIMEOUT }}
-
-            # Rolling update logic
-            if docker compose -f docker-compose.prod.yml ps | grep -q "mealsync-app"; then
-              echo "🚀 Performing rolling update..."
-              docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=2 mealsync-app
-            else
-              echo "🆕 First-time deployment..."
-              docker compose -f docker-compose.prod.yml up -d
-            fi
-
+            
+            # Start the service
+            echo "🚀 Starting services..."
+            docker compose -f docker-compose.prod.yml up -d
+            
+            # Wait for the service to be healthy
             echo "🩺 Waiting for container health..."
+            ELAPSED=0
+            TIMEOUT=120
+            HEALTHY=false
+            
             while [ $ELAPSED -lt $TIMEOUT ]; do
-              if docker compose -f docker-compose.prod.yml ps mealsync-app | grep -q "healthy"; then
-                echo "✅ Healthy!"
+              if docker compose -f docker-compose.prod.yml ps | grep -q "healthy"; then
+                echo "✅ Service is healthy!"
+                HEALTHY=true
                 break
               fi
+              echo "⏳ Waiting for service to become healthy... ($ELAPSED/$TIMEOUT seconds)"
               sleep 5
               ELAPSED=$((ELAPSED + 5))
             done
-
-            if [ $ELAPSED -ge $TIMEOUT ]; then
-              echo "❌ Health check timeout, rolling back..."
-              docker compose -f docker-compose.prod.yml up -d --no-deps --scale mealsync-app=1 mealsync-app
+            
+            if [ "$HEALTHY" = false ]; then
+              echo "❌ Health check failed, showing logs..."
+              docker compose -f docker-compose.prod.yml logs --tail=50
               exit 1
             fi
-
+            
             echo "🧹 Cleaning up old images..."
             docker image prune -af --filter "until=48h"
             echo "✅ Deployment complete."
