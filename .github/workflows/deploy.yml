@@ -130,9 +130,11 @@ jobs:
       - name: Checkout deployment scripts
         uses: actions/checkout@v4
         with:
-            scripts
+          sparse-checkout: |
+            scripts/
             docker-compose.prod.yml
-            nginx
+            nginx/
+            .env.template
 
       - name: Deploy with Zero Downtime (Rolling Update)
         uses: appleboy/ssh-action@v1.0.0
