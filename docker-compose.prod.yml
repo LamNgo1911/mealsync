@@ -72,6 +72,12 @@ services:
     depends_on:
       mealsync-app:
         condition: service_started  # Changed from service_healthy to service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/nginx-health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     networks:
       - mealsync-network
