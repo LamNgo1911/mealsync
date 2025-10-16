@@ -135,75 +135,40 @@ jobs:
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
           SSH_KEY: ${{ secrets.EC2_KEY }}
         run: |
-          # Create a temporary SSH key file with proper formatting
-          SSH_KEY_FILE="$HOME/.ssh/ec2_key"
-          mkdir -p "$(dirname "$SSH_KEY_FILE")"
-          # Ensure the key is properly formatted with newlines
-          echo "$SSH_KEY" | sed 's/\s*$//' > "$SSH_KEY_FILE"
-          echo "" >> "$SSH_KEY_FILE"  # Ensure there's a newline at the end
-          chmod 600 "$SSH_KEY_FILE"
+          # Create a temporary SSH key file
+          echo "${{ secrets.EC2_KEY }}" > /tmp/ec2_key
+          chmod 600 /tmp/ec2_key
           
-          # Test SSH connection first
-          echo "🔌 Testing SSH connection..."
-          if ! ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" -q "$EC2_USERNAME@$EC2_HOST" exit; then
-            echo "❌ SSH connection failed. Please check your EC2 instance and credentials."
-            exit 1
-          fi
-          
-          # Create necessary directories on EC2
-          echo "📂 Creating directories on EC2..."
-          ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" "$EC2_USERNAME@$EC2_HOST" \
-            "mkdir -p ~/mealsync/nginx" || {
-              echo "❌ Failed to create directories on EC2"
-              exit 1
-            }
-          
-          # Create nginx directory and copy files with proper permissions
-          echo "📤 Transferring files to EC2..."
-          
-          # Create nginx directory first
-          ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" "$EC2_USERNAME@$EC2_HOST" \
-            "mkdir -p ~/mealsync/nginx/ssl"
+          # Create directory on EC2
+          ssh -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+              "mkdir -p ~/mealsync/nginx"
           
           # Transfer docker-compose.prod.yml
-          rsync -avz --progress \
-            -e "ssh -o StrictHostKeyChecking=no -i $SSH_KEY_FILE" \
-            --chmod=644 \
-            "$GITHUB_WORKSPACE/docker-compose.prod.yml" "$EC2_USERNAME@$EC2_HOST:~/mealsync/" || {
-              echo "❌ Failed to transfer docker-compose.prod.yml"
-              echo "Trying to copy from: $GITHUB_WORKSPACE/docker-compose.prod.yml"
-              ls -la "$GITHUB_WORKSPACE/" || true
-              exit 1
-            }
+          scp -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "$GITHUB_WORKSPACE/docker-compose.prod.yml" \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/mealsync/
           
           # Transfer nginx config
-          rsync -avz --progress \
-            -e "ssh -o StrictHostKeyChecking=no -i $SSH_KEY_FILE" \
-            --chmod=644 \
-            "$GITHUB_WORKSPACE/nginx/nginx.conf" "$EC2_USERNAME@$EC2_HOST:~/mealsync/nginx/" || {
-              echo "❌ Failed to transfer nginx.conf"
-              echo "Current directory: $(pwd)"
-              echo "Trying to copy from: $GITHUB_WORKSPACE/nginx/nginx.conf"
-              ls -la "$GITHUB_WORKSPACE/nginx/" || true
-              exit 1
-            }
+          scp -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "$GITHUB_WORKSPACE/nginx/nginx.conf" \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/mealsync/nginx/
           
-          # Ensure nginx directory has correct permissions
-          # Only modify permissions for files we own and can modify
-          ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" "$EC2_USERNAME@$EC2_HOST" \
-            "chmod 755 ~/mealsync/nginx && \
-             chmod 644 ~/mealsync/nginx/nginx.conf && \
-             [ -d ~/mealsync/nginx/ssl ] && sudo chown -R $EC2_USERNAME:$EC2_USERNAME ~/mealsync/nginx/ssl || true" || {
-              echo "⚠️  Could not set all permissions, but continuing deployment..."
-            }
+          # Set proper permissions
+          ssh -i /tmp/ec2_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+              "chmod 755 ~/mealsync/nginx && chmod 644 ~/mealsync/nginx/nginx.conf"
           
-          # Verify files were transferred
-          echo "=== Verifying files on EC2 ==="
-          ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_FILE" "$EC2_USERNAME@$EC2_HOST" \
-            "ls -la ~/mealsync/ && ls -la ~/mealsync/nginx/"
-          
-          # Clean up the SSH key
-          rm -f "$SSH_KEY_FILE"
+          # Clean up
+          rm -f /tmp/ec2_key
       - name: Deploy with Zero Downtime (Rolling Update)
         uses: appleboy/ssh-action@v1.0.0
         with:

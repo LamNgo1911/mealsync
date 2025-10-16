@@ -24,7 +24,9 @@ DOCKER_HUB_USERNAME=your_dockerhub_username
 ## 📦 Deployment & Hosting
 
 - Docker images are pushed to Docker Hub and deployed to AWS EC2 using GitHub Actions and Docker Compose.
-- The production backend is available at: http://13.49.27.132:8081/api/v1
+- The production backend is available at: `http://13.49.27.132/api/v1`
+  - All requests are proxied through Nginx on port 80
+  - The backend service runs on port 8081 internally
 
 ## 📚 API Routes (v1)
 
