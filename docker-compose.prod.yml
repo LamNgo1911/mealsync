@@ -6,15 +6,15 @@ services:
     image: postgres:15-alpine
     container_name: mealsync-db
     environment:
-      POSTGRES_DB: ${RDS_DB_NAME:-mealsync}
-      POSTGRES_USER: ${RDS_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${RDS_PASSWORD:-postgres}
+      POSTGRES_DB: ${RDS_DB_NAME}
+      POSTGRES_USER: ${RDS_USERNAME}
+      POSTGRES_PASSWORD: ${RDS_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - mealsync-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${RDS_USERNAME:-postgres} -d ${RDS_DB_NAME:-mealsync}"]
+      test: ["CMD-SHELL", "pg_isready -U ${RDS_USERNAME} -d ${RDS_DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 10  # increase retries to be more forgiving
@@ -30,9 +30,9 @@ services:
     env_file:
       - .env
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/${RDS_DB_NAME:-mealsync}
-      - SPRING_DATASOURCE_USERNAME=${RDS_USERNAME:-postgres}
-      - SPRING_DATASOURCE_PASSWORD=${RDS_PASSWORD:-postgres}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/${RDS_DB_NAME}
+      - SPRING_DATASOURCE_USERNAME=${RDS_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${RDS_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_PROFILES_ACTIVE=prod
       - GOOGLE_APPLICATION_CREDENTIALS=/app/mealsync-451912-80d962e81ab0.json
