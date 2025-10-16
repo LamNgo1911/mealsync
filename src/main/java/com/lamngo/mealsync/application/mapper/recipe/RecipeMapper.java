@@ -15,6 +15,7 @@ import java.util.List;
 )
 public interface RecipeMapper {
 
+    @Mapping(target = "imageUrl", source = "imageUrl")
     RecipeReadDto toRecipeReadDto(Recipe recipe);
 
     List<RecipeReadDto> toRecipeReadDtoList(List<Recipe> recipes);

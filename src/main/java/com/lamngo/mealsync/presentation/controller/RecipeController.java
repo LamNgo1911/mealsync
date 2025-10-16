@@ -11,6 +11,7 @@ import com.lamngo.mealsync.application.service.recipe.RecipeService;
 import com.lamngo.mealsync.application.shared.OffsetPage;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
 import com.lamngo.mealsync.domain.model.UserRecipe;
+import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.presentation.error.BadRequestException;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
@@ -20,6 +21,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -78,10 +81,10 @@ public class RecipeController {
     @GetMapping("/recommended")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> getRecommendedRecipes(
-            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
+            @AuthenticationPrincipal User user,
             @RequestParam(defaultValue = "10") int limit) {
 
-        UUID userId = UUID.fromString(userDetails.getUsername());
+        UUID userId = user.getId();
         List<RecipeReadDto> recommendedRecipes = recipeService.getRecommendedRecipes(userId, limit);
 
         SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
@@ -92,10 +95,10 @@ public class RecipeController {
     @GetMapping("/saved")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> getSavedRecipes(
-            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
+            @AuthenticationPrincipal User user,
             @RequestParam(defaultValue = "10") int limit) {
 
-        UUID userId = UUID.fromString(userDetails.getUsername());
+        UUID userId = user.getId();
         List<UserRecipeReadDto> savedRecipes = recipeService.getSavedRecipesByUserId(userId, limit);
 
         SuccessResponseEntity<List<UserRecipeReadDto>> body = new SuccessResponseEntity<>();
