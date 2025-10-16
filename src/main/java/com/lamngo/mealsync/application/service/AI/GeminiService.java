@@ -338,8 +338,9 @@ public class GeminiService {
             if (recipeOpt.isPresent()) {
                 Recipe recipe = recipeOpt.get();
                 recipe.setImageUrl(imageUrl);
-                recipeRepo.createRecipe(recipe);
-                logger.debug("Successfully updated recipe {} with image URL", dto.getId());
+                // Save the updated recipe back to the database
+                recipe = recipeRepo.saveRecipe(recipe);
+                logger.debug("Successfully updated recipe {} with image URL: {}", dto.getId(), recipe.getImageUrl());
             } else {
                 logger.warn("Recipe not found in database: {}", dto.getId());
             }

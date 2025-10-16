@@ -20,4 +20,11 @@ public interface IRecipeRepo {
     long countAllRecipes();
     List<Recipe> findRecipesByCuisines(List<String> cuisines, int limit);
     List<Recipe> findAllRecipesForRecommendation(int limit);
+    
+    /**
+     * Saves a recipe to the database. Can be used for both creating and updating.
+     * @param recipe The recipe to save
+     * @return The saved recipe
+     */
+    Recipe saveRecipe(Recipe recipe);
 }

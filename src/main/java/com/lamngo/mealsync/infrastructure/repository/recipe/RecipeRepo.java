@@ -62,6 +62,11 @@ public class RecipeRepo implements IRecipeRepo {
     public List<Recipe> findAllRecipesForRecommendation(int limit) {
         return _recipeJpaRepo.findAll(PageRequest.of(0, limit)).getContent();
     }
+    
+    @Override
+    public Recipe saveRecipe(Recipe recipe) {
+        return _recipeJpaRepo.save(recipe);
+    }
 
     @Override
     public Page<Recipe> getAllRecipesFiltered(OffsetPage pageable, List<String> cuisines, List<String> tags,
