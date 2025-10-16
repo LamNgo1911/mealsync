@@ -208,6 +208,14 @@ jobs:
 
               log_info "Checking health for service: $service_name"
 
+              # Skip health check for services without health checks configured
+              if ! docker compose -f "$COMPOSE_FILE" ps "$service_name" | grep -q "health"; then
+                log_info "⏳ Service $service_name doesn't have health checks, waiting 10s..."
+                sleep 10
+                log_info "✅ Service $service_name is ready (no health check configured)!"
+                return 0
+              fi
+
               while [ $elapsed -lt $HEALTH_TIMEOUT ]; do
                 if docker compose -f "$COMPOSE_FILE" ps "$service_name" | grep -q "healthy"; then
                   log_info "✅ Service $service_name is healthy!"
