@@ -67,6 +67,7 @@ public class GeminiService {
         this.s3Service = s3Service;
     }
 
+    @Transactional
     public List<RecipeReadDto> generateRecipes(List<String> ingredients, UserPreference userPreference) {
         if (CollectionUtils.isEmpty(ingredients)) {
             logger.warn("Ingredient list is empty or null");
@@ -74,16 +75,31 @@ public class GeminiService {
         }
         if (userPreference == null) {
             userPreference = new UserPreference();
+            logger.debug("No user preference provided, using default");
         }
+        
+        logger.info("Generating recipes for ingredients: {}", ingredients);
         try {
             List<RecipeReadDto> recipeDtos = fetchRecipesFromGemini(ingredients, userPreference);
-            recipeDtos.forEach(this::addImageToRecipe);
+            logger.info("Successfully fetched {} recipes from Gemini", recipeDtos.size());
+            
+            for (RecipeReadDto dto : recipeDtos) {
+                try {
+                    addImageToRecipe(dto);
+                    logger.debug("Successfully added image to recipe: {}", dto.getName());
+                } catch (Exception e) {
+                    logger.error("Failed to add image to recipe {}: {}", dto.getName(), e.getMessage(), e);
+                    // Continue with other recipes even if one fails
+                }
+            }
+            
             return recipeDtos;
         } catch (GeminiServiceException e) {
+            logger.error("Gemini service error: {}", e.getMessage(), e);
             throw e;
         } catch (Exception e) {
-            logger.error("Error generating recipes: {}", e.getMessage(), e);
-            throw new GeminiServiceException("Failed to generate recipes", e);
+            logger.error("Unexpected error generating recipes: {}", e.getMessage(), e);
+            throw new GeminiServiceException("Failed to generate recipes: " + e.getMessage(), e);
         }
     }
 
@@ -281,20 +297,51 @@ public class GeminiService {
         }
     }
 
-    //    Adds imageUrl to the given RecipeReadDto using AI and S3 services.
+    /**
+     * Adds imageUrl to the given RecipeReadDto using AI and S3 services.
+     * Also updates the recipe in the database with the new image URL.
+     * 
+     * @param dto The recipe DTO to add image to
+     * @throws GeminiServiceException if image generation or upload fails
+     */
+    @Transactional
     public void addImageToRecipe(RecipeReadDto dto) {
+        if (dto == null || dto.getId() == null) {
+            logger.warn("Cannot add image to null recipe or recipe with null ID");
+            return;
+        }
+        
+        logger.debug("Generating image for recipe: {}", dto.getName());
         try {
             String prompt = dto.getName();
-            List<String> ingredientNames = dto.getIngredients() != null ? dto.getIngredients().stream().map(i -> i.getName()).toList() : List.of();
+            List<String> ingredientNames = dto.getIngredients() != null ? 
+                dto.getIngredients().stream().map(i -> i.getName()).toList() : 
+                List.of();
             String description = dto.getDescription() != null ? dto.getDescription() : "";
+            
+            // Generate and upload image
             String base64 = imageGeneratorService.generateImage(prompt, ingredientNames, description);
-            if (base64 != null && !base64.isEmpty()) {
-                byte[] imageBytes = Base64.getDecoder().decode(base64);
-                String imageUrl = s3Service.uploadImage(imageBytes, dto.getName());
-                dto.setImageUrl(imageUrl);
-            } else {
+            if (base64 == null || base64.isEmpty()) {
                 logger.warn("Image generator returned empty base64 for recipe: {}", dto.getName());
                 throw new GeminiServiceException("Image generator returned empty base64 for recipe: " + dto.getName());
+            }
+            
+            byte[] imageBytes = Base64.getDecoder().decode(base64);
+            String imageUrl = s3Service.uploadImage(imageBytes, dto.getName());
+            
+            // Update DTO
+            dto.setImageUrl(imageUrl);
+            logger.debug("Successfully uploaded image for recipe {} to: {}", dto.getName(), imageUrl);
+            
+            // Update entity in database
+            Optional<Recipe> recipeOpt = recipeRepo.getRecipeById(dto.getId());
+            if (recipeOpt.isPresent()) {
+                Recipe recipe = recipeOpt.get();
+                recipe.setImageUrl(imageUrl);
+                recipeRepo.createRecipe(recipe);
+                logger.debug("Successfully updated recipe {} with image URL", dto.getId());
+            } else {
+                logger.warn("Recipe not found in database: {}", dto.getId());
             }
         } catch (GeminiServiceException e) {
             throw e;

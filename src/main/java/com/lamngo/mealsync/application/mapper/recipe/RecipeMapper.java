@@ -16,6 +16,21 @@ import java.util.List;
 public interface RecipeMapper {
 
     @Mapping(target = "imageUrl", source = "imageUrl")
+    @Mapping(target = "id", source = "id")
+    @Mapping(target = "name", source = "name")
+    @Mapping(target = "description", source = "description")
+    @Mapping(target = "cuisine", source = "cuisine")
+    @Mapping(target = "preparationTime", source = "preparationTime")
+    @Mapping(target = "cookingTime", source = "cookingTime")
+    @Mapping(target = "totalTime", source = "totalTime")
+    @Mapping(target = "servings", source = "servings")
+    @Mapping(target = "calories", source = "calories")
+    @Mapping(target = "protein", source = "protein")
+    @Mapping(target = "carbohydrates", source = "carbohydrates")
+    @Mapping(target = "fat", source = "fat")
+    @Mapping(target = "difficulty", source = "difficulty")
+    @Mapping(target = "tags", source = "tags")
+    @Mapping(target = "ingredients", source = "ingredients")
     RecipeReadDto toRecipeReadDto(Recipe recipe);
 
     List<RecipeReadDto> toRecipeReadDtoList(List<Recipe> recipes);
