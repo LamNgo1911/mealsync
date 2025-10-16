@@ -95,14 +95,42 @@ public class GeminiService {
                 throw new GeminiServiceException("GEMINI_API_BASE_URL or GEMINI_API_KEY is not set properly. Check your env.properties file.");
             }
 
-            String prompt = "Given these ingredients: " + String.join(", ", ingredients) +
-                    ". And these user preferences: dietary restrictions: " + userPreference.getDietaryRestrictions() +
-                    ", favorite cuisines: " + userPreference.getFavoriteCuisines() +
-                    ", disliked ingredients: " + userPreference.getDislikedIngredients() + "." +
-                    " Generate exactly 2 creative recipes and respond with ONLY a valid JSON array. Do not include any text or explanation. Each recipe should have the following fields: " +
-                    "name, instructions (as a string array, one step per item), cuisine, description, preparationTime, cookingTime, totalTime, servings, " +
-                    "calories (kcal per serving), protein (grams per serving), carbohydrates (grams per serving), fat (grams per serving), " +
-                    "difficulty, tags, and ingredients (with name, quantity, unit).";
+            String prompt = "You are a professional recipe creator. " +
+                    "Given the following ingredients: " + String.join(", ", ingredients) + ". " +
+                    "And the following user preferences: " +
+                    "dietary restrictions: " + userPreference.getDietaryRestrictions() + ", " +
+                    "favorite cuisines: " + userPreference.getFavoriteCuisines() + ", " +
+                    "disliked ingredients: " + userPreference.getDislikedIngredients() + ". " +
+                    "Generate exactly 2 unique and creative recipes that fully comply with these preferences. " +
+                    "Respond ONLY with a valid JSON array containing exactly 2 objects. " +
+                    "Do NOT include any extra text, explanations, or formatting. " +
+                    "Each recipe object must follow this exact structure:\n" +
+                    "{\n" +
+                    "  \"name\": \"string\",\n" +
+                    "  \"instructions\": [\"string\", \"string\", ...],\n" +
+                    "  \"cuisine\": \"string\",\n" +
+                    "  \"description\": \"string\",\n" +
+                    "  \"preparationTime\": integer (minutes),\n" +
+                    "  \"cookingTime\": integer (minutes),\n" +
+                    "  \"totalTime\": integer (minutes),\n" +
+                    "  \"servings\": integer,\n" +
+                    "  \"calories\": number (kcal per serving),\n" +
+                    "  \"protein\": number (grams per serving),\n" +
+                    "  \"carbohydrates\": number (grams per serving),\n" +
+                    "  \"fat\": number (grams per serving),\n" +
+                    "  \"difficulty\": \"string\" (one of \"easy\", \"medium\", \"hard\"),\n" +
+                    "  \"tags\": [\"string\", \"string\", ...],\n" +
+                    "  \"ingredients\": [\n" +
+                    "    {\n" +
+                    "      \"name\": \"string\",\n" +
+                    "      \"quantity\": number,\n" +
+                    "      \"unit\": \"string\"\n" +
+                    "    }, ...\n" +
+                    "  ]\n" +
+                    "} \n" +
+                    "Ensure all numeric values are realistic and consistent. " +
+                    "Do not include any additional fields, text, or explanation outside this JSON structure.";
+
 
             JSONObject requestBody = new JSONObject();
             requestBody.put("contents", new JSONArray()
