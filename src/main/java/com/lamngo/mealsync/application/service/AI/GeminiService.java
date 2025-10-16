@@ -114,7 +114,7 @@ public class GeminiService {
                     MediaType.parse("application/json")
             );
 
-            String fullUrl = geminiApiBaseUrl + "?key=" + geminiApiKey; /// google.com/api/userAPIKey
+            String fullUrl = geminiApiBaseUrl + "?key=" + geminiApiKey;
             Request request = new Request.Builder()
                     .url(fullUrl)
                     .post(body)

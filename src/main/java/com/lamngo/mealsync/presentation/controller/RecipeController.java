@@ -75,6 +75,34 @@ public class RecipeController {
         return new ResponseEntity<>(body, HttpStatus.CREATED);
     }
 
+    @GetMapping("/recommended")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> getRecommendedRecipes(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
+            @RequestParam(defaultValue = "10") int limit) {
+
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        List<RecipeReadDto> recommendedRecipes = recipeService.getRecommendedRecipes(userId, limit);
+
+        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
+        body.setData(recommendedRecipes);
+        return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/saved")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> getSavedRecipes(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
+            @RequestParam(defaultValue = "10") int limit) {
+
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        List<UserRecipeReadDto> savedRecipes = recipeService.getSavedRecipesByUserId(userId, limit);
+
+        SuccessResponseEntity<List<UserRecipeReadDto>> body = new SuccessResponseEntity<>();
+        body.setData(savedRecipes);
+        return ResponseEntity.ok(body);
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<RecipeReadDto>> getRecipeById(@PathVariable("id") String id) {
@@ -113,34 +141,6 @@ public class RecipeController {
         }
 
         return ResponseEntity.ok(response);
-    }
-
-    @GetMapping("/recommended")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> getRecommendedRecipes(
-            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
-            @RequestParam(defaultValue = "10") int limit) {
-
-        UUID userId = UUID.fromString(userDetails.getUsername());
-        List<RecipeReadDto> recommendedRecipes = recipeService.getRecommendedRecipes(userId, limit);
-
-        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
-        body.setData(recommendedRecipes);
-        return ResponseEntity.ok(body);
-    }
-
-    @GetMapping("/saved")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> getSavedRecipes(
-            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
-            @RequestParam(defaultValue = "10") int limit) {
-
-        UUID userId = UUID.fromString(userDetails.getUsername());
-        List<UserRecipeReadDto> savedRecipes = recipeService.getSavedRecipesByUserId(userId, limit);
-
-        SuccessResponseEntity<List<UserRecipeReadDto>> body = new SuccessResponseEntity<>();
-        body.setData(savedRecipes);
-        return ResponseEntity.ok(body);
     }
 
     @PutMapping("/{id}")
