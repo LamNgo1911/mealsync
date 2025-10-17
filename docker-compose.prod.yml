@@ -1,4 +1,16 @@
 services:
+  # Watchtower for automatic updates
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=300  # Check every 5 minutes
+      - WATCHTOWER_CLEANUP=true       # Remove old images after update
+      - WATCHTOWER_LABEL_ENABLE=true  # Only update containers with the watchtower.enable label
+    restart: unless-stopped
+
   # PostgreSQL Database
   db:
     image: postgres:15-alpine
@@ -22,6 +34,9 @@ services:
   mealsync-app:
     image: ${DOCKER_HUB_USERNAME}/mealsync-app:latest
     container_name: mealsync-app
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.monitor-only=false"  # Set to true to monitor only without updating
     depends_on:
       db:
         condition: service_healthy
