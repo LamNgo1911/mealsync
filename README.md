@@ -1,253 +1,338 @@
-# MealSync Backend
+# 🍽️ MealSync API
 
-A robust Spring Boot application for meal planning and recipe synchronization with AI-powered features.
+A high-performance Spring Boot backend for AI-powered meal planning and recipe management.
 
-## 🔒 Environment Variables & Secrets
+## 📌 Quick Links
 
-Sensitive information (such as database credentials and Docker Hub username) is stored in a `.env` file, which is loaded automatically by Docker Compose.
+- [API Documentation](#-api-documentation)
+- [Local Development](#-local-development)
+- [Deployment](#-deployment)
+- [Tech Stack](#-tech-stack)
+- [Environment Setup](#-environment-setup)
 
-- **Never commit your real `.env` to version control.**
-- Example `.env` content:
+## 🌟 Features
 
-```env
-POSTGRES_ENDPOINT=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB_NAME=mealsync_db
-POSTGRES_USER=your_database_username
-POSTGRES_PASSWORD=your_database_password
-DOCKER_HUB_USERNAME=your_dockerhub_username
-```
-
-- Update `.env` with your own secrets before running `docker-compose up` or deploying.
-- The `.env` file is referenced in both `docker-compose.yml` and the CI/CD pipeline for secure configuration.
-
-## 📦 Deployment & Hosting
-
-- Docker images are pushed to Docker Hub and deployed to AWS EC2 using GitHub Actions and Docker Compose.
-- The production backend is available at: `http://13.49.27.132/api/v1`
-  - All requests are proxied through Nginx on port 80
-  - The backend service runs on port 8081 internally
-
-## 📚 API Routes (v1)
-
-Below is a summary of main routes (all prefixed with `/api/v1`):
-
-### Auth
-- `POST /users/register` — Register a new user
-- `POST /users/login` — User login
-- `POST /users/login/google` — Google OAuth login
-
-### Users
-- `GET /users` — List all users (admin only)
-- `GET /users/{id}` — Get user by ID
-- `DELETE /users/{id}` — Delete user (admin only)
-- `PUT /users/{id}` — Update user (admin or self)
-- `PUT /users/{id}/preference` — Update user preference
-
-### Recipes
-- `POST /recipes/generate-recipes` — AI-generate recipes from ingredients
-- `POST /recipes/save` — Save recipe to user
-- `POST /recipes` — Create a recipe
-- `GET /recipes/{id}` — Get recipe by ID
-- `GET /recipes` — List recipes (paginated)
-- `PUT /recipes/{id}` — Update recipe
-- `DELETE /recipes/{id}` — Delete recipe
-
-### Ingredient Recognition
-- `POST /ingredient-recognition/detect` — Detect ingredients from an image
-
-### Photos
-- `POST /photos/generate` — Generate and upload a recipe image
-
----
-- All endpoints return a standard `SuccessResponseEntity<T>` wrapper.
-- Most endpoints require authentication; see your security config for details.
-
-## 📋 Overview
-
-MealSync is a backend service that enables users to discover, save, and manage recipes with advanced features including ingredient recognition, AI-generated recipe images, and personalized meal planning.
-
-## 🚀 Features
-
-- **User Authentication & Authorization**
-  - JWT-based secure authentication
+- **🔐 Authentication**
+  - JWT & Google OAuth 2.0
   - Role-based access control
-  - Google OAuth integration
-  - Refresh token mechanism
+  - Secure password hashing
 
-- **Recipe Management**
-  - Comprehensive recipe model with ingredients, instructions, nutritional information
-  - Recipe search and filtering by ingredients, cuisine, tags
-  - User-recipe relationships (favorites, meal plans)
+- **🍳 Recipe Management**
+  - AI-generated recipes from ingredients
+  - Advanced search and filtering
+  - Image generation for recipes
+  - Ingredient recognition from images
 
-- **AI Integration**
-  - Image generation for recipes using Stability AI
-  - Ingredient recognition from images via Google Cloud Vision
-  - Smart recipe recommendations powered by Gemini AI
-
-- **File Storage**
-  - AWS S3 integration for image storage
-  - Secure file upload/download
-
-## 🛠️ Tech Stack
-
-- **Framework**: Spring Boot 3.4.3
-- **Language**: Java 21 (compile target as per pom.xml)
-- **Database**: PostgreSQL 42.7.2
-- **Security**: Spring Security with JWT 0.12.6
-- **Mapping**: MapStruct 1.5.5.Final
-- **Build Tool**: Maven
-- **Cloud Services**: AWS S3, Google Cloud Vision 3.22.0
-- **External APIs**: Stability AI, Google Gemini AI
-- **Authentication**: JWT, Google OAuth
-- **HTTP Client**: OkHttp 4.11.0, WebFlux
-
-## 🏗️ Architecture
-
-MealSync follows a clean architecture pattern with clear separation of concerns:
-
-- **Domain**: Core business logic and entities
-- **Application**: Services and use cases
-- **Infrastructure**: External interfaces and data access
-- **Presentation**: API endpoints and controllers
-
-## 📦 Prerequisites
-
-- Docker & Docker Compose (for local and production deployment)
-- (For local dev) Java 21+, Maven 3.8+, PostgreSQL 14+
-
-## 🔧 Environment Variables
-
-The following environment variables need to be set:
-
-```
-# Database Configuration
-POSTGRES_ENDPOINT=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB_NAME=your_database_name
-POSTGRES_USER=your_database_username
-POSTGRES_PASSWORD=your_database_password
-
-# JWT Configuration
-JWT_SECRET=your_jwt_secret_key
-JWT_EXPIRATION_MS=86400000
-
-# Gemini API Configuration
-GEMINI_API_BASE_URL=your_gemini_api_url
-GEMINI_API_KEY=your_gemini_api_key
-
-# AWS Configuration
-AWS_ACCESS_KEY=your_aws_access_key
-AWS_SECRET_KEY=your_aws_secret_key
-AWS_REGION=your_aws_region
-AWS_BUCKET_NAME=your_bucket_name
-
-# Stability AI Configuration
-STABILITY_API_KEY=your_stability_api_key
-STABILITY_API_URL=your_stability_api_url
-
-# Google Cloud Vision Configuration
-GOOGLE_APPLICATION_CREDENTIALS=path/to/your/google-credentials.json
-```
-
-## 🐳 Running with Docker & Docker Compose
-
-- The backend will be available at `http://localhost:8081` by default.
-- Environment variables are managed via `.env` and `docker-compose.yml`.
-
-### Quick Start
-
-**Development**:
-```bash
-docker compose -f docker-compose.dev.yml up --build
-```
-
-**Staging**:
-```bash
-docker compose -f docker-compose.staging.yml up -d
-```
-
-**Production**:
-```bash
-docker compose -f docker-compose.prod.yml up -d
-```
-
-For detailed infrastructure documentation, see [docs/README.md](docs/README.md).
+- **⚡ Performance**
+  - Containerized with Docker
+  - Nginx reverse proxy
+  - Rate limiting
+  - Caching
 
 ## 🚀 Getting Started
 
-### Running Locally (Java)
+### Prerequisites
 
-1. Clone the repository
+- Docker & Docker Compose
+- Java 21+ (for local development)
+- Maven 3.8+
+
+### Local Development
+
+1. Clone the repository:
    ```bash
    git clone https://github.com/LamNgo1911/mealsync
    cd mealsync
    ```
 
-2. Set up environment variables (see above)
-
-3. Build the application
+2. Set up environment:
    ```bash
-   ./mvnw clean install
+   cp .env.example .env
+   # Update .env with your configuration
    ```
 
-4. Run the application
+3. Start services:
    ```bash
+   # With Nginx proxy
+   docker-compose -f docker-compose.yml -f docker-compose.nginx.yml up --build
+   
+   # Or direct Java execution
    ./mvnw spring-boot:run
    ```
-   The application will be available at `http://localhost:8081`
 
-### Using Docker Compose
+4. Access the API:
+   - API: `http://localhost/api/v1`
+   - Health: `http://localhost/actuator/health`
 
-1. Make sure your `.env` file is set up (see above).
-2. Start all services:
-   ```bash
-   docker compose -f docker-compose.dev.yml up
-   ```
-   The backend will be available at `http://localhost:8081`.
+## 📚 API Documentation
 
-## 🚀 Deployment (CI/CD & Production)
+### Base URLs
+- **Production**: `http://13.49.27.132/api/v1`
+- **Local**: `http://localhost/api/v1`
 
-This project uses **GitHub Actions** for CI/CD and automatic deployment to an AWS EC2 instance:
-
-- On every push to `main`, GitHub Actions builds, tests, and deploys the Docker image to your EC2 server.
-- The deployment is managed via SSH and Docker Compose on the remote server.
-- See `.github/workflows/deploy.yml` for details.
-
-### Production URL
-
-The deployed backend is available at:
-
+### Authentication
+Include JWT token in the `Authorization` header:
 ```
-http://13.49.27.132:8081/api/v1
+Authorization: Bearer your-jwt-token
 ```
-## 🧪 Testing
 
-Run the tests with Maven:
-```bash
-./mvnw test
+### Response Format
+All endpoints return a standardized response:
+```json
+{
+  "success": true,
+  "data": { ... },
+  "message": "Operation completed successfully"
+}
+```
+
+### Endpoints
+
+#### 🔐 Authentication (`/api/v1/users`)
+
+- **Register User**
+  ```
+  POST /register
+  ```
+  - **Request Body**: 
+    ```json
+    {
+      "email": "user@example.com",
+      "password": "securePassword123",
+      "name": "John Doe"
+    }
+    ```
+  - **Auth**: Not required
+
+- **Login**
+  ```
+  POST /login
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "email": "user@example.com",
+      "password": "securePassword123"
+    }
+    ```
+  - **Auth**: Not required
+
+- **Google OAuth Login**
+  ```
+  POST /login/google
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "idToken": "google-oauth-token"
+    }
+    ```
+  - **Auth**: Not required
+
+#### 👥 Users (`/api/v1/users`)
+
+- **List Users**
+  ```
+  GET /
+  ```
+  - **Query Params**:
+    - `role`: Filter by role (USER, ADMIN)
+    - `status`: Filter by status (ACTIVE, INACTIVE)
+  - **Auth**: Admin only
+
+- **Get User by ID**
+  ```
+  GET /{id}
+  ```
+  - **Auth**: Admin or self
+
+- **Update User**
+  ```
+  PUT /{id}
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "name": "Updated Name",
+      "email": "new.email@example.com"
+    }
+    ```
+  - **Auth**: Admin or self
+
+- **Update User Preferences**
+  ```
+  PUT /{id}/preference
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "dietaryRestrictions": ["VEGETARIAN", "GLUTEN_FREE"],
+      "allergies": ["PEANUTS", "SHELLFISH"],
+      "cuisinePreferences": ["ITALIAN", "ASIAN"]
+    }
+    ```
+  - **Auth**: Admin or self
+
+#### 🍽️ Recipes (`/api/v1/recipes`)
+
+- **Generate Recipes**
+  ```
+  POST /generate-recipes
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "ingredients": ["chicken", "rice", "vegetables"],
+      "userPreference": {
+        "dietaryRestrictions": ["VEGETARIAN"],
+        "cuisinePreferences": ["ITALIAN"]
+      }
+    }
+    ```
+  - **Auth**: Required
+
+- **List Recipes**
+  ```
+  GET /
+  ```
+  - **Query Params**:
+    - `offset`: Pagination offset (default: 0)
+    - `limit`: Items per page (default: 2)
+    - `cuisines`: Comma-separated list of cuisines
+    - `tags`: Comma-separated list of tags
+    - `ingredients`: Comma-separated list of ingredients
+    - `difficulty`: EASY, MEDIUM, or HARD
+    - `maxTotalTime`: Maximum cooking time in minutes
+    - `minServings`: Minimum number of servings
+  - **Auth**: Not required
+
+- **Get Recipe Details**
+  ```
+  GET /{id}
+  ```
+  - **Auth**: Required
+
+- **Save Recipe to User**
+  ```
+  POST /save
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "userId": "uuid",
+      "recipeId": "uuid"
+    }
+    ```
+  - **Auth**: User can only save to their own account
+
+- **Get Recommended Recipes**
+  ```
+  GET /recommended
+  ```
+  - **Query Params**:
+    - `limit`: Number of recommendations (default: 10)
+  - **Auth**: Required
+
+- **Get Saved Recipes**
+  ```
+  GET /saved
+  ```
+  - **Query Params**:
+    - `limit`: Number of recipes (default: 10)
+  - **Auth**: Required
+
+#### 🖼️ Media
+
+- **Generate Recipe Image** (`/api/v1/photos`)
+  ```
+  POST /generate
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "recipeName": "Pasta Carbonara",
+      "ingredients": ["pasta", "eggs", "bacon", "parmesan"],
+      "description": "Creamy Italian pasta dish"
+    }
+    ```
+  - **Auth**: Required
+  - **Returns**: URL of the generated image
+
+- **Detect Ingredients from Image** (`/api/v1/ingredient-recognition`)
+  ```
+  POST /detect
+  ```
+  - **Content-Type**: `multipart/form-data`
+  - **Form Field**: `image` (image file)
+  - **Auth**: Required
+  - **Returns**: List of detected ingredients
+
+### Rate Limiting
+- 100 requests/minute per IP
+- 10 requests/minute for auth endpoints
+
+### Error Responses
+- `400 Bad Request`: Invalid request parameters
+- `401 Unauthorized`: Missing or invalid authentication
+- `403 Forbidden`: Insufficient permissions
+- `404 Not Found`: Resource not found
+- `500 Internal Server Error`: Server-side error
+
+## 🛠️ Tech Stack
+
+- **Backend**: Spring Boot 3.4, Java 21
+- **Database**: PostgreSQL 14
+- **AI/ML**: Google Gemini, Cloud Vision, Stability AI
+- **Infra**: Docker, AWS (EC2, S3), Nginx
+- **Auth**: JWT, Spring Security, OAuth 2.0
+
+## 🔧 Environment Variables
+
+Required variables in `.env`:
+
+```env
+# Database
+POSTGRES_DB=mealsync
+POSTGRES_USER=user
+POSTGRES_PASSWORD=password
+
+# JWT
+JWT_SECRET=your-secret-key
+JWT_EXPIRATION_MS=86400000
+
+# AWS
+AWS_ACCESS_KEY=your-key
+AWS_SECRET_KEY=your-secret
+AWS_BUCKET=your-bucket
+
+# AI Services
+GEMINI_API_KEY=your-key
+STABILITY_API_KEY=your-key
 ```
 
 ## 🚀 Deployment
 
-This project is set up for continuous integration and deployment using:
-
-- **GitHub Actions**: Automated build, test, and deployment pipeline
-- **Docker & Docker Compose**: Containerization for consistent deployment
-- **AWS RDS**: Relational Database Service
-- **AWS EC2**: Cloud hosting platform
-- **Zero-Downtime Deployment**: Rolling updates with health checks
-- **Nginx**: Reverse proxy with load balancing
-
-The CI/CD pipeline automatically builds and tests the application on each push to the main branch, and deploys to AWS EC2 when tests pass.
-
-### Production URL
-
-The backend is deployed at:
-
+### Production
+```bash
+docker-compose -f docker-compose.prod.yml up -d
 ```
-http://13.49.27.132:8081/api/v1
-```
+
+### CI/CD
+- GitHub Actions for automated testing and deployment
+- Auto-deploys to AWS EC2 on `main` branch updates
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+  <p>Built with ❤️ by the MealSync Team</p>
+  <a href="https://github.com/LamNgo1911/mealsync">
+    <img src="https://img.shields.io/github/stars/LamNgo1911/mealsync?style=social" alt="GitHub stars">
+  </a>
+</div>
 
 ### Infrastructure Documentation
 
