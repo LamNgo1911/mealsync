@@ -321,6 +321,7 @@ public class GeminiService {
             
             // Generate and upload image
             String base64 = imageGeneratorService.generateImage(prompt, ingredientNames, description);
+            System.out.println("Base64: " + base64);
             if (base64 == null || base64.isEmpty()) {
                 logger.warn("Image generator returned empty base64 for recipe: {}", dto.getName());
                 throw new GeminiServiceException("Image generator returned empty base64 for recipe: " + dto.getName());
@@ -328,6 +329,7 @@ public class GeminiService {
             
             byte[] imageBytes = Base64.getDecoder().decode(base64);
             String imageUrl = s3Service.uploadImage(imageBytes, dto.getName());
+            System.out.println("Image URL: " + imageUrl);
             
             // Update DTO
             dto.setImageUrl(imageUrl);
