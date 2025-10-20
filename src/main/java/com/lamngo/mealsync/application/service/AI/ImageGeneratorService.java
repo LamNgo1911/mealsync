@@ -88,11 +88,17 @@ public class ImageGeneratorService {
             ingredients = List.of();
         }
         String prompt = String.format(
-                "A high-quality food photography image of %s, served with ingredients like %s. Styled in a realistic kitchen or restaurant setting. %s",
+                "Ultra-realistic, high-resolution DSLR food photo of %s made with %s. "
+                        + "Freshly cooked, styled for a modern recipe app — clean, bright, and appetizing. "
+                        + "Overhead (top-down) composition on a white or light neutral background. "
+                        + "Soft natural daylight, gentle shadows, and realistic textures. "
+                        + "Shot with a 50mm lens, shallow depth of field, and true-to-life colors. "
+                        + "No text, no watermark, no illustration, no 3D render, no artificial look. %s",
                 recipeName,
                 String.join(", ", ingredients),
                 description
         );
+
         return callStabilityAiAPI(prompt);
     }
 }
