@@ -8,6 +8,7 @@ import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
 import com.lamngo.mealsync.application.mapper.UserRecipeMapper;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeIngredientMapper;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeMapper;
+import com.lamngo.mealsync.application.service.AWS.S3Service;
 import com.lamngo.mealsync.application.shared.OffsetPage;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
 import com.lamngo.mealsync.domain.model.UserRecipe;
@@ -40,10 +41,12 @@ public class RecipeService implements IRecipeService {
     private final IUserRepo userRepo;
     private final RecipeIngredientMapper recipeIngredientMapper;
     private final RecipeRecommendationService recommendationService;
+    private final S3Service s3Service;
 
     public RecipeService(IRecipeRepo recipeRepo, RecipeMapper recipeMapper,
                          IUserRecipeRepo userRecipeRepo, UserRecipeMapper userRecipeMapper, IUserRepo userRepo,
-                         RecipeIngredientMapper recipeIngredientMapper, RecipeRecommendationService recommendationService) {
+                         RecipeIngredientMapper recipeIngredientMapper, RecipeRecommendationService recommendationService,
+                         S3Service s3Service) {
         this.recipeRepo = recipeRepo;
         this.recipeMapper = recipeMapper;
         this.userRecipeRepo = userRecipeRepo;
@@ -51,6 +54,7 @@ public class RecipeService implements IRecipeService {
         this.userRepo = userRepo;
         this.recipeIngredientMapper = recipeIngredientMapper;
         this.recommendationService = recommendationService;
+        this.s3Service = s3Service;
     }
 
     @Override
@@ -133,7 +137,26 @@ public class RecipeService implements IRecipeService {
     @Override
     @Transactional
     public void deleteRecipe(UUID id) {
+        logger.info("Deleting recipe with ID: {}", id);
+
+        // Fetch the recipe to get the image URL
+        Recipe recipe = recipeRepo.getRecipeById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Recipe not found with id: " + id));
+
+        // Delete the image from S3 if it exists
+        if (recipe.getImageUrl() != null && !recipe.getImageUrl().isEmpty()) {
+            try {
+                s3Service.deleteImage(recipe.getImageUrl());
+                logger.info("Image deleted from S3 for recipe ID: {}", id);
+            } catch (Exception e) {
+                logger.error("Failed to delete image from S3 for recipe ID: {}, continuing with recipe deletion", id, e);
+                // Continue with recipe deletion even if S3 deletion fails
+            }
+        }
+
+        // Delete the recipe from the database
         recipeRepo.deleteRecipe(id);
+        logger.info("Recipe deleted successfully with ID: {}", id);
     }
 
     @Override
