@@ -1,6 +1,5 @@
 package com.lamngo.mealsync.application.service.AWS;
 
-import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -19,9 +18,10 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Service class for interacting with AWS S3 (permanent public URLs).
+ * Note: No @Transactional annotation as S3 operations are external API calls
+ * and should not participate in database transactions.
  */
 @Service
-@Transactional
 public class S3Service {
 
     private final S3Client s3Client;
