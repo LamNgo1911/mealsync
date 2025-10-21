@@ -310,29 +310,44 @@ public class GeminiService {
             logger.warn("Cannot add image to null recipe or recipe with null ID");
             return;
         }
-        
-        logger.debug("Generating image for recipe: {}", dto.getName());
+
+        // Skip if recipe already has an image
+        if (dto.getImageUrl() != null && !dto.getImageUrl().isEmpty()) {
+            logger.debug("Recipe {} already has an image URL, skipping image generation", dto.getName());
+            return;
+        }
+
+        logger.info("Generating image for recipe: {}", dto.getName());
         try {
             String prompt = dto.getName();
-            List<String> ingredientNames = dto.getIngredients() != null ? 
-                dto.getIngredients().stream().map(i -> i.getName()).toList() : 
+            List<String> ingredientNames = dto.getIngredients() != null ?
+                dto.getIngredients().stream().map(i -> i.getName()).toList() :
                 List.of();
             String description = dto.getDescription() != null ? dto.getDescription() : "";
-            
+
             // Generate and upload image
+            logger.debug("Calling image generator service for recipe: {}", dto.getName());
             String base64 = imageGeneratorService.generateImage(prompt, ingredientNames, description);
             if (base64 == null || base64.isEmpty()) {
-                logger.warn("Image generator returned empty base64 for recipe: {}", dto.getName());
+                logger.error("Image generator returned empty base64 for recipe: {}", dto.getName());
                 throw new GeminiServiceException("Image generator returned empty base64 for recipe: " + dto.getName());
             }
-            
+
+            logger.debug("Decoding base64 image for recipe: {}", dto.getName());
             byte[] imageBytes = Base64.getDecoder().decode(base64);
+
+            logger.debug("Uploading image to S3 for recipe: {}", dto.getName());
             String imageUrl = s3Service.uploadImage(imageBytes, dto.getName());
-            
+
+            if (imageUrl == null || imageUrl.isEmpty()) {
+                logger.error("S3 service returned empty imageUrl for recipe: {}", dto.getName());
+                throw new GeminiServiceException("S3 service returned empty imageUrl for recipe: " + dto.getName());
+            }
+
             // Update DTO
             dto.setImageUrl(imageUrl);
-            logger.debug("Successfully uploaded image for recipe {} to: {}", dto.getName(), imageUrl);
-            
+            logger.info("Successfully uploaded image for recipe {} to: {}", dto.getName(), imageUrl);
+
             // Update entity in database
             Optional<Recipe> recipeOpt = recipeRepo.getRecipeById(dto.getId());
             if (recipeOpt.isPresent()) {
@@ -340,14 +355,19 @@ public class GeminiService {
                 recipe.setImageUrl(imageUrl);
                 // Save the updated recipe back to the database
                 recipe = recipeRepo.saveRecipe(recipe);
-                logger.debug("Successfully updated recipe {} with image URL: {}", dto.getId(), recipe.getImageUrl());
+                logger.info("Successfully updated recipe {} in database with image URL", dto.getId());
             } else {
-                logger.warn("Recipe not found in database: {}", dto.getId());
+                logger.error("Recipe not found in database: {}", dto.getId());
+                throw new GeminiServiceException("Recipe not found in database: " + dto.getId());
             }
         } catch (GeminiServiceException e) {
+            logger.error("GeminiServiceException while adding image to recipe {}: {}", dto.getName(), e.getMessage());
             throw e;
+        } catch (IllegalArgumentException e) {
+            logger.error("Invalid base64 data for recipe {}: {}", dto.getName(), e.getMessage(), e);
+            throw new GeminiServiceException("Invalid image data for recipe: " + dto.getName(), e);
         } catch (Exception e) {
-            logger.error("Failed to generate/upload image for recipe {}: {}", dto.getName(), e.getMessage(), e);
+            logger.error("Unexpected error generating/uploading image for recipe {}: {}", dto.getName(), e.getMessage(), e);
             throw new GeminiServiceException("Failed to generate/upload image for recipe: " + dto.getName(), e);
         }
     }
