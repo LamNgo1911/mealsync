@@ -2,10 +2,7 @@ package com.lamngo.mealsync.application.service.auth;
 
 import com.lamngo.mealsync.application.dto.user.*;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
-import com.lamngo.mealsync.domain.model.user.RefreshToken;
-import com.lamngo.mealsync.domain.model.user.User;
-import com.lamngo.mealsync.domain.model.user.UserPreference;
-import com.lamngo.mealsync.domain.model.user.UserRole;
+import com.lamngo.mealsync.domain.model.user.*;
 import com.lamngo.mealsync.domain.repository.user.IRefreshTokenRepo;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
 import com.lamngo.mealsync.infrastructure.security.JwtTokenProvider;
@@ -65,6 +62,7 @@ public class AuthService implements IAuthService {
         user.setPassword(passwordEncoder.encode(userCreateDto.getPassword()));
         user.setName(userCreateDto.getName());
         user.setRole(userCreateDto.getRole() == null ? UserRole.USER : userCreateDto.getRole());
+        user.setStatus(UserStatus.ACTIVE);
 
         UserPreference preference = new UserPreference();
         preference.setDietaryRestrictions(new ArrayList<>());

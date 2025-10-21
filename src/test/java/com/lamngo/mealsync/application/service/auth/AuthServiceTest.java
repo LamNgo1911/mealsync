@@ -58,6 +58,7 @@ class AuthServiceTest {
         dto.setEmail("test2@example.com");
         dto.setPassword("pass");
         dto.setName("Test");
+
         when(userRepo.findByEmail(dto.getEmail())).thenReturn(Optional.empty());
         when(passwordEncoder.encode(any())).thenReturn("encoded");
         when(userRepo.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
