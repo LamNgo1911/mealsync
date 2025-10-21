@@ -36,9 +36,13 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Public endpoints - no authentication required
+                        .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/users/login/google").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/recipes").permitAll()
+                        // All other requests require authentication
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

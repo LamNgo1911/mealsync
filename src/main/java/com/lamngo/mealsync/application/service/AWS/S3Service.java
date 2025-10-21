@@ -52,13 +52,12 @@ public class S3Service {
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(bucketName)
                     .key(key)
-                    .acl("public-read") // 👈 Make the object publicly accessible
                     .contentType("image/png")
                     .build();
 
             s3Client.putObject(putObjectRequest, RequestBody.fromBytes(imageBytes));
 
-            // ✅ Return permanent public URL
+            // Return the S3 URL (access depends on bucket policy)
             String imageUrl = "https://" + bucketName + ".s3." + region + ".amazonaws.com/" + key;
 
             log.info("Image uploaded successfully: {}", imageUrl);
