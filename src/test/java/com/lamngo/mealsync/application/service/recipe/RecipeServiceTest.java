@@ -5,6 +5,7 @@ import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
 import com.lamngo.mealsync.application.mapper.UserRecipeMapper;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeIngredientMapper;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeMapper;
+import com.lamngo.mealsync.application.service.AWS.S3Service;
 import com.lamngo.mealsync.application.shared.OffsetPage;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
 import com.lamngo.mealsync.domain.model.UserRecipe;
@@ -31,6 +32,7 @@ class RecipeServiceTest {
     private IUserRepo userRepo;
     private RecipeIngredientMapper recipeIngredientMapper;
     private RecipeRecommendationService recommendationService;
+    private S3Service s3Service;
     private RecipeService recipeService;
 
     @BeforeEach
@@ -42,7 +44,8 @@ class RecipeServiceTest {
         userRepo = mock(IUserRepo.class);
         recipeIngredientMapper = mock(RecipeIngredientMapper.class);
         recommendationService = mock(RecipeRecommendationService.class);
-        recipeService = new RecipeService(recipeRepo, recipeMapper, userRecipeRepo, userRecipeMapper, userRepo, recipeIngredientMapper, recommendationService);
+        s3Service = mock(S3Service.class);
+        recipeService = new RecipeService(recipeRepo, recipeMapper, userRecipeRepo, userRecipeMapper, userRepo, recipeIngredientMapper, recommendationService, s3Service);
     }
 
     @Test
@@ -127,9 +130,14 @@ class RecipeServiceTest {
     @Test
     void deleteRecipe_success() {
         UUID id = UUID.randomUUID();
+        Recipe recipe = mock(Recipe.class);
+        when(recipeRepo.getRecipeById(id)).thenReturn(Optional.of(recipe));
+        when(recipe.getImageUrl()).thenReturn("https://s3.amazonaws.com/bucket/image.jpg");
+        doNothing().when(s3Service).deleteImage(anyString());
         doNothing().when(recipeRepo).deleteRecipe(id);
         recipeService.deleteRecipe(id);
         verify(recipeRepo).deleteRecipe(id);
+        verify(s3Service).deleteImage("https://s3.amazonaws.com/bucket/image.jpg");
     }
 
     @Test
