@@ -111,41 +111,44 @@ public class GeminiService {
                 throw new GeminiServiceException("GEMINI_API_BASE_URL or GEMINI_API_KEY is not set properly. Check your env.properties file.");
             }
 
-            String prompt = "You are a professional recipe creator. " +
-                    "Given the following ingredients: " + String.join(", ", ingredients) + ". " +
-                    "And the following user preferences: " +
-                    "dietary restrictions: " + userPreference.getDietaryRestrictions() + ", " +
-                    "favorite cuisines: " + userPreference.getFavoriteCuisines() + ", " +
-                    "disliked ingredients: " + userPreference.getDislikedIngredients() + ". " +
-                    "Generate exactly 2 unique and creative recipes that fully comply with these preferences. " +
-                    "Respond ONLY with a valid JSON array containing exactly 2 objects. " +
-                    "Do NOT include any extra text, explanations, or formatting. " +
-                    "Each recipe object must follow this exact structure:\n" +
-                    "{\n" +
-                    "  \"name\": \"string\",\n" +
-                    "  \"instructions\": [\"string\", \"string\", ...],\n" +
-                    "  \"cuisine\": \"string\",\n" +
-                    "  \"description\": \"string\",\n" +
-                    "  \"preparationTime\": integer (minutes),\n" +
-                    "  \"cookingTime\": integer (minutes),\n" +
-                    "  \"totalTime\": integer (minutes),\n" +
-                    "  \"servings\": integer,\n" +
-                    "  \"calories\": number (kcal per serving),\n" +
-                    "  \"protein\": number (grams per serving),\n" +
-                    "  \"carbohydrates\": number (grams per serving),\n" +
-                    "  \"fat\": number (grams per serving),\n" +
-                    "  \"difficulty\": \"string\" (one of \"easy\", \"medium\", \"hard\"),\n" +
-                    "  \"tags\": [\"string\", \"string\", ...],\n" +
-                    "  \"ingredients\": [\n" +
-                    "    {\n" +
-                    "      \"name\": \"string\",\n" +
-                    "      \"quantity\": number,\n" +
-                    "      \"unit\": \"string\"\n" +
-                    "    }, ...\n" +
-                    "  ]\n" +
-                    "} \n" +
-                    "Ensure all numeric values are realistic and consistent. " +
-                    "Do not include any additional fields, text, or explanation outside this JSON structure.";
+            String prompt =
+                    "You are a professional chef and AI recipe creator. " +
+                            "The following list comes from an image recognition model and may include both ingredients and non-food objects: " +
+                            String.join(", ", ingredients) + ". " +
+                            "Your first task is to identify which items are actual edible ingredients. Ignore anything that is not food or edible. " +
+                            "Based ONLY on the valid ingredients you identify, and considering the following user preferences: " +
+                            "dietary restrictions: " + userPreference.getDietaryRestrictions() + ", " +
+                            "favorite cuisines: " + userPreference.getFavoriteCuisines() + ", " +
+                            "disliked ingredients: " + userPreference.getDislikedIngredients() + ". " +
+                            "Generate exactly 2 creative and realistic recipes that comply fully with these preferences. " +
+                            "If there are too few valid ingredients, you may suggest simple recipes that require minimal extra pantry items (like oil, salt, or spices). " +
+                            "Respond ONLY with a valid JSON array containing exactly 2 objects, with no extra commentary. " +
+                            "Each recipe object must strictly follow this structure:\n" +
+                            "{\n" +
+                            "  \"name\": \"string\",\n" +
+                            "  \"instructions\": [\"string\", \"string\", ...],\n" +
+                            "  \"cuisine\": \"string\",\n" +
+                            "  \"description\": \"string\",\n" +
+                            "  \"preparationTime\": integer (minutes),\n" +
+                            "  \"cookingTime\": integer (minutes),\n" +
+                            "  \"totalTime\": integer (minutes),\n" +
+                            "  \"servings\": integer,\n" +
+                            "  \"calories\": number (kcal per serving),\n" +
+                            "  \"protein\": number (grams per serving),\n" +
+                            "  \"carbohydrates\": number (grams per serving),\n" +
+                            "  \"fat\": number (grams per serving),\n" +
+                            "  \"difficulty\": \"string\" (one of \"easy\", \"medium\", \"hard\"),\n" +
+                            "  \"tags\": [\"string\", \"string\", ...],\n" +
+                            "  \"ingredients\": [\n" +
+                            "    {\n" +
+                            "      \"name\": \"string\",\n" +
+                            "      \"quantity\": number,\n" +
+                            "      \"unit\": \"string\"\n" +
+                            "    }\n" +
+                            "  ]\n" +
+                            "} " +
+                            "Ensure all numeric values are realistic and consistent. " +
+                            "Do not include any extra text, explanation, or commentary outside the JSON array.";
 
 
             JSONObject requestBody = new JSONObject();

@@ -41,7 +41,7 @@ public class IngredientRecognitionService {
 
         try {
             List<String> ingredients = new ArrayList<>(callGoogleVision(imgBytes));
-
+            System.out.println(ingredients);
             boolean containsFood = ingredients.stream()
                     .anyMatch(label -> label.toLowerCase().contains("food"));
 
