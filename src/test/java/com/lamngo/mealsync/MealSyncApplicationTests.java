@@ -5,7 +5,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.TestPropertySource;
 import com.lamngo.mealsync.application.service.AWS.S3Service;
-import com.lamngo.mealsync.application.service.AI.GeminiService;
 
 @SpringBootTest
 @TestPropertySource(properties = {

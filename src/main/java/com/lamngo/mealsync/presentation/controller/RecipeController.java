@@ -1,16 +1,14 @@
 package com.lamngo.mealsync.presentation.controller;
 
-import com.lamngo.mealsync.application.dto.recipe.GenerateRecipeRequest;
 import com.lamngo.mealsync.application.dto.recipe.RecipeCreateDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeUpdateDto;
 import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeCreateDto;
 import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
-import com.lamngo.mealsync.application.service.AI.GeminiService;
+import com.lamngo.mealsync.application.service.AI.AIRecipeService;
+import com.lamngo.mealsync.application.service.AI.IngredientDetectionService;
 import com.lamngo.mealsync.application.service.recipe.RecipeService;
-import com.lamngo.mealsync.application.shared.OffsetPage;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
-import com.lamngo.mealsync.domain.model.UserRecipe;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.presentation.error.BadRequestException;
@@ -18,12 +16,13 @@ import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -32,27 +31,56 @@ import java.util.UUID;
 @RequestMapping("/api/v1/recipes")
 public class RecipeController {
     private Logger logger = LoggerFactory.getLogger(RecipeController.class);
-    private final GeminiService geminiService;
+//    private final GeminiService geminiService;
+    private final AIRecipeService aiRecipeService;
     private final RecipeService recipeService;
+    private final IngredientDetectionService ingredientDetectionService;
 
-    public RecipeController(GeminiService geminiService, RecipeService recipeService) {
-        this.geminiService = geminiService;
+    public RecipeController(RecipeService recipeService, AIRecipeService aiRecipeService, IngredientDetectionService ingredientDetectionService) {
+        this.aiRecipeService = aiRecipeService;
         this.recipeService = recipeService;
+        this.ingredientDetectionService = ingredientDetectionService;
     }
 
-    @PostMapping("/generate-recipes")
+    @PostMapping(value = "/generate-recipes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> generateRecipesFromIngredients(
-            @RequestBody @Valid GenerateRecipeRequest request) {
-        List<String> ingredients = request.getIngredients();
-        UserPreference userPreference = request.getUserPreference();
+    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> generateRecipes(
+            @RequestPart("image") MultipartFile image,
+            @RequestPart(value = "userPreference", required = false) UserPreference userPreference) {
 
-        if (ingredients == null || ingredients.isEmpty()) {
-            throw new BadRequestException("Ingredient list cannot be empty");
+        if (image == null || image.isEmpty()) {
+            throw new BadRequestException("Image file cannot be empty");
         }
-        List<RecipeReadDto> recipes = geminiService.generateRecipes(ingredients, userPreference);
+
+        if (userPreference == null) {
+            userPreference = new UserPreference();
+        }
+
+        // First, detect ingredients from the image
+        logger.info("Detecting ingredients from uploaded image: {}", image.getOriginalFilename());
+        List<String> ingredients = ingredientDetectionService.detectRawIngredients(image);
+        logger.info("Detected {} ingredients: {}", ingredients.size(), ingredients);
+
+        // Then, generate recipes from the detected ingredients
+        List<RecipeReadDto> recipes = aiRecipeService.generateRecipes(ingredients, userPreference);
         SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
         body.setData(recipes);
+        return ResponseEntity.ok(body);
+    }
+
+    @PostMapping(value = "/detect-ingredients", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SuccessResponseEntity<List<String>>> detectIngredients(
+            @RequestPart("image") MultipartFile image) {
+
+        if (image == null || image.isEmpty()) {
+            throw new BadRequestException("Image file cannot be empty");
+        }
+
+        logger.info("Detecting raw ingredients from uploaded image: {}", image.getOriginalFilename());
+        List<String> ingredients = ingredientDetectionService.detectRawIngredients(image);
+        SuccessResponseEntity<List<String>> body = new SuccessResponseEntity<>();
+        body.setData(ingredients);
         return ResponseEntity.ok(body);
     }
 

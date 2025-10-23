@@ -123,12 +123,6 @@
             <version>0.13.0</version>
             <scope>runtime</scope>
         </dependency>
-        <!-- Google Cloud Vision for image ingredient recognition API integration -->
-        <dependency>
-            <groupId>com.google.cloud</groupId>
-            <artifactId>google-cloud-vision</artifactId>
-            <version>3.22.0</version>
-        </dependency>
         <!-- OkHttp for HTTP requests -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>

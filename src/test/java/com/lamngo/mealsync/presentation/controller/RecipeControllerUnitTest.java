@@ -3,9 +3,11 @@ package com.lamngo.mealsync.presentation.controller;
 import com.lamngo.mealsync.application.dto.recipe.*;
 import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeCreateDto;
 import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
-import com.lamngo.mealsync.application.service.AI.GeminiService;
+import com.lamngo.mealsync.application.service.AI.AIRecipeService;
+import com.lamngo.mealsync.application.service.AI.IngredientDetectionService;
 import com.lamngo.mealsync.application.service.recipe.RecipeService;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
+import com.lamngo.mealsync.presentation.error.BadRequestException;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -22,8 +25,9 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class RecipeControllerUnitTest {
-    @Mock GeminiService geminiService;
     @Mock RecipeService recipeService;
+    @Mock AIRecipeService aiRecipeService;
+    @Mock IngredientDetectionService ingredientDetectionService;
     @InjectMocks RecipeController controller;
 
     @BeforeEach
@@ -31,14 +35,22 @@ class RecipeControllerUnitTest {
 
     @Test
     void generateRecipesFromIngredients_success() {
-        GenerateRecipeRequest req = new GenerateRecipeRequest();
-        req.setIngredients(List.of("egg", "milk"));
-        req.setUserPreference(null);
+        MultipartFile image = mock(MultipartFile.class);
+        when(image.isEmpty()).thenReturn(false);
+        when(image.getOriginalFilename()).thenReturn("test.jpg");
+
+        List<String> detectedIngredients = List.of("egg", "milk");
         List<RecipeReadDto> recipes = List.of(new RecipeReadDto());
-        when(geminiService.generateRecipes(anyList(), any())).thenReturn(recipes);
-        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.generateRecipesFromIngredients(req);
+
+        when(ingredientDetectionService.detectRawIngredients(image)).thenReturn(detectedIngredients);
+        when(aiRecipeService.generateRecipes(detectedIngredients, null)).thenReturn(recipes);
+
+        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.generateRecipes(image, null);
+
         assertEquals(200, resp.getStatusCodeValue());
         assertEquals(recipes, resp.getBody().getData());
+        verify(ingredientDetectionService).detectRawIngredients(image);
+        verify(aiRecipeService).generateRecipes(detectedIngredients, null);
     }
 
     @Test
@@ -106,5 +118,51 @@ class RecipeControllerUnitTest {
         ResponseEntity<Void> resp = controller.deleteRecipe(id.toString());
         assertEquals(204, resp.getStatusCodeValue());
         verify(recipeService).deleteRecipe(id);
+    }
+
+    @Test
+    void detectIngredients_success() {
+        MultipartFile image = mock(MultipartFile.class);
+        when(image.isEmpty()).thenReturn(false);
+        List<String> ingredients = List.of("tomato", "onion", "garlic", "chicken");
+        when(ingredientDetectionService.detectRawIngredients(image)).thenReturn(ingredients);
+
+        ResponseEntity<SuccessResponseEntity<List<String>>> resp = controller.detectIngredients(image);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertEquals(ingredients, resp.getBody().getData());
+        assertEquals(4, resp.getBody().getData().size());
+        verify(ingredientDetectionService).detectRawIngredients(image);
+    }
+
+    @Test
+    void detectIngredients_emptyImage_throwsBadRequestException() {
+        MultipartFile image = mock(MultipartFile.class);
+        when(image.isEmpty()).thenReturn(true);
+
+        assertThrows(BadRequestException.class, () -> controller.detectIngredients(image));
+        verify(ingredientDetectionService, never()).detectRawIngredients(any());
+    }
+
+    @Test
+    void detectIngredients_nullImage_throwsBadRequestException() {
+        assertThrows(BadRequestException.class, () -> controller.detectIngredients(null));
+        verify(ingredientDetectionService, never()).detectRawIngredients(any());
+    }
+
+    @Test
+    void detectIngredients_emptyResults() {
+        MultipartFile image = mock(MultipartFile.class);
+        when(image.isEmpty()).thenReturn(false);
+        List<String> emptyIngredients = List.of();
+        when(ingredientDetectionService.detectRawIngredients(image)).thenReturn(emptyIngredients);
+
+        ResponseEntity<SuccessResponseEntity<List<String>>> resp = controller.detectIngredients(image);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertTrue(resp.getBody().getData().isEmpty());
+        verify(ingredientDetectionService).detectRawIngredients(image);
     }
 }
