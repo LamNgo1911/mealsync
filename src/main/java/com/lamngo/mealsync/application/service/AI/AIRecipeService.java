@@ -116,15 +116,18 @@ public class AIRecipeService {
             // The Text Prompt
             String prompt =
                     "You are a professional chef and AI recipe creator. " +
-                            "Based on the following ingredients: " + ingredientsString + ", " +
-                            "and considering the following user preferences: " +
+                            "You are given the following detected ingredients: " + ingredientsString + ". " +
+                            "You must use ALL or MOST of these detected ingredients as the main components of the recipes. " +
+                            "You may only add minimal extra pantry items such as oil, salt, pepper, or common spices if needed. " +
+                            "Consider the following user preferences: " +
                             "dietary restrictions: " + userPreference.getDietaryRestrictions() + ", " +
                             "favorite cuisines: " + userPreference.getFavoriteCuisines() + ", " +
                             "disliked ingredients: " + userPreference.getDislikedIngredients() + ". " +
-                            "Generate exactly 2 creative and realistic recipes that comply fully with these preferences. " +
-                            "You may suggest recipes that require minimal extra pantry items (like oil, salt, or spices). " +
+                            "Generate exactly 2 creative and realistic recipes that comply fully with these preferences " +
+                            "and utilize the detected ingredients as the primary base. " +
                             "Respond ONLY with a valid JSON object with a 'recipes' array containing exactly 2 recipe objects, with no extra commentary. " +
-                            "The structure should be: {\"recipes\": [recipe1, recipe2]}. " +
+                            "The JSON structure must be:\n" +
+                            "{ \"recipes\": [ recipe1, recipe2 ] }\n" +
                             "Each recipe object must strictly follow this structure:\n" +
                             "{\n" +
                             "  \"name\": \"string\",\n" +
@@ -149,8 +152,10 @@ public class AIRecipeService {
                             "    }\n" +
                             "  ]\n" +
                             "} " +
-                            "Ensure all numeric values are realistic and consistent. " +
-                            "Do not include any extra text, explanation, or commentary outside the JSON array.";
+                            "Ensure that the 'ingredients' list in each recipe clearly includes the detected ingredients whenever possible. " +
+                            "All numeric values must be realistic and consistent. " +
+                            "Do not include any explanation, commentary, or text outside the JSON object.";
+
 
             // Construct the OpenAI Request Body (text-only, no image)
             JSONObject requestBody = new JSONObject();
