@@ -1,5 +1,6 @@
 package com.lamngo.mealsync;
 
+import com.lamngo.mealsync.application.service.AI.AIRecipeService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -12,12 +13,11 @@ import com.lamngo.mealsync.application.service.AWS.S3Service;
 	"spring.datasource.driver-class-name=org.h2.Driver",
 	"spring.jpa.hibernate.ddl-auto=create-drop",
 	"spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
-	"google.vision.credentials.path=",
 	"JWT_SECRET=test-secret-key-for-testing-purposes-only-minimum-256-bits",
 	"JWT_EXPIRATION=86400000",
 	"JWT_REFRESH_EXPIRATION=604800000",
-	"GEMINI_API_BASE_URL=http://localhost",
-	"GEMINI_API_KEY=test-key",
+	"OPENAI_API_BASE_URL=http://localhost",
+	"OPENAI_API_KEY=test-key",
 	"AWS_ACCESS_KEY_ID=test-key",
 	"AWS_SECRET_ACCESS_KEY=test-secret",
 	"AWS_REGION=us-east-1",
@@ -33,7 +33,7 @@ class MealSyncApplicationTests {
 	private S3Service s3Service;
 	
 	@MockitoBean(name = "geminiService")
-	private GeminiService geminiService;
+	private AIRecipeService aiRecipeService;
 
 	@Test
 	void contextLoads() {

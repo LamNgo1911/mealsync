@@ -1,7 +1,7 @@
 services:
   # Watchtower for automatic updates
   watchtower:
-    image: containrrr/watchtower:latest
+    image: container/watchtower:latest
     container_name: watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -48,13 +48,11 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${RDS_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_PROFILES_ACTIVE=prod
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/mealsync-451912-80d962e81ab0.json
       - JAVA_OPTS=-Xmx1g -Xms512m
       - SERVER_ADDRESS=0.0.0.0  # bind to all interfaces
       - SERVER_PORT=8081
     volumes:
       - ./env.properties:/app/env.properties:ro
-      - ./mealsync-451912-80d962e81ab0.json:/app/mealsync-451912-80d962e81ab0.json:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -f --max-time 5 http://localhost:8081/actuator/health || exit 1"]
       interval: 30s

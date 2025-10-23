@@ -18,16 +18,46 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
   - Secure password hashing
 
 - **🍳 Recipe Management**
-  - AI-generated recipes from ingredients
-  - Advanced search and filtering
-  - Image generation for recipes
-  - Ingredient recognition from images
+  - AI-powered ingredient detection from images (OpenAI GPT-4o-mini Vision)
+  - Smart recipe generation from ingredient lists
+  - Personalized recommendations based on user preferences
+  - Advanced search and filtering (cuisine, tags, ingredients, difficulty)
+  - Automatic recipe image generation with Stability AI
+  - Save and manage favorite recipes
+
+- **🤖 AI Services**
+  - **Ingredient Detection**: Upload a photo to detect raw ingredients
+  - **Recipe Generation**: Get creative recipes from detected or provided ingredients
+  - **User Preference Matching**: Respects dietary restrictions, allergies, and cuisine preferences
+  - **Nutrition Information**: Automatic calculation of calories, protein, carbs, and fat
 
 - **⚡ Performance**
   - Containerized with Docker
   - Nginx reverse proxy
   - Rate limiting
   - Caching
+
+## 🤖 AI Workflow
+
+MealSync uses a two-step AI process for recipe generation:
+
+1. **Ingredient Detection** (Optional)
+   - Upload a photo of your ingredients
+   - OpenAI GPT-4o-mini Vision API analyzes the image
+   - Returns a list of detected raw ingredients
+
+2. **Recipe Generation**
+   - Provide ingredients (detected or manually entered)
+   - System considers user preferences:
+     - Dietary restrictions (vegetarian, vegan, gluten-free, etc.)
+     - Favorite cuisines (Italian, Asian, Mexican, etc.)
+     - Disliked ingredients
+   - OpenAI generates 2 creative recipes with:
+     - Step-by-step instructions
+     - Nutritional information
+     - Cooking times and difficulty levels
+   - Stability AI generates attractive recipe images
+   - Recipes are saved to the database for future reference
 
 ## 🚀 Getting Started
 
@@ -36,6 +66,7 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
 - Docker & Docker Compose
 - Java 21+ (for local development)
 - Maven 3.8+
+- OpenAI API key (for AI features)
 
 ### Local Development
 
@@ -69,7 +100,7 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
 ### Base URLs
 - **Production**: `http://13.49.27.132/api/v1`
 - **Local**: `http://localhost/api/v1`
-
+h
 ### Authentication
 Include JWT token in the `Authorization` header:
 ```
@@ -175,21 +206,73 @@ All endpoints return a standardized response:
 
 #### 🍽️ Recipes (`/api/v1/recipes`)
 
-- **Generate Recipes**
+- **Detect Ingredients from Image**
+  ```
+  POST /detect-ingredients
+  ```
+  - **Content-Type**: `multipart/form-data`
+  - **Form Field**: `image` (image file - JPG, PNG)
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": ["tomato", "onion", "garlic", "chicken", "rice"]
+    }
+    ```
+  - **Auth**: Required
+  - **Description**: Upload a photo of ingredients to automatically detect what's in the image using AI vision
+
+- **Generate Recipes from Ingredients**
   ```
   POST /generate-recipes
   ```
+  - **Content-Type**: `application/json`
   - **Request Body**:
     ```json
     {
       "ingredients": ["chicken", "rice", "vegetables"],
       "userPreference": {
-        "dietaryRestrictions": ["VEGETARIAN"],
-        "cuisinePreferences": ["ITALIAN"]
+        "dietaryRestrictions": "vegetarian, gluten-free",
+        "favoriteCuisines": "Italian, Asian",
+        "dislikedIngredients": "mushrooms, olives"
       }
     }
     ```
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": [
+        {
+          "id": "uuid",
+          "name": "Chicken Fried Rice",
+          "description": "A delicious Asian-inspired dish",
+          "cuisine": "Asian",
+          "difficulty": "easy",
+          "preparationTime": 15,
+          "cookingTime": 20,
+          "totalTime": 35,
+          "servings": 4,
+          "calories": 450.0,
+          "protein": 25.0,
+          "carbohydrates": 55.0,
+          "fat": 12.0,
+          "imageUrl": "https://...",
+          "tags": ["quick", "asian", "main-course"],
+          "instructions": ["Step 1...", "Step 2..."],
+          "ingredients": [
+            {
+              "name": "chicken",
+              "quantity": "500",
+              "unit": "grams"
+            }
+          ]
+        }
+      ]
+    }
+    ```
   - **Auth**: Required
+  - **Description**: Generate 2 creative recipes based on provided ingredients and user preferences
 
 - **List Recipes**
   ```
@@ -241,9 +324,9 @@ All endpoints return a standardized response:
     - `limit`: Number of recipes (default: 10)
   - **Auth**: Required
 
-#### 🖼️ Media
+#### 🖼️ Media (`/api/v1/photos`)
 
-- **Generate Recipe Image** (`/api/v1/photos`)
+- **Generate Recipe Image**
   ```
   POST /generate
   ```
@@ -256,16 +339,7 @@ All endpoints return a standardized response:
     }
     ```
   - **Auth**: Required
-  - **Returns**: URL of the generated image
-
-- **Detect Ingredients from Image** (`/api/v1/ingredient-recognition`)
-  ```
-  POST /detect
-  ```
-  - **Content-Type**: `multipart/form-data`
-  - **Form Field**: `image` (image file)
-  - **Auth**: Required
-  - **Returns**: List of detected ingredients
+  - **Returns**: URL of the generated image stored in AWS S3
 
 ### Rate Limiting
 - 100 requests/minute per IP
@@ -282,9 +356,15 @@ All endpoints return a standardized response:
 
 - **Backend**: Spring Boot 3.4, Java 21
 - **Database**: PostgreSQL 14
-- **AI/ML**: Google Gemini, Cloud Vision, Stability AI
-- **Infra**: Docker, AWS (EC2, S3), Nginx
-- **Auth**: JWT, Spring Security, OAuth 2.0
+- **AI/ML**:
+  - OpenAI GPT-4o-mini (Vision & Text) - Ingredient detection & recipe generation
+  - Google Gemini - Additional AI capabilities
+  - Stability AI - Recipe image generation
+- **Cloud & Infrastructure**:
+  - AWS (EC2, S3)
+  - Docker & Docker Compose
+  - Nginx (Reverse proxy & load balancing)
+- **Security & Auth**: JWT, Spring Security, Google OAuth 2.0
 
 ## 🔧 Environment Variables
 
@@ -296,18 +376,30 @@ POSTGRES_DB=mealsync
 POSTGRES_USER=user
 POSTGRES_PASSWORD=password
 
-# JWT
+# JWT Authentication
 JWT_SECRET=your-secret-key
 JWT_EXPIRATION_MS=86400000
 
-# AWS
+# Google OAuth
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# AWS Services
 AWS_ACCESS_KEY=your-key
 AWS_SECRET_KEY=your-secret
 AWS_BUCKET=your-bucket
+AWS_REGION=us-east-1
 
-# AI Services
-GEMINI_API_KEY=your-key
-STABILITY_API_KEY=your-key
+# OpenAI (for ingredient detection and recipe generation)
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_API_BASE_URL=https://api.openai.com/v1/chat/completions
+
+# Google AI Services
+GEMINI_API_KEY=your-gemini-key
+GOOGLE_VISION_CREDENTIALS_PATH=/path/to/credentials.json
+
+# Stability AI (for image generation)
+STABILITY_API_KEY=your-stability-key
 ```
 
 ## 🚀 Deployment

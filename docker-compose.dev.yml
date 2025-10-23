@@ -37,11 +37,9 @@ services:
       - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=create-drop
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/mealsync-451912-80d962e81ab0.json
       - SPRING_DEVTOOLS_RESTART_ENABLED=true
     volumes:
       - ./src/main/resources/env.properties:/app/env.properties
-      - /home/liam/Downloads/app_keys/mealsync-451912-80d962e81ab0.json:/app/mealsync-451912-80d962e81ab0.json:ro
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
       interval: 30s

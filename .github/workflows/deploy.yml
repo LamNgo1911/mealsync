@@ -72,7 +72,6 @@ jobs:
           mkdir -p generated
           envsubst < env/env.template > generated/.env
           envsubst < env/env.template > generated/env.properties
-          echo "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" | base64 -d > generated/mealsync-451912-80d962e81ab0.json
         env:
           DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
           RDS_ENDPOINT: ${{ secrets.RDS_ENDPOINT }}
@@ -88,8 +87,8 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           JWT_EXPIRATION: ${{ secrets.JWT_EXPIRATION }}
           JWT_REFRESH_EXPIRATION: ${{ secrets.JWT_REFRESH_EXPIRATION }}
-          GEMINI_API_BASE_URL: ${{ secrets.GEMINI_API_BASE_URL }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_BASE_URL: ${{ secrets.OPENAI_API_BASE_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
