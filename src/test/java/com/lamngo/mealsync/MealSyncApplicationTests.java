@@ -1,6 +1,7 @@
 package com.lamngo.mealsync;
 
 import com.lamngo.mealsync.application.service.AI.AIRecipeService;
+import com.lamngo.mealsync.application.service.AI.IngredientDetectionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -31,9 +32,12 @@ class MealSyncApplicationTests {
 	// Mock external services to avoid initialization issues
 	@MockitoBean(name = "s3Service")
 	private S3Service s3Service;
-	
-	@MockitoBean(name = "geminiService")
+
+	@MockitoBean(name = "aiRecipeService")
 	private AIRecipeService aiRecipeService;
+
+	@MockitoBean(name = "ingredientDetectionService")
+	private IngredientDetectionService ingredientDetectionService;
 
 	@Test
 	void contextLoads() {

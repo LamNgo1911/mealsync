@@ -36,22 +36,21 @@ class RecipeControllerUnitTest {
 
     @Test
     void generateRecipesFromIngredients_success() {
-
         GenerateRecipeRequest request = new GenerateRecipeRequest();
         request.setIngredients(List.of("egg", "milk"));
-        request.setUserPreference(new UserPreference());
-        List<String> detectedIngredients = List.of("egg", "milk");
+        UserPreference userPreference = new UserPreference();
+        request.setUserPreference(userPreference);
+
         List<RecipeReadDto> recipes = List.of(new RecipeReadDto());
 
-        when(ingredientDetectionService.detectRawIngredients(any())).thenReturn(detectedIngredients);
-        when(aiRecipeService.generateRecipes(detectedIngredients, null)).thenReturn(recipes);
+        when(aiRecipeService.generateRecipes(request.getIngredients(), userPreference)).thenReturn(recipes);
 
         ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.generateRecipes(request);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertEquals(recipes, resp.getBody().getData());
-        verify(ingredientDetectionService).detectRawIngredients(any());
-        verify(aiRecipeService).generateRecipes(detectedIngredients, null);
+        verify(aiRecipeService).generateRecipes(request.getIngredients(), userPreference);
+        verify(ingredientDetectionService, never()).detectRawIngredients(any());
     }
 
     @Test
