@@ -20,7 +20,7 @@ public class IngredientRecognitionController {
     }
 
     @PostMapping("/detect")
-    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<String>>> recognizeIngredients(@RequestParam("image") MultipartFile image) {
         List<String> ingredients = ingredientRecognitionService.recognizeIngredients(image);
         SuccessResponseEntity<List<String>> body = new SuccessResponseEntity<>();

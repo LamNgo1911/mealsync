@@ -3,11 +3,10 @@ package com.lamngo.mealsync.application.service.AI;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.vision.v1.*;
 import com.google.protobuf.ByteString;
-import com.lamngo.mealsync.application.data.KnownIngredients;
 import com.lamngo.mealsync.presentation.error.IngredientRecognitionServiceException;
-import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -26,6 +25,14 @@ public class IngredientRecognitionService {
 
     public List<String> recognizeIngredients(MultipartFile imageFile) throws IngredientRecognitionServiceException {
         try {
+            if (imageFile == null || imageFile.isEmpty()) {
+                logger.warn("Received empty image file");
+                throw new IngredientRecognitionServiceException("Image file is empty or invalid");
+            }
+
+            logger.info("Received file: {} (type={}, size={} bytes)", imageFile.getOriginalFilename(),
+                    imageFile.getContentType(), imageFile.getSize());
+
             ByteString imgBytes = ByteString.readFrom(imageFile.getInputStream());
             return recognizeIngredients(imgBytes);
         } catch (IOException e) {
@@ -41,7 +48,6 @@ public class IngredientRecognitionService {
 
         try {
             List<String> ingredients = new ArrayList<>(callGoogleVision(imgBytes));
-            System.out.println(ingredients);
             boolean containsFood = ingredients.stream()
                     .anyMatch(label -> label.toLowerCase().contains("food"));
 
@@ -49,8 +55,6 @@ public class IngredientRecognitionService {
                 logger.warn("No 'food' label found in image analysis");
                 throw new IngredientRecognitionServiceException("No valid food-related labels detected");
             }
-
-            ingredients.removeIf(ingredient -> !KnownIngredients.INGREDIENTS.contains(ingredient.toLowerCase()));
 
             return Collections.unmodifiableList(ingredients);
         } catch (IngredientRecognitionServiceException e) {
@@ -64,14 +68,12 @@ public class IngredientRecognitionService {
     public List<String> callGoogleVision(final ByteString imgBytes) throws IngredientRecognitionServiceException {
         try {
             final Image img = Image.newBuilder().setContent(imgBytes).build();
-
             final Feature feat = Feature.newBuilder().setType(Feature.Type.LABEL_DETECTION).build();
             final AnnotateImageRequest request = AnnotateImageRequest.newBuilder()
                     .addFeatures(feat)
                     .setImage(img)
                     .build();
 
-            // ✅ Load credentials dynamically
             GoogleCredentials credentials = GoogleCredentials.fromStream(new FileInputStream(credentialsPath))
                     .createScoped(Collections.singletonList("https://www.googleapis.com/auth/cloud-platform"));
 
@@ -80,13 +82,11 @@ public class IngredientRecognitionService {
                     .build();
 
             try (ImageAnnotatorClient client = ImageAnnotatorClient.create(settings)) {
-                final List<AnnotateImageRequest> requests = Collections.singletonList(request);
-                final BatchAnnotateImagesResponse response = client.batchAnnotateImages(requests);
-                final List<AnnotateImageResponse> responses = response.getResponsesList();
+                List<AnnotateImageRequest> requests = Collections.singletonList(request);
+                BatchAnnotateImagesResponse response = client.batchAnnotateImages(requests);
                 List<String> labels = new ArrayList<>();
-                for (AnnotateImageResponse res : responses) {
+                for (AnnotateImageResponse res : response.getResponsesList()) {
                     if (res.hasError()) {
-                        logger.error("Google Vision API error: {}", res.getError().getMessage());
                         throw new IngredientRecognitionServiceException("Google Vision API error: " + res.getError().getMessage());
                     }
                     for (EntityAnnotation annotation : res.getLabelAnnotationsList()) {
