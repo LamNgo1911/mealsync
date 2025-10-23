@@ -7,6 +7,7 @@ import com.lamngo.mealsync.application.service.AI.AIRecipeService;
 import com.lamngo.mealsync.application.service.AI.IngredientDetectionService;
 import com.lamngo.mealsync.application.service.recipe.RecipeService;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
+import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.presentation.error.BadRequestException;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,21 +36,21 @@ class RecipeControllerUnitTest {
 
     @Test
     void generateRecipesFromIngredients_success() {
-        MultipartFile image = mock(MultipartFile.class);
-        when(image.isEmpty()).thenReturn(false);
-        when(image.getOriginalFilename()).thenReturn("test.jpg");
 
+        GenerateRecipeRequest request = new GenerateRecipeRequest();
+        request.setIngredients(List.of("egg", "milk"));
+        request.setUserPreference(new UserPreference());
         List<String> detectedIngredients = List.of("egg", "milk");
         List<RecipeReadDto> recipes = List.of(new RecipeReadDto());
 
-        when(ingredientDetectionService.detectRawIngredients(image)).thenReturn(detectedIngredients);
+        when(ingredientDetectionService.detectRawIngredients(any())).thenReturn(detectedIngredients);
         when(aiRecipeService.generateRecipes(detectedIngredients, null)).thenReturn(recipes);
 
-        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.generateRecipes(image, null);
+        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.generateRecipes(request);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertEquals(recipes, resp.getBody().getData());
-        verify(ingredientDetectionService).detectRawIngredients(image);
+        verify(ingredientDetectionService).detectRawIngredients(any());
         verify(aiRecipeService).generateRecipes(detectedIngredients, null);
     }
 

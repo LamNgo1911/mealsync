@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.presentation.controller;
 
+import com.lamngo.mealsync.application.dto.recipe.GenerateRecipeRequest;
 import com.lamngo.mealsync.application.dto.recipe.RecipeCreateDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeUpdateDto;
@@ -31,7 +32,6 @@ import java.util.UUID;
 @RequestMapping("/api/v1/recipes")
 public class RecipeController {
     private Logger logger = LoggerFactory.getLogger(RecipeController.class);
-//    private final GeminiService geminiService;
     private final AIRecipeService aiRecipeService;
     private final RecipeService recipeService;
     private final IngredientDetectionService ingredientDetectionService;
@@ -42,24 +42,24 @@ public class RecipeController {
         this.ingredientDetectionService = ingredientDetectionService;
     }
 
-    @PostMapping(value = "/generate-recipes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/generate-recipes")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> generateRecipes(
-            @RequestPart("image") MultipartFile image,
-            @RequestPart(value = "userPreference", required = false) UserPreference userPreference) {
+           @RequestBody @Valid GenerateRecipeRequest request) {
 
-        if (image == null || image.isEmpty()) {
-            throw new BadRequestException("Image file cannot be empty");
+        List<String> ingredients = request.getIngredients();
+        UserPreference userPreference = request.getUserPreference();
+
+        if (ingredients == null || ingredients.isEmpty()) {
+            throw new BadRequestException("Ingredients list is empty or null");
         }
 
         if (userPreference == null) {
             userPreference = new UserPreference();
         }
 
-        // First, detect ingredients from the image
-        logger.info("Detecting ingredients from uploaded image: {}", image.getOriginalFilename());
-        List<String> ingredients = ingredientDetectionService.detectRawIngredients(image);
-        logger.info("Detected {} ingredients: {}", ingredients.size(), ingredients);
+        logger.info("Generating recipes from {} ingredients", ingredients.size());
+        logger.info("User preference: {}", userPreference);
 
         // Then, generate recipes from the detected ingredients
         List<RecipeReadDto> recipes = aiRecipeService.generateRecipes(ingredients, userPreference);
