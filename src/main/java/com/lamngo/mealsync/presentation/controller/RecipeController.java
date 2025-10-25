@@ -1,6 +1,7 @@
 package com.lamngo.mealsync.presentation.controller;
 
 import com.lamngo.mealsync.application.dto.recipe.GenerateRecipeRequest;
+import com.lamngo.mealsync.application.dto.recipe.ManualIngredientDetectionRequest;
 import com.lamngo.mealsync.application.dto.recipe.RecipeCreateDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeUpdateDto;
@@ -79,6 +80,22 @@ public class RecipeController {
 
         logger.info("Detecting raw ingredients from uploaded image: {}", image.getOriginalFilename());
         List<String> ingredients = ingredientDetectionService.detectRawIngredients(image);
+        SuccessResponseEntity<List<String>> body = new SuccessResponseEntity<>();
+        body.setData(ingredients);
+        return ResponseEntity.ok(body);
+    }
+
+    @PostMapping(value = "/detect-ingredients-from-text")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SuccessResponseEntity<List<String>>> detectIngredientsFromText(
+            @RequestBody @Valid ManualIngredientDetectionRequest request) {
+
+        if (request.getTextInput() == null || request.getTextInput().trim().isEmpty()) {
+            throw new BadRequestException("Text input cannot be empty");
+        }
+
+        logger.info("Detecting ingredients from manual text input");
+        List<String> ingredients = ingredientDetectionService.detectIngredientsFromText(request.getTextInput());
         SuccessResponseEntity<List<String>> body = new SuccessResponseEntity<>();
         body.setData(ingredients);
         return ResponseEntity.ok(body);

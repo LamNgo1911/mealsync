@@ -109,7 +109,7 @@ public class AIRecipeService {
                 logger.error("OPENAI_API_BASE_URL or OPENAI_API_KEY is not set properly. Check your env.properties file.");
                 throw new AIServiceException("OpenAI API configuration error.");
             }
-
+            System.out.println("Ingredients: " + ingredients);
             // Build ingredients string
             String ingredientsString = String.join(", ", ingredients);
 

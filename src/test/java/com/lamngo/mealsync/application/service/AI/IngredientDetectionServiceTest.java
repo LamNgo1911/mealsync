@@ -88,4 +88,61 @@ class IngredientDetectionServiceTest {
 
         assertEquals("OpenAI API configuration error", exception.getMessage());
     }
+
+    @Test
+    void detectIngredientsFromText_nullInput_throwsAIServiceException() {
+        AIServiceException exception = assertThrows(AIServiceException.class,
+            () -> ingredientDetectionService.detectIngredientsFromText(null));
+
+        assertEquals("Text input is empty or null", exception.getMessage());
+    }
+
+    @Test
+    void detectIngredientsFromText_emptyInput_throwsAIServiceException() {
+        AIServiceException exception = assertThrows(AIServiceException.class,
+            () -> ingredientDetectionService.detectIngredientsFromText(""));
+
+        assertEquals("Text input is empty or null", exception.getMessage());
+    }
+
+    @Test
+    void detectIngredientsFromText_whitespaceInput_throwsAIServiceException() {
+        AIServiceException exception = assertThrows(AIServiceException.class,
+            () -> ingredientDetectionService.detectIngredientsFromText("   "));
+
+        assertEquals("Text input is empty or null", exception.getMessage());
+    }
+
+    @Test
+    void detectIngredientsFromText_invalidApiConfiguration_throwsAIServiceException() {
+        // Set invalid configuration
+        ReflectionTestUtils.setField(ingredientDetectionService, "openAIApiBaseUrl", null);
+
+        AIServiceException exception = assertThrows(AIServiceException.class,
+            () -> ingredientDetectionService.detectIngredientsFromText("tomatoes, onions, garlic"));
+
+        assertEquals("OpenAI API configuration error", exception.getMessage());
+    }
+
+    @Test
+    void detectIngredientsFromText_emptyApiKey_throwsAIServiceException() {
+        // Set empty API key
+        ReflectionTestUtils.setField(ingredientDetectionService, "openAIApiKey", "");
+
+        AIServiceException exception = assertThrows(AIServiceException.class,
+            () -> ingredientDetectionService.detectIngredientsFromText("tomatoes, onions, garlic"));
+
+        assertEquals("OpenAI API configuration error", exception.getMessage());
+    }
+
+    @Test
+    void detectIngredientsFromText_invalidUrlProtocol_throwsAIServiceException() {
+        // Set invalid URL (not https)
+        ReflectionTestUtils.setField(ingredientDetectionService, "openAIApiBaseUrl", "http://api.openai.com");
+
+        AIServiceException exception = assertThrows(AIServiceException.class,
+            () -> ingredientDetectionService.detectIngredientsFromText("tomatoes, onions, garlic"));
+
+        assertEquals("OpenAI API configuration error", exception.getMessage());
+    }
 }
