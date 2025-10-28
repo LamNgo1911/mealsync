@@ -255,9 +255,9 @@ All endpoints return a standardized response:
     {
       "ingredients": ["chicken", "rice", "vegetables"],
       "userPreference": {
-        "dietaryRestrictions": "vegetarian, gluten-free",
-        "favoriteCuisines": "Italian, Asian",
-        "dislikedIngredients": "mushrooms, olives"
+         "dietaryRestrictions": ["vegetarian", "gluten-free"],
+        "favoriteCuisines": ["Italian", "Asian"],
+        "dislikedIngredients": ["mushrooms", "olives"]
       }
     }
     ```
@@ -330,6 +330,22 @@ All endpoints return a standardized response:
     }
     ```
   - **Auth**: User can only save to their own account
+  - **Description**: Save a recipe to the user's favorites list
+
+- **Unsave Recipe from User**
+  ```
+  DELETE /save
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "userId": "uuid",
+      "recipeId": "uuid"
+    }
+    ```
+  - **Response**: 204 No Content
+  - **Auth**: User can only unsave from their own account
+  - **Description**: Remove a recipe from the user's saved favorites list
 
 - **Create Recipe**
   ```

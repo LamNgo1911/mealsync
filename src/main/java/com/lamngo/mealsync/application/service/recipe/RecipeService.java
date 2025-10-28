@@ -174,6 +174,25 @@ public class RecipeService implements IRecipeService {
     }
 
     @Override
+    @Transactional
+    public void removeRecipeFromUser(UUID userId, UUID recipeId) {
+        logger.info("Removing recipe with ID {} from user with ID {}", recipeId, userId);
+        userRepo.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+        recipeRepo.getRecipeById(recipeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Recipe not found with id: " + recipeId));
+
+        // Find the UserRecipe entry
+        UserRecipe userRecipe = userRecipeRepo.getUserRecipesByUserId(userId).stream()
+                .filter(ur -> ur.getRecipe().getId().equals(recipeId) && ur.getType() == UserRecipeType.SAVED)
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Saved recipe not found for user"));
+
+        userRecipeRepo.deleteUserRecipe(userRecipe.getId());
+        logger.info("Successfully removed recipe with ID {} from user with ID {}", recipeId, userId);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<RecipeReadDto> getRecommendedRecipes(UUID userId, int limit) {
         User user = userRepo.findById(userId)

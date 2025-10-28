@@ -20,6 +20,7 @@ public interface IRecipeService {
     RecipeReadDto updateRecipe(UUID id, RecipeUpdateDto recipeUpdateDto);
     void deleteRecipe(UUID id);
     UserRecipeReadDto addRecipeToUser(UUID userId, UUID recipeId);
+    void removeRecipeFromUser(UUID userId, UUID recipeId);
     List<RecipeReadDto> getRecommendedRecipes(UUID userId, int limit);
     List<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId, int limit);
     List<RecipeReadDto> getTodayPicks(UUID userId);

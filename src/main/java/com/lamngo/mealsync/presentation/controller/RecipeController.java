@@ -122,6 +122,15 @@ public class RecipeController {
         return ResponseEntity.ok(body);
     }
 
+    // Unsave recipe from user
+    @DeleteMapping("/save")
+    @PreAuthorize("hasRole('ADMIN') or #userRecipeCreateDto.userId == authentication.principal.id")
+    public ResponseEntity<Void> unsaveRecipeFromUser(@RequestBody @Valid UserRecipeCreateDto userRecipeCreateDto) {
+        logger.info("Unsaving recipe from user: {}", userRecipeCreateDto);
+        recipeService.removeRecipeFromUser(userRecipeCreateDto.getUserId(), userRecipeCreateDto.getRecipeId());
+        return ResponseEntity.noContent().build();
+    }
+
     // CRUD endpoints for RecipeService
     @PostMapping
     @PreAuthorize("isAuthenticated()")
