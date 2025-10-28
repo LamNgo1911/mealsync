@@ -7,6 +7,7 @@ import com.lamngo.mealsync.application.service.AI.AIRecipeService;
 import com.lamngo.mealsync.application.service.AI.IngredientDetectionService;
 import com.lamngo.mealsync.application.service.recipe.RecipeService;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
+import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.presentation.error.BadRequestException;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
@@ -41,15 +42,23 @@ class RecipeControllerUnitTest {
         UserPreference userPreference = new UserPreference();
         request.setUserPreference(userPreference);
 
-        List<RecipeReadDto> recipes = List.of(new RecipeReadDto());
+        User user = mock(User.class);
+        UUID userId = UUID.randomUUID();
+        when(user.getId()).thenReturn(userId);
+
+        RecipeReadDto recipe = new RecipeReadDto();
+        recipe.setId(UUID.randomUUID());
+        List<RecipeReadDto> recipes = List.of(recipe);
 
         when(aiRecipeService.generateRecipes(request.getIngredients(), userPreference)).thenReturn(recipes);
+        doNothing().when(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
 
-        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.generateRecipes(request);
+        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.generateRecipes(request, user);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertEquals(recipes, resp.getBody().getData());
         verify(aiRecipeService).generateRecipes(request.getIngredients(), userPreference);
+        verify(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
         verify(ingredientDetectionService, never()).detectRawIngredients(any());
     }
 
@@ -164,5 +173,163 @@ class RecipeControllerUnitTest {
         assertNotNull(resp.getBody());
         assertTrue(resp.getBody().getData().isEmpty());
         verify(ingredientDetectionService).detectRawIngredients(image);
+    }
+
+    @Test
+    void getTodayPicks_success() {
+        User user = mock(User.class);
+        UUID userId = UUID.randomUUID();
+        when(user.getId()).thenReturn(userId);
+
+        RecipeReadDto recipe1 = new RecipeReadDto();
+        recipe1.setId(UUID.randomUUID());
+        recipe1.setName("Recipe 1");
+
+        RecipeReadDto recipe2 = new RecipeReadDto();
+        recipe2.setId(UUID.randomUUID());
+        recipe2.setName("Recipe 2");
+
+        List<RecipeReadDto> todayPicks = List.of(recipe1, recipe2);
+        when(recipeService.getTodayPicks(userId)).thenReturn(todayPicks);
+
+        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.getTodayPicks(user);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertEquals(todayPicks, resp.getBody().getData());
+        assertEquals(2, resp.getBody().getData().size());
+        verify(recipeService).getTodayPicks(userId);
+    }
+
+    @Test
+    void getTodayPicks_emptyResult() {
+        User user = mock(User.class);
+        UUID userId = UUID.randomUUID();
+        when(user.getId()).thenReturn(userId);
+
+        List<RecipeReadDto> emptyPicks = List.of();
+        when(recipeService.getTodayPicks(userId)).thenReturn(emptyPicks);
+
+        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.getTodayPicks(user);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertTrue(resp.getBody().getData().isEmpty());
+        verify(recipeService).getTodayPicks(userId);
+    }
+
+    @Test
+    void getTodayPicks_singleRecipe() {
+        User user = mock(User.class);
+        UUID userId = UUID.randomUUID();
+        when(user.getId()).thenReturn(userId);
+
+        RecipeReadDto recipe = new RecipeReadDto();
+        recipe.setId(UUID.randomUUID());
+        recipe.setName("Single Recipe");
+
+        List<RecipeReadDto> todayPicks = List.of(recipe);
+        when(recipeService.getTodayPicks(userId)).thenReturn(todayPicks);
+
+        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.getTodayPicks(user);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertEquals(1, resp.getBody().getData().size());
+        assertEquals(recipe, resp.getBody().getData().get(0));
+        verify(recipeService).getTodayPicks(userId);
+    }
+
+    @Test
+    void getRecentGeneratedRecipes_success() {
+        User user = mock(User.class);
+        UUID userId = UUID.randomUUID();
+        when(user.getId()).thenReturn(userId);
+
+        RecipeReadDto recipe1 = new RecipeReadDto();
+        recipe1.setId(UUID.randomUUID());
+        recipe1.setName("Recent Recipe 1");
+
+        RecipeReadDto recipe2 = new RecipeReadDto();
+        recipe2.setId(UUID.randomUUID());
+        recipe2.setName("Recent Recipe 2");
+
+        List<RecipeReadDto> recentRecipes = List.of(recipe1, recipe2);
+        when(recipeService.getRecentGeneratedRecipes(userId, 6)).thenReturn(recentRecipes);
+
+        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp =
+                controller.getRecentGeneratedRecipes(user, 6);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertEquals(2, resp.getBody().getData().size());
+        assertEquals(recentRecipes, resp.getBody().getData());
+        verify(recipeService).getRecentGeneratedRecipes(userId, 6);
+    }
+
+    @Test
+    void getRecentGeneratedRecipes_emptyResult() {
+        User user = mock(User.class);
+        UUID userId = UUID.randomUUID();
+        when(user.getId()).thenReturn(userId);
+
+        List<RecipeReadDto> emptyList = List.of();
+        when(recipeService.getRecentGeneratedRecipes(userId, 6)).thenReturn(emptyList);
+
+        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp =
+                controller.getRecentGeneratedRecipes(user, 6);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertTrue(resp.getBody().getData().isEmpty());
+        verify(recipeService).getRecentGeneratedRecipes(userId, 6);
+    }
+
+    @Test
+    void getRecentGeneratedRecipes_withCustomLimit() {
+        User user = mock(User.class);
+        UUID userId = UUID.randomUUID();
+        when(user.getId()).thenReturn(userId);
+
+        List<RecipeReadDto> recipes = List.of(new RecipeReadDto(), new RecipeReadDto());
+        when(recipeService.getRecentGeneratedRecipes(userId, 20)).thenReturn(recipes);
+
+        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp =
+                controller.getRecentGeneratedRecipes(user, 20);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertEquals(2, resp.getBody().getData().size());
+        verify(recipeService).getRecentGeneratedRecipes(userId, 20);
+    }
+
+    @Test
+    void generateRecipes_savesGeneratedRecipes() {
+        User user = mock(User.class);
+        UUID userId = UUID.randomUUID();
+        when(user.getId()).thenReturn(userId);
+
+        GenerateRecipeRequest request = new GenerateRecipeRequest();
+        request.setIngredients(List.of("chicken", "rice", "tomato"));
+        request.setUserPreference(new UserPreference());
+
+        RecipeReadDto recipe1 = new RecipeReadDto();
+        recipe1.setId(UUID.randomUUID());
+        RecipeReadDto recipe2 = new RecipeReadDto();
+        recipe2.setId(UUID.randomUUID());
+
+        List<RecipeReadDto> recipes = List.of(recipe1, recipe2);
+        when(aiRecipeService.generateRecipes(request.getIngredients(), request.getUserPreference()))
+                .thenReturn(recipes);
+        doNothing().when(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
+
+        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp =
+                controller.generateRecipes(request, user);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertEquals(recipes, resp.getBody().getData());
+        verify(aiRecipeService).generateRecipes(request.getIngredients(), request.getUserPreference());
+        verify(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
     }
 }

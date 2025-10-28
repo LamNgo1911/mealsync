@@ -26,7 +26,9 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
   - Save and manage favorite recipes
 
 - **🤖 AI Services**
-  - **Ingredient Detection**: Upload a photo to detect raw ingredients
+  - **Ingredient Detection**:
+    - Upload a photo to detect raw ingredients from images
+    - Or manually describe ingredients in text for AI extraction and normalization
   - **Recipe Generation**: Get creative recipes from detected or provided ingredients
   - **User Preference Matching**: Respects dietary restrictions, allergies, and cuisine preferences
   - **Nutrition Information**: Automatic calculation of calories, protein, carbs, and fat
@@ -42,8 +44,8 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
 MealSync uses a two-step AI process for recipe generation:
 
 1. **Ingredient Detection** (Optional)
-   - Upload a photo of your ingredients
-   - OpenAI GPT-4o-mini Vision API analyzes the image
+   - **Option A - Image Upload**: Upload a photo of your ingredients and OpenAI GPT-4o-mini Vision API analyzes the image
+   - **Option B - Text Input**: Describe your ingredients in natural language and AI extracts and normalizes them
    - Returns a list of detected raw ingredients
 
 2. **Recipe Generation**
@@ -222,6 +224,27 @@ All endpoints return a standardized response:
   - **Auth**: Required
   - **Description**: Upload a photo of ingredients to automatically detect what's in the image using AI vision
 
+- **Detect Ingredients from Text**
+  ```
+  POST /detect-ingredients-from-text
+  ```
+  - **Content-Type**: `application/json`
+  - **Request Body**:
+    ```json
+    {
+      "textInput": "I have tomatoes, onions, garlic, chicken breast, and rice in my kitchen"
+    }
+    ```
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": ["tomato", "onion", "garlic", "chicken", "rice"]
+    }
+    ```
+  - **Auth**: Required
+  - **Description**: Manually input a description of your ingredients as text and let AI extract and normalize the ingredient list
+
 - **Generate Recipes from Ingredients**
   ```
   POST /generate-recipes
@@ -308,21 +331,84 @@ All endpoints return a standardized response:
     ```
   - **Auth**: User can only save to their own account
 
+- **Create Recipe**
+  ```
+  POST /
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "name": "Pasta Carbonara",
+      "description": "Classic Italian pasta dish",
+      "cuisine": "Italian",
+      "difficulty": "MEDIUM",
+      "preparationTime": 10,
+      "cookingTime": 15,
+      "servings": 4,
+      "calories": 550.0,
+      "protein": 20.0,
+      "carbohydrates": 60.0,
+      "fat": 25.0,
+      "imageUrl": "https://...",
+      "tags": ["pasta", "italian", "main-course"],
+      "instructions": ["Step 1...", "Step 2..."],
+      "ingredients": [
+        {
+          "name": "pasta",
+          "quantity": "400",
+          "unit": "grams"
+        }
+      ]
+    }
+    ```
+  - **Auth**: Required
+
+- **Update Recipe**
+  ```
+  PUT /{id}
+  ```
+  - **Request Body**: Same as Create Recipe
+  - **Auth**: Admin only
+
+- **Delete Recipe**
+  ```
+  DELETE /{id}
+  ```
+  - **Auth**: Admin only
+
 - **Get Recommended Recipes**
   ```
   GET /recommended
   ```
   - **Query Params**:
-    - `limit`: Number of recommendations (default: 10)
+    - `limit`: Number of recommendations (default: 6)
   - **Auth**: Required
+  - **Description**: Get personalized recipe recommendations based on user preferences and history
+
+- **Get Today's Picks**
+  ```
+  GET /today-picks
+  ```
+  - **Auth**: Required
+  - **Description**: Get curated daily recipe recommendations for the authenticated user
 
 - **Get Saved Recipes**
   ```
   GET /saved
   ```
   - **Query Params**:
-    - `limit`: Number of recipes (default: 10)
+    - `limit`: Number of recipes (default: 6)
   - **Auth**: Required
+  - **Description**: Retrieve all recipes the user has saved to their favorites
+
+- **Get Recent Generated Recipes**
+  ```
+  GET /recent
+  ```
+  - **Query Params**:
+    - `limit`: Number of recipes (default: 6)
+  - **Auth**: Required
+  - **Description**: Get the most recently AI-generated recipes for the authenticated user
 
 #### 🖼️ Media (`/api/v1/photos`)
 

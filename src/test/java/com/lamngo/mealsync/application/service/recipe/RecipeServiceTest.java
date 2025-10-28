@@ -9,6 +9,7 @@ import com.lamngo.mealsync.application.service.AWS.S3Service;
 import com.lamngo.mealsync.application.shared.OffsetPage;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
 import com.lamngo.mealsync.domain.model.UserRecipe;
+import com.lamngo.mealsync.domain.model.UserRecipeType;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.repository.IUserRecipeRepo;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -172,5 +174,223 @@ class RecipeServiceTest {
         when(recipeRepo.getRecipeById(recipeId)).thenReturn(Optional.of(recipe));
         when(userRepo.findById(userId)).thenReturn(Optional.empty());
         assertThrows(ResourceNotFoundException.class, () -> recipeService.addRecipeToUser(userId, recipeId));
+    }
+
+    @Test
+    void getTodayPicks_success() {
+        UUID userId = UUID.randomUUID();
+        User user = mock(User.class);
+        Recipe recipe1 = mock(Recipe.class);
+        Recipe recipe2 = mock(Recipe.class);
+        Recipe recipe3 = mock(Recipe.class);
+        RecipeReadDto readDto1 = mock(RecipeReadDto.class);
+        RecipeReadDto readDto2 = mock(RecipeReadDto.class);
+
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(recommendationService.getRecommendedRecipes(user, 20))
+                .thenReturn(List.of(recipe1, recipe2, recipe3));
+        when(recipeMapper.toRecipeReadDto(any(Recipe.class)))
+                .thenReturn(readDto1, readDto2);
+
+        List<RecipeReadDto> result = recipeService.getTodayPicks(userId);
+
+        assertEquals(2, result.size());
+        verify(userRepo).findById(userId);
+        verify(recommendationService).getRecommendedRecipes(user, 20);
+    }
+
+    @Test
+    void getTodayPicks_onlyOneRecipe() {
+        UUID userId = UUID.randomUUID();
+        User user = mock(User.class);
+        Recipe recipe = mock(Recipe.class);
+        RecipeReadDto readDto = mock(RecipeReadDto.class);
+
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(recommendationService.getRecommendedRecipes(user, 20))
+                .thenReturn(List.of(recipe));
+        when(recipeMapper.toRecipeReadDto(recipe)).thenReturn(readDto);
+
+        List<RecipeReadDto> result = recipeService.getTodayPicks(userId);
+
+        assertEquals(1, result.size());
+        assertEquals(readDto, result.get(0));
+    }
+
+    @Test
+    void getTodayPicks_noRecommendations() {
+        UUID userId = UUID.randomUUID();
+        User user = mock(User.class);
+
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(recommendationService.getRecommendedRecipes(user, 20))
+                .thenReturn(Collections.emptyList());
+
+        List<RecipeReadDto> result = recipeService.getTodayPicks(userId);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void getTodayPicks_userNotFound() {
+        UUID userId = UUID.randomUUID();
+        when(userRepo.findById(userId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> recipeService.getTodayPicks(userId));
+    }
+
+    @Test
+    void addGeneratedRecipesToUser_success() {
+        UUID userId = UUID.randomUUID();
+        UUID recipeId1 = UUID.randomUUID();
+        UUID recipeId2 = UUID.randomUUID();
+        List<UUID> recipeIds = List.of(recipeId1, recipeId2);
+
+        User user = mock(User.class);
+        Recipe recipe1 = mock(Recipe.class);
+        Recipe recipe2 = mock(Recipe.class);
+        UserRecipe userRecipe1 = mock(UserRecipe.class);
+        UserRecipe userRecipe2 = mock(UserRecipe.class);
+
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(recipeRepo.getRecipeById(recipeId1)).thenReturn(Optional.of(recipe1));
+        when(recipeRepo.getRecipeById(recipeId2)).thenReturn(Optional.of(recipe2));
+        when(userRecipeRepo.saveUserRecipe(any(UserRecipe.class)))
+                .thenReturn(userRecipe1)
+                .thenReturn(userRecipe2);
+
+        recipeService.addGeneratedRecipesToUser(userId, recipeIds);
+
+        verify(userRepo).findById(userId);
+        verify(recipeRepo).getRecipeById(recipeId1);
+        verify(recipeRepo).getRecipeById(recipeId2);
+        verify(userRecipeRepo, times(2)).saveUserRecipe(any(UserRecipe.class));
+    }
+
+    @Test
+    void addGeneratedRecipesToUser_userNotFound() {
+        UUID userId = UUID.randomUUID();
+        List<UUID> recipeIds = List.of(UUID.randomUUID());
+
+        when(userRepo.findById(userId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> recipeService.addGeneratedRecipesToUser(userId, recipeIds));
+        verify(recipeRepo, never()).getRecipeById(any());
+        verify(userRecipeRepo, never()).saveUserRecipe(any());
+    }
+
+    @Test
+    void addGeneratedRecipesToUser_recipeNotFound() {
+        UUID userId = UUID.randomUUID();
+        UUID recipeId = UUID.randomUUID();
+        List<UUID> recipeIds = List.of(recipeId);
+
+        User user = mock(User.class);
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(recipeRepo.getRecipeById(recipeId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> recipeService.addGeneratedRecipesToUser(userId, recipeIds));
+        verify(userRecipeRepo, never()).saveUserRecipe(any());
+    }
+
+    @Test
+    void getRecentGeneratedRecipes_success() {
+        UUID userId = UUID.randomUUID();
+        int limit = 5;
+
+        Recipe recipe1 = mock(Recipe.class);
+        Recipe recipe2 = mock(Recipe.class);
+        Recipe recipe3 = mock(Recipe.class);
+
+        UserRecipe userRecipe1 = new UserRecipe();
+        userRecipe1.setRecipe(recipe1);
+        userRecipe1.setType(UserRecipeType.GENERATED);
+        userRecipe1.setSavedAt(LocalDateTime.now().minusHours(1));
+
+        UserRecipe userRecipe2 = new UserRecipe();
+        userRecipe2.setRecipe(recipe2);
+        userRecipe2.setType(UserRecipeType.GENERATED);
+        userRecipe2.setSavedAt(LocalDateTime.now().minusHours(2));
+
+        UserRecipe userRecipe3 = new UserRecipe();
+        userRecipe3.setRecipe(recipe3);
+        userRecipe3.setType(UserRecipeType.SAVED);
+        userRecipe3.setSavedAt(LocalDateTime.now().minusMinutes(30));
+
+        List<UserRecipe> userRecipes = List.of(userRecipe1, userRecipe2, userRecipe3);
+
+        RecipeReadDto readDto1 = mock(RecipeReadDto.class);
+        RecipeReadDto readDto2 = mock(RecipeReadDto.class);
+
+        when(userRecipeRepo.getUserRecipesByUserId(userId)).thenReturn(userRecipes);
+        when(recipeMapper.toRecipeReadDto(recipe1)).thenReturn(readDto1);
+        when(recipeMapper.toRecipeReadDto(recipe2)).thenReturn(readDto2);
+
+        List<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit);
+
+        // Should only return GENERATED type recipes, sorted by most recent first
+        assertEquals(2, result.size());
+        assertEquals(readDto1, result.get(0)); // Most recent
+        assertEquals(readDto2, result.get(1));
+        verify(userRecipeRepo).getUserRecipesByUserId(userId);
+    }
+
+    @Test
+    void getRecentGeneratedRecipes_emptyList() {
+        UUID userId = UUID.randomUUID();
+        int limit = 10;
+
+        when(userRecipeRepo.getUserRecipesByUserId(userId)).thenReturn(Collections.emptyList());
+
+        List<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit);
+
+        assertTrue(result.isEmpty());
+        verify(userRecipeRepo).getUserRecipesByUserId(userId);
+    }
+
+    @Test
+    void getRecentGeneratedRecipes_onlySavedRecipes() {
+        UUID userId = UUID.randomUUID();
+        int limit = 10;
+
+        Recipe recipe = mock(Recipe.class);
+        UserRecipe userRecipe = new UserRecipe();
+        userRecipe.setRecipe(recipe);
+        userRecipe.setType(UserRecipeType.SAVED);
+        userRecipe.setSavedAt(LocalDateTime.now());
+
+        when(userRecipeRepo.getUserRecipesByUserId(userId)).thenReturn(List.of(userRecipe));
+
+        List<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit);
+
+        assertTrue(result.isEmpty());
+        verify(userRecipeRepo).getUserRecipesByUserId(userId);
+    }
+
+    @Test
+    void getRecentGeneratedRecipes_respectsLimit() {
+        UUID userId = UUID.randomUUID();
+        int limit = 2;
+
+        List<UserRecipe> userRecipes = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            Recipe recipe = mock(Recipe.class);
+            UserRecipe userRecipe = new UserRecipe();
+            userRecipe.setRecipe(recipe);
+            userRecipe.setType(UserRecipeType.GENERATED);
+            userRecipe.setSavedAt(LocalDateTime.now().minusHours(i));
+            userRecipes.add(userRecipe);
+        }
+
+        when(userRecipeRepo.getUserRecipesByUserId(userId)).thenReturn(userRecipes);
+        when(recipeMapper.toRecipeReadDto(any(Recipe.class)))
+                .thenReturn(mock(RecipeReadDto.class));
+
+        List<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit);
+
+        assertEquals(2, result.size());
+        verify(userRecipeRepo).getUserRecipesByUserId(userId);
     }
 }

@@ -12,6 +12,7 @@ import com.lamngo.mealsync.application.service.AWS.S3Service;
 import com.lamngo.mealsync.application.shared.OffsetPage;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
 import com.lamngo.mealsync.domain.model.UserRecipe;
+import com.lamngo.mealsync.domain.model.UserRecipeType;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import com.lamngo.mealsync.domain.model.recipe.RecipeIngredient;
 import com.lamngo.mealsync.domain.model.user.User;
@@ -26,9 +27,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -169,6 +168,7 @@ public class RecipeService implements IRecipeService {
         UserRecipe userRecipe = new UserRecipe();
         userRecipe.setUser(user);
         userRecipe.setRecipe(recipe);
+        userRecipe.setType(UserRecipeType.SAVED);
         UserRecipe savedUserRecipe = userRecipeRepo.saveUserRecipe(userRecipe);
         return userRecipeMapper.toUserRecipeReadDto(savedUserRecipe);
     }
@@ -194,6 +194,81 @@ public class RecipeService implements IRecipeService {
         return userRecipes.stream()
                 .limit(limit)
                 .map(userRecipeMapper::toUserRecipeReadDto)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RecipeReadDto> getTodayPicks(UUID userId) {
+        logger.info("Getting today's picks for user with ID: {}", userId);
+        User user = userRepo.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        // Get more recommended recipes to have a good pool for random selection
+        List<Recipe> recommendedRecipes = recommendationService.getRecommendedRecipes(user, 20);
+
+        if (recommendedRecipes.isEmpty()) {
+            logger.warn("No recommended recipes found for user with ID: {}", userId);
+            return Collections.emptyList();
+        }
+
+        // Randomly select 2 recipes from the recommended list
+        List<Recipe> todayPicks = new ArrayList<>();
+        Random random = new Random();
+
+        if (recommendedRecipes.size() <= 2) {
+            todayPicks = recommendedRecipes;
+        } else {
+            // Create a copy to avoid modifying the original list
+            List<Recipe> recipesPool = new ArrayList<>(recommendedRecipes);
+
+            // Select first random recipe
+            int firstIndex = random.nextInt(recipesPool.size());
+            todayPicks.add(recipesPool.remove(firstIndex));
+
+            // Select second random recipe
+            int secondIndex = random.nextInt(recipesPool.size());
+            todayPicks.add(recipesPool.remove(secondIndex));
+        }
+
+        logger.info("Successfully selected {} today's picks for user with ID: {}", todayPicks.size(), userId);
+
+        return todayPicks.stream()
+                .map(recipeMapper::toRecipeReadDto)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void addGeneratedRecipesToUser(UUID userId, List<UUID> recipeIds) {
+        logger.info("Adding {} generated recipes to user with ID: {}", recipeIds.size(), userId);
+        User user = userRepo.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        for (UUID recipeId : recipeIds) {
+            Recipe recipe = recipeRepo.getRecipeById(recipeId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Recipe not found with id: " + recipeId));
+
+            UserRecipe userRecipe = new UserRecipe();
+            userRecipe.setUser(user);
+            userRecipe.setRecipe(recipe);
+            userRecipe.setType(UserRecipeType.GENERATED);
+            userRecipeRepo.saveUserRecipe(userRecipe);
+        }
+        logger.info("Successfully added {} generated recipes to user with ID: {}", recipeIds.size(), userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RecipeReadDto> getRecentGeneratedRecipes(UUID userId, int limit) {
+        logger.info("Getting recent generated recipes for user with ID: {}", userId);
+        List<UserRecipe> userRecipes = userRecipeRepo.getUserRecipesByUserId(userId);
+
+        return userRecipes.stream()
+                .filter(ur -> ur.getType() == UserRecipeType.GENERATED)
+                .sorted((ur1, ur2) -> ur2.getSavedAt().compareTo(ur1.getSavedAt())) // Sort by most recent first
+                .limit(limit)
+                .map(ur -> recipeMapper.toRecipeReadDto(ur.getRecipe()))
                 .toList();
     }
 }

@@ -46,7 +46,8 @@ public class RecipeController {
     @PostMapping(value = "/generate-recipes")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> generateRecipes(
-           @RequestBody @Valid GenerateRecipeRequest request) {
+           @RequestBody @Valid GenerateRecipeRequest request,
+           @AuthenticationPrincipal User user) {
 
         List<String> ingredients = request.getIngredients();
         UserPreference userPreference = request.getUserPreference();
@@ -59,11 +60,19 @@ public class RecipeController {
             userPreference = new UserPreference();
         }
 
-        logger.info("Generating recipes from {} ingredients", ingredients.size());
+        logger.info("Generating recipes from {} ingredients for user {}", ingredients.size(), user.getId());
         logger.info("User preference: {}", userPreference);
 
-        // Then, generate recipes from the detected ingredients
+        // Generate recipes from the detected ingredients
         List<RecipeReadDto> recipes = aiRecipeService.generateRecipes(ingredients, userPreference);
+
+        // Save generated recipes to user's history
+        List<UUID> recipeIds = recipes.stream()
+                .map(RecipeReadDto::getId)
+                .toList();
+        recipeService.addGeneratedRecipesToUser(user.getId(), recipeIds);
+        logger.info("Saved {} generated recipes to user {} history", recipes.size(), user.getId());
+
         SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
         body.setData(recipes);
         return ResponseEntity.ok(body);
@@ -127,7 +136,7 @@ public class RecipeController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> getRecommendedRecipes(
             @AuthenticationPrincipal User user,
-            @RequestParam(defaultValue = "10") int limit) {
+            @RequestParam(defaultValue = "6") int limit) {
 
         UUID userId = user.getId();
         List<RecipeReadDto> recommendedRecipes = recipeService.getRecommendedRecipes(userId, limit);
@@ -137,17 +146,46 @@ public class RecipeController {
         return ResponseEntity.ok(body);
     }
 
+    @GetMapping("/today-picks")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> getTodayPicks(
+            @AuthenticationPrincipal User user) {
+
+        logger.info("Getting today's picks for user: {}", user.getId());
+        UUID userId = user.getId();
+        List<RecipeReadDto> todayPicks = recipeService.getTodayPicks(userId);
+
+        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
+        body.setData(todayPicks);
+        return ResponseEntity.ok(body);
+    }
+
     @GetMapping("/saved")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> getSavedRecipes(
             @AuthenticationPrincipal User user,
-            @RequestParam(defaultValue = "10") int limit) {
+            @RequestParam(defaultValue = "6") int limit) {
 
         UUID userId = user.getId();
         List<UserRecipeReadDto> savedRecipes = recipeService.getSavedRecipesByUserId(userId, limit);
 
         SuccessResponseEntity<List<UserRecipeReadDto>> body = new SuccessResponseEntity<>();
         body.setData(savedRecipes);
+        return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/recent")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> getRecentGeneratedRecipes(
+            @AuthenticationPrincipal User user,
+            @RequestParam(defaultValue = "6") int limit) {
+
+        logger.info("Getting recent generated recipes for user: {}", user.getId());
+        UUID userId = user.getId();
+        List<RecipeReadDto> recentRecipes = recipeService.getRecentGeneratedRecipes(userId, limit);
+
+        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
+        body.setData(recentRecipes);
         return ResponseEntity.ok(body);
     }
 

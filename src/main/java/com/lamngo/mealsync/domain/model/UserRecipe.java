@@ -29,5 +29,9 @@ public class UserRecipe {
     @JoinColumn(name = "recipe_id", nullable = false)
     private Recipe recipe;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private UserRecipeType type = UserRecipeType.SAVED;
+
     private LocalDateTime savedAt = LocalDateTime.now();
 }
