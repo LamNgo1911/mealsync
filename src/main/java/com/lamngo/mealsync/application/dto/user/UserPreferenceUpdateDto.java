@@ -20,6 +20,5 @@ public class UserPreferenceUpdateDto {
     @NotEmpty(message = "Favorite cuisines list cannot be empty if provided, but can be an empty list to clear.")
     private List<String> favoriteCuisines;
 
-    @NotEmpty(message = "Disliked ingredients list cannot be empty if provided, but can be an empty list to clear.")
     private List<String> dislikedIngredients;
 }
