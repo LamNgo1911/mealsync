@@ -304,6 +304,7 @@ All endpoints return a standardized response:
   - **Query Params**:
     - `offset`: Pagination offset (default: 0)
     - `limit`: Items per page (default: 2)
+    - `name`: Recipe name (optional)
     - `cuisines`: Comma-separated list of cuisines
     - `tags`: Comma-separated list of tags
     - `ingredients`: Comma-separated list of ingredients
