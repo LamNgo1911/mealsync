@@ -211,6 +211,7 @@ public class RecipeController {
     public ResponseEntity<PaginationResponse<RecipeReadDto>> getAllRecipes(
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "2") int limit,
+            @RequestParam(required = false) String name,
             @RequestParam(required = false) List<String> cuisines,
             @RequestParam(required = false) List<String> tags,
             @RequestParam(required = false) List<String> ingredients,
@@ -221,7 +222,8 @@ public class RecipeController {
         PaginationResponse<RecipeReadDto> response;
 
         // Check if any filter is applied
-        boolean hasFilters = (cuisines != null && !cuisines.isEmpty()) ||
+        boolean hasFilters = (name != null && !name.isEmpty()) ||
+                           (cuisines != null && !cuisines.isEmpty()) ||
                            (tags != null && !tags.isEmpty()) ||
                            (ingredients != null && !ingredients.isEmpty()) ||
                            difficulty != null ||
@@ -229,7 +231,7 @@ public class RecipeController {
                            minServings != null;
 
         if (hasFilters) {
-            response = recipeService.getAllRecipes(limit, offset, cuisines, tags, ingredients,
+            response = recipeService.getAllRecipes(limit, offset, name, cuisines, tags, ingredients,
                                                    difficulty, maxTotalTime, minServings);
         } else {
             response = recipeService.getAllRecipes(limit, offset);

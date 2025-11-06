@@ -69,13 +69,17 @@ public class RecipeRepo implements IRecipeRepo {
     }
 
     @Override
-    public Page<Recipe> getAllRecipesFiltered(OffsetPage pageable, List<String> cuisines, List<String> tags,
+    public Page<Recipe> getAllRecipesFiltered(OffsetPage pageable, String name, List<String> cuisines, List<String> tags,
                                                List<String> ingredients, String difficulty,
                                                Integer maxTotalTime, Integer minServings) {
         List<Recipe> allRecipes = _recipeJpaRepo.findAll();
 
         List<Recipe> filteredRecipes = allRecipes.stream()
                 .filter(recipe -> {
+                    // Filter by name (case-insensitive partial match)
+                    boolean nameMatch = name == null || name.isEmpty() ||
+                            recipe.getName().toLowerCase().contains(name.toLowerCase());
+
                     // Filter by cuisines (if any cuisine matches)
                     boolean cuisineMatch = cuisines == null || cuisines.isEmpty() ||
                             cuisines.stream().anyMatch(c -> recipe.getCuisine().equalsIgnoreCase(c));
@@ -98,7 +102,7 @@ public class RecipeRepo implements IRecipeRepo {
                     // Filter by minServings
                     boolean servingsMatch = minServings == null || recipe.getServings() >= minServings;
 
-                    return cuisineMatch && tagMatch && ingredientMatch && difficultyMatch && timeMatch && servingsMatch;
+                    return nameMatch && cuisineMatch && tagMatch && ingredientMatch && difficultyMatch && timeMatch && servingsMatch;
                 })
                 .collect(Collectors.toList());
 

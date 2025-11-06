@@ -12,7 +12,7 @@ public interface IRecipeRepo {
     Recipe createRecipe(Recipe recipe);
     Optional<Recipe> getRecipeById(UUID id);
     Page<Recipe> getAllRecipes(OffsetPage pageable);
-    Page<Recipe> getAllRecipesFiltered(OffsetPage pageable, List<String> cuisines, List<String> tags,
+    Page<Recipe> getAllRecipesFiltered(OffsetPage pageable, String name, List<String> cuisines, List<String> tags,
                                         List<String> ingredients, String difficulty,
                                         Integer maxTotalTime, Integer minServings);
     void deleteRecipe(UUID id);

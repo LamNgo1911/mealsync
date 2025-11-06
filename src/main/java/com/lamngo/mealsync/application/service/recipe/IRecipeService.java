@@ -14,7 +14,7 @@ public interface IRecipeService {
     RecipeReadDto createRecipe(RecipeCreateDto recipeCreateDto);
     RecipeReadDto getRecipeById(UUID id);
     PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset);
-    PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset, List<String> cuisines, List<String> tags,
+    PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset, String name, List<String> cuisines, List<String> tags,
                                                      List<String> ingredients, String difficulty,
                                                      Integer maxTotalTime, Integer minServings);
     RecipeReadDto updateRecipe(UUID id, RecipeUpdateDto recipeUpdateDto);

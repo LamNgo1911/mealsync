@@ -99,11 +99,11 @@ public class RecipeService implements IRecipeService {
     }
 
     @Override
-    public PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset, List<String> cuisines, List<String> tags,
+    public PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset, String name, List<String> cuisines, List<String> tags,
                                                             List<String> ingredients, String difficulty,
                                                             Integer maxTotalTime, Integer minServings) {
         OffsetPage page = new OffsetPage(limit, offset);
-        Page<Recipe> recipePage = recipeRepo.getAllRecipesFiltered(page, cuisines, tags, ingredients, difficulty, maxTotalTime, minServings);
+        Page<Recipe> recipePage = recipeRepo.getAllRecipesFiltered(page, name, cuisines, tags, ingredients, difficulty, maxTotalTime, minServings);
         List<RecipeReadDto> recipeReadDtos = recipePage.getContent().stream()
                 .map(recipeMapper::toRecipeReadDto)
                 .collect(Collectors.toList());
