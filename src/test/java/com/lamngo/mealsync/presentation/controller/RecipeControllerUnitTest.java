@@ -75,6 +75,65 @@ class RecipeControllerUnitTest {
     }
 
     @Test
+    void unsaveRecipeFromUser_success() {
+        UserRecipeCreateDto dto = new UserRecipeCreateDto();
+        UUID userId = UUID.randomUUID();
+        UUID recipeId = UUID.randomUUID();
+        dto.setUserId(userId);
+        dto.setRecipeId(recipeId);
+
+        doNothing().when(recipeService).removeRecipeFromUser(userId, recipeId);
+
+        ResponseEntity<Void> resp = controller.unsaveRecipeFromUser(dto);
+
+        assertEquals(204, resp.getStatusCodeValue());
+        verify(recipeService).removeRecipeFromUser(userId, recipeId);
+    }
+
+    @Test
+    void getSavedRecipes_success() {
+        User user = mock(User.class);
+        UUID userId = UUID.randomUUID();
+        when(user.getId()).thenReturn(userId);
+
+        UserRecipeReadDto savedRecipe1 = new UserRecipeReadDto();
+        savedRecipe1.setId(UUID.randomUUID());
+
+        UserRecipeReadDto savedRecipe2 = new UserRecipeReadDto();
+        savedRecipe2.setId(UUID.randomUUID());
+
+        List<UserRecipeReadDto> savedRecipes = List.of(savedRecipe1, savedRecipe2);
+        when(recipeService.getSavedRecipesByUserId(userId, 6)).thenReturn(savedRecipes);
+
+        ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> resp =
+                controller.getSavedRecipes(user, 6);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertEquals(2, resp.getBody().getData().size());
+        assertEquals(savedRecipes, resp.getBody().getData());
+        verify(recipeService).getSavedRecipesByUserId(userId, 6);
+    }
+
+    @Test
+    void getSavedRecipes_emptyResult() {
+        User user = mock(User.class);
+        UUID userId = UUID.randomUUID();
+        when(user.getId()).thenReturn(userId);
+
+        List<UserRecipeReadDto> emptyList = List.of();
+        when(recipeService.getSavedRecipesByUserId(userId, 6)).thenReturn(emptyList);
+
+        ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> resp =
+                controller.getSavedRecipes(user, 6);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertTrue(resp.getBody().getData().isEmpty());
+        verify(recipeService).getSavedRecipesByUserId(userId, 6);
+    }
+
+    @Test
     void createRecipe_success() {
         RecipeCreateDto dto = new RecipeCreateDto();
         RecipeReadDto readDto = new RecipeReadDto();

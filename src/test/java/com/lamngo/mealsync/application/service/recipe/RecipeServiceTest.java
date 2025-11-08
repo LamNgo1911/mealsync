@@ -393,4 +393,143 @@ class RecipeServiceTest {
         assertEquals(2, result.size());
         verify(userRecipeRepo).getUserRecipesByUserId(userId);
     }
+
+    @Test
+    void removeRecipeFromUser_success() {
+        UUID userId = UUID.randomUUID();
+        UUID recipeId = UUID.randomUUID();
+        UUID userRecipeId = UUID.randomUUID();
+        User user = mock(User.class);
+        Recipe recipe = mock(Recipe.class);
+        UserRecipe userRecipe = mock(UserRecipe.class);
+
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(recipeRepo.getRecipeById(recipeId)).thenReturn(Optional.of(recipe));
+        when(userRecipeRepo.getUserRecipeByUserIdAndRecipeIdAndType(userId, recipeId, UserRecipeType.SAVED))
+                .thenReturn(Optional.of(userRecipe));
+        when(userRecipe.getId()).thenReturn(userRecipeId);
+        doNothing().when(userRecipeRepo).deleteUserRecipe(userRecipeId);
+
+        recipeService.removeRecipeFromUser(userId, recipeId);
+
+        verify(userRepo).findById(userId);
+        verify(recipeRepo).getRecipeById(recipeId);
+        verify(userRecipeRepo).getUserRecipeByUserIdAndRecipeIdAndType(userId, recipeId, UserRecipeType.SAVED);
+        verify(userRecipeRepo).deleteUserRecipe(userRecipeId);
+    }
+
+    @Test
+    void removeRecipeFromUser_userNotFound() {
+        UUID userId = UUID.randomUUID();
+        UUID recipeId = UUID.randomUUID();
+
+        when(userRepo.findById(userId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> recipeService.removeRecipeFromUser(userId, recipeId));
+        verify(recipeRepo, never()).getRecipeById(any());
+        verify(userRecipeRepo, never()).getUserRecipeByUserIdAndRecipeIdAndType(any(), any(), any());
+        verify(userRecipeRepo, never()).deleteUserRecipe(any());
+    }
+
+    @Test
+    void removeRecipeFromUser_recipeNotFound() {
+        UUID userId = UUID.randomUUID();
+        UUID recipeId = UUID.randomUUID();
+        User user = mock(User.class);
+
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(recipeRepo.getRecipeById(recipeId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> recipeService.removeRecipeFromUser(userId, recipeId));
+        verify(userRecipeRepo, never()).getUserRecipeByUserIdAndRecipeIdAndType(any(), any(), any());
+        verify(userRecipeRepo, never()).deleteUserRecipe(any());
+    }
+
+    @Test
+    void removeRecipeFromUser_savedRecipeNotFound() {
+        UUID userId = UUID.randomUUID();
+        UUID recipeId = UUID.randomUUID();
+        User user = mock(User.class);
+        Recipe recipe = mock(Recipe.class);
+
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(recipeRepo.getRecipeById(recipeId)).thenReturn(Optional.of(recipe));
+        when(userRecipeRepo.getUserRecipeByUserIdAndRecipeIdAndType(userId, recipeId, UserRecipeType.SAVED))
+                .thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> recipeService.removeRecipeFromUser(userId, recipeId));
+        verify(userRecipeRepo, never()).deleteUserRecipe(any());
+    }
+
+    @Test
+    void getSavedRecipesByUserId_success() {
+        UUID userId = UUID.randomUUID();
+        int limit = 5;
+
+        Recipe recipe1 = mock(Recipe.class);
+        Recipe recipe2 = mock(Recipe.class);
+
+        UserRecipe userRecipe1 = mock(UserRecipe.class);
+        when(userRecipe1.getRecipe()).thenReturn(recipe1);
+
+        UserRecipe userRecipe2 = mock(UserRecipe.class);
+        when(userRecipe2.getRecipe()).thenReturn(recipe2);
+
+        List<UserRecipe> savedRecipes = List.of(userRecipe1, userRecipe2);
+        UserRecipeReadDto readDto1 = mock(UserRecipeReadDto.class);
+        UserRecipeReadDto readDto2 = mock(UserRecipeReadDto.class);
+
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED))
+                .thenReturn(savedRecipes);
+        when(userRecipeMapper.toUserRecipeReadDto(userRecipe1)).thenReturn(readDto1);
+        when(userRecipeMapper.toUserRecipeReadDto(userRecipe2)).thenReturn(readDto2);
+
+        List<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit);
+
+        assertEquals(2, result.size());
+        assertEquals(readDto1, result.get(0));
+        assertEquals(readDto2, result.get(1));
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED);
+    }
+
+    @Test
+    void getSavedRecipesByUserId_respectsLimit() {
+        UUID userId = UUID.randomUUID();
+        int limit = 2;
+
+        List<UserRecipe> savedRecipes = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            UserRecipe userRecipe = mock(UserRecipe.class);
+            Recipe recipe = mock(Recipe.class);
+            when(userRecipe.getRecipe()).thenReturn(recipe);
+            savedRecipes.add(userRecipe);
+        }
+
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED))
+                .thenReturn(savedRecipes);
+        when(userRecipeMapper.toUserRecipeReadDto(any(UserRecipe.class)))
+                .thenReturn(mock(UserRecipeReadDto.class));
+
+        List<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit);
+
+        assertEquals(2, result.size());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED);
+    }
+
+    @Test
+    void getSavedRecipesByUserId_emptyList() {
+        UUID userId = UUID.randomUUID();
+        int limit = 10;
+
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED))
+                .thenReturn(Collections.emptyList());
+
+        List<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit);
+
+        assertTrue(result.isEmpty());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED);
+    }
 }

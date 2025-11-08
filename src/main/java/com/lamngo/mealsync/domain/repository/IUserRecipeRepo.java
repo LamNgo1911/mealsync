@@ -1,12 +1,16 @@
 package com.lamngo.mealsync.domain.repository;
 
 import com.lamngo.mealsync.domain.model.UserRecipe;
+import com.lamngo.mealsync.domain.model.UserRecipeType;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface IUserRecipeRepo {
      UserRecipe saveUserRecipe(UserRecipe userRecipe);
      List<UserRecipe> getUserRecipesByUserId(UUID userId);
+     List<UserRecipe> getUserRecipesByUserIdAndType(UUID userId, UserRecipeType type);
+     Optional<UserRecipe> getUserRecipeByUserIdAndRecipeIdAndType(UUID userId, UUID recipeId, UserRecipeType type);
      void deleteUserRecipe(UUID userRecipeId);
 }

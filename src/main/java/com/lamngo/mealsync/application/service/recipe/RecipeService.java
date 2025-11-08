@@ -182,10 +182,8 @@ public class RecipeService implements IRecipeService {
         recipeRepo.getRecipeById(recipeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Recipe not found with id: " + recipeId));
 
-        // Find the UserRecipe entry
-        UserRecipe userRecipe = userRecipeRepo.getUserRecipesByUserId(userId).stream()
-                .filter(ur -> ur.getRecipe().getId().equals(recipeId) && ur.getType() == UserRecipeType.SAVED)
-                .findFirst()
+        // Find the UserRecipe entry with SAVED type
+        UserRecipe userRecipe = userRecipeRepo.getUserRecipeByUserIdAndRecipeIdAndType(userId, recipeId, UserRecipeType.SAVED)
                 .orElseThrow(() -> new ResourceNotFoundException("Saved recipe not found for user"));
 
         userRecipeRepo.deleteUserRecipe(userRecipe.getId());
@@ -208,7 +206,7 @@ public class RecipeService implements IRecipeService {
     @Override
     @Transactional(readOnly = true)
     public List<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId, int limit) {
-        List<UserRecipe> userRecipes = userRecipeRepo.getUserRecipesByUserId(userId);
+        List<UserRecipe> userRecipes = userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED);
 
         return userRecipes.stream()
                 .limit(limit)
