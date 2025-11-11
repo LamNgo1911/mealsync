@@ -50,14 +50,22 @@ public class RecipeController {
            @AuthenticationPrincipal User user) {
 
         List<String> ingredients = request.getIngredients();
-        UserPreference userPreference = request.getUserPreference();
 
         if (ingredients == null || ingredients.isEmpty()) {
             throw new BadRequestException("Ingredients list is empty or null");
         }
 
-        if (userPreference == null) {
-            userPreference = new UserPreference();
+        // Convert DTO to entity
+        UserPreference userPreference = new UserPreference();
+        if (request.getUserPreference() != null) {
+            userPreference.setDietaryRestrictions(request.getUserPreference().getDietaryRestrictions());
+            userPreference.setFavoriteCuisines(request.getUserPreference().getFavoriteCuisines());
+            userPreference.setDislikedIngredients(request.getUserPreference().getDislikedIngredients());
+        } else {
+            // Set empty lists as defaults
+            userPreference.setDietaryRestrictions(List.of());
+            userPreference.setFavoriteCuisines(List.of());
+            userPreference.setDislikedIngredients(List.of());
         }
 
         logger.info("Generating recipes from {} ingredients for user {}", ingredients.size(), user.getId());

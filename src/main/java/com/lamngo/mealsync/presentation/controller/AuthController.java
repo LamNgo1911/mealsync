@@ -1,11 +1,11 @@
 package com.lamngo.mealsync.presentation.controller;
 
+import com.lamngo.mealsync.application.dto.user.RefreshTokenRequestDto;
 import com.lamngo.mealsync.application.dto.user.*;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
 import com.lamngo.mealsync.application.service.auth.AuthService;
 import com.lamngo.mealsync.application.service.auth.GoogleVerifierService;
 import com.lamngo.mealsync.application.service.auth.RefreshTokenService;
-import com.lamngo.mealsync.domain.model.user.RefreshToken;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.model.user.UserRole;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
@@ -97,6 +97,15 @@ public class AuthController {
         userInfoDto.setRefreshToken(newRefreshToken);
         SuccessResponseEntity<UserInfoDto> body = new SuccessResponseEntity<>();
         body.setData(userInfoDto);
+        return ResponseEntity.ok(body);
+    }
+
+    // Anyone can refresh their access token using a refresh token
+    @PostMapping("/refresh")
+    public ResponseEntity<SuccessResponseEntity<UserInfoDto>> refresh(@RequestBody @Valid RefreshTokenRequestDto refreshTokenRequestDto) {
+        UserInfoDto userInfo = authService.refreshToken(refreshTokenRequestDto.getRefreshToken());
+        SuccessResponseEntity<UserInfoDto> body = new SuccessResponseEntity<>();
+        body.setData(userInfo);
         return ResponseEntity.ok(body);
     }
 }

@@ -41,6 +41,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/login/google").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/users/refresh").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/recipes").permitAll()
                         // All other requests require authentication
                         .anyRequest().authenticated()

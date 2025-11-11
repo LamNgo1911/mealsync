@@ -151,6 +151,11 @@ public class AuthService implements IAuthService {
             throw new BadRequestException("Refresh token is not valid");
         }
 
+        // Check if the refresh token is revoked
+        if (refreshToken.isRevoked()) {
+            throw new BadRequestException("Refresh token has been revoked");
+        }
+
         // Verify the expiration of the refresh token
         if (!refreshTokenService.verifyExpiration(refreshToken)) {
             throw new BadRequestException("Refresh token is expired");

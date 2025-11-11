@@ -67,6 +67,9 @@ public class AIRecipeService {
     // Generate recipes from a list of ingredient names
     @Transactional
     public List<RecipeReadDto> generateRecipes(List<String> ingredients, UserPreference userPreference) {
+        System.out.println("Ingredients: " + ingredients);
+        System.out.println("User preference: " + userPreference);
+
         if (ingredients == null || ingredients.isEmpty()) {
             logger.warn("Ingredients list is empty or null");
             throw new AIServiceException("Ingredients list is empty or null");
@@ -112,6 +115,10 @@ public class AIRecipeService {
             System.out.println("Ingredients: " + ingredients);
             // Build ingredients string
             String ingredientsString = String.join(", ", ingredients);
+            System.out.println("Ingredients string: " + ingredientsString);
+            System.out.println("User dietary restrictions: " + userPreference.getDietaryRestrictions());
+            System.out.println("User favorite cuisines: " + userPreference.getFavoriteCuisines());
+            System.out.println("User disliked ingredients: " + userPreference.getDislikedIngredients());
 
             // The Text Prompt
             String prompt =
