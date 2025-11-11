@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.application.dto.user;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,8 +15,13 @@ import java.util.List;
 @AllArgsConstructor
 public class UserPreferenceRequestDto {
 
+    @JsonDeserialize(using = StringToListDeserializer.class)
     private List<String> dietaryRestrictions;
+
+    @JsonDeserialize(using = StringToListDeserializer.class)
     private List<String> favoriteCuisines;
+
+    @JsonDeserialize(using = StringToListDeserializer.class)
     private List<String> dislikedIngredients;
 
     /**

@@ -1,6 +1,7 @@
 package com.lamngo.mealsync.presentation.controller;
 
 import com.lamngo.mealsync.application.dto.recipe.*;
+import com.lamngo.mealsync.application.dto.user.UserPreferenceRequestDto;
 import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeCreateDto;
 import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
 import com.lamngo.mealsync.application.service.AI.AIRecipeService;
@@ -39,8 +40,11 @@ class RecipeControllerUnitTest {
     void generateRecipesFromIngredients_success() {
         GenerateRecipeRequest request = new GenerateRecipeRequest();
         request.setIngredients(List.of("egg", "milk"));
-        UserPreference userPreference = new UserPreference();
-        request.setUserPreference(userPreference);
+        UserPreferenceRequestDto userPreferenceDto = new UserPreferenceRequestDto();
+        userPreferenceDto.setDietaryRestrictions(List.of());
+        userPreferenceDto.setFavoriteCuisines(List.of());
+        userPreferenceDto.setDislikedIngredients(List.of());
+        request.setUserPreference(userPreferenceDto);
 
         User user = mock(User.class);
         UUID userId = UUID.randomUUID();
@@ -50,14 +54,14 @@ class RecipeControllerUnitTest {
         recipe.setId(UUID.randomUUID());
         List<RecipeReadDto> recipes = List.of(recipe);
 
-        when(aiRecipeService.generateRecipes(request.getIngredients(), userPreference)).thenReturn(recipes);
+        when(aiRecipeService.generateRecipes(eq(request.getIngredients()), any(UserPreference.class))).thenReturn(recipes);
         doNothing().when(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
 
         ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.generateRecipes(request, user);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertEquals(recipes, resp.getBody().getData());
-        verify(aiRecipeService).generateRecipes(request.getIngredients(), userPreference);
+        verify(aiRecipeService).generateRecipes(eq(request.getIngredients()), any(UserPreference.class));
         verify(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
         verify(ingredientDetectionService, never()).detectRawIngredients(any());
     }
@@ -370,7 +374,11 @@ class RecipeControllerUnitTest {
 
         GenerateRecipeRequest request = new GenerateRecipeRequest();
         request.setIngredients(List.of("chicken", "rice", "tomato"));
-        request.setUserPreference(new UserPreference());
+        UserPreferenceRequestDto userPreferenceDto = new UserPreferenceRequestDto();
+        userPreferenceDto.setDietaryRestrictions(List.of("vegetarian"));
+        userPreferenceDto.setFavoriteCuisines(List.of("Italian"));
+        userPreferenceDto.setDislikedIngredients(List.of("mushroom"));
+        request.setUserPreference(userPreferenceDto);
 
         RecipeReadDto recipe1 = new RecipeReadDto();
         recipe1.setId(UUID.randomUUID());
@@ -378,7 +386,7 @@ class RecipeControllerUnitTest {
         recipe2.setId(UUID.randomUUID());
 
         List<RecipeReadDto> recipes = List.of(recipe1, recipe2);
-        when(aiRecipeService.generateRecipes(request.getIngredients(), request.getUserPreference()))
+        when(aiRecipeService.generateRecipes(eq(request.getIngredients()), any(UserPreference.class)))
                 .thenReturn(recipes);
         doNothing().when(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
 
@@ -388,7 +396,7 @@ class RecipeControllerUnitTest {
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertEquals(recipes, resp.getBody().getData());
-        verify(aiRecipeService).generateRecipes(request.getIngredients(), request.getUserPreference());
+        verify(aiRecipeService).generateRecipes(eq(request.getIngredients()), any(UserPreference.class));
         verify(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
     }
 }
