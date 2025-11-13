@@ -545,7 +545,7 @@ class RecipeServiceTest {
         when(userRecipe2.getRecipe()).thenReturn(recipe2);
         when(userRecipe2.getSavedAt()).thenReturn(LocalDateTime.now());
 
-        List<UserRecipe> savedRecipes = List.of(userRecipe1, userRecipe2);
+        List<UserRecipe> savedRecipes = new ArrayList<>(List.of(userRecipe1, userRecipe2));
         UserRecipeReadDto readDto1 = mock(UserRecipeReadDto.class);
         UserRecipeReadDto readDto2 = mock(UserRecipeReadDto.class);
 
@@ -639,12 +639,14 @@ class RecipeServiceTest {
         when(userRecipe2.getRecipe()).thenReturn(recipe2);
         when(userRecipe2.getSavedAt()).thenReturn(LocalDateTime.now().minusDays(1));
 
-        List<UserRecipe> savedRecipes = List.of(userRecipe1Old, userRecipe1New, userRecipe2);
+        List<UserRecipe> savedRecipes = new ArrayList<>(List.of(userRecipe1Old, userRecipe1New, userRecipe2));
+        UserRecipeReadDto readDto1Old = mock(UserRecipeReadDto.class);
         UserRecipeReadDto readDto1New = mock(UserRecipeReadDto.class);
         UserRecipeReadDto readDto2 = mock(UserRecipeReadDto.class);
 
         when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED)))
                 .thenReturn(savedRecipes);
+        when(userRecipeMapper.toUserRecipeReadDto(userRecipe1Old)).thenReturn(readDto1Old);
         when(userRecipeMapper.toUserRecipeReadDto(userRecipe1New)).thenReturn(readDto1New);
         when(userRecipeMapper.toUserRecipeReadDto(userRecipe2)).thenReturn(readDto2);
 
