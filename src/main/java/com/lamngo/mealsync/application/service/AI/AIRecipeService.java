@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -49,6 +50,7 @@ public class AIRecipeService {
     private final IRecipeRepo recipeRepo;
     private final ImageGeneratorService imageGeneratorService;
     private final S3Service s3Service;
+    private final PromptLoader promptLoader;
 
     // Remove IRecipeIngredient if it's unused in the constructor
     public AIRecipeService(
@@ -56,11 +58,13 @@ public class AIRecipeService {
             IRecipeRepo recipeRepo,
             // IRecipeIngredient recipeIngredientRepo, // Removed if not needed
             ImageGeneratorService imageGeneratorService,
-            S3Service s3Service) {
+            S3Service s3Service,
+            PromptLoader promptLoader) {
         this.recipeMapper = recipeMapper;
         this.recipeRepo = recipeRepo;
         this.imageGeneratorService = imageGeneratorService;
         this.s3Service = s3Service;
+        this.promptLoader = promptLoader;
     }
 
     // Generate recipes from a list of detected ingredients with quantities and units
@@ -129,60 +133,16 @@ public class AIRecipeService {
             }
             String ingredientsString = ingredientsStringBuilder.toString();
 
-            // The Text Prompt
-            String prompt =
-                    "You are a professional chef and AI recipe creator. " +
-                            "You are given the following detected ingredients with their quantities: " + ingredientsString + ". " +
-                            "IMPORTANT: Pay close attention to the quantities and units provided. " +
-                            "For example, if an ingredient is '200 (grams) beef', use approximately 200g of beef, not a whole steak. " +
-                            "If an ingredient is '2 (pieces) tomatoes', use 2 tomatoes, not more. " +
-                            "If a quantity is '1' with no unit, it may mean the quantity was unclear - use reasonable amounts for that ingredient. " +
-                            "You must use ALL or MOST of these detected ingredients as the main components of the recipes, respecting their quantities when specified. " +
-                            "You may only add minimal extra pantry items such as oil, salt, pepper, or common spices if needed. " +
-                            "Consider the following user preferences: " +
-                            "dietary restrictions: " + userPreference.getDietaryRestrictions() + ", " +
-                            "favorite cuisines: " + userPreference.getFavoriteCuisines() + ", " +
-                            "disliked ingredients: " + userPreference.getDislikedIngredients() + ". " +
-                            "RECIPE SELECTION STRATEGY: " +
-                            "1. Prioritize well-known, popular, and commonly made recipes that use these ingredients. " +
-                            "2. Choose classic, recognizable dishes that home cooks would be familiar with (e.g., stir-fries, pasta dishes, soups, salads, simple roasts, one-pot meals). " +
-                            "3. Recognize common ingredient combinations and suggest the most popular dishes for them (e.g., tomatoes+basil+mozzarella → Caprese salad or Margherita pizza; chicken+rice+vegetables → fried rice or chicken stir-fry). " +
-                            "4. Prioritize practical recipes with reasonable cooking times (under 60 minutes total time) unless the ingredients specifically require longer cooking. " +
-                            "5. Ensure diversity between the 2 recipes - make them different styles (e.g., one quick meal, one more elaborate; one warm dish, one cold dish; different cuisines). " +
-                            "6. Avoid obscure or overly experimental recipes - focus on dishes that are proven, popular, and achievable for home cooking. " +
-                            "Generate exactly 2 creative and realistic recipes that comply fully with these preferences " +
-                            "and utilize the detected ingredients as the primary base. " +
-                            "The recipes should be practical, well-known dishes that home cooks would recognize and want to make. " +
-                            "Respond ONLY with a valid JSON object with a 'recipes' array containing exactly 2 recipe objects, with no extra commentary. " +
-                            "The JSON structure must be:\n" +
-                            "{ \"recipes\": [ recipe1, recipe2 ] }\n" +
-                            "Each recipe object must strictly follow this structure:\n" +
-                            "{\n" +
-                            "  \"name\": \"string\",\n" +
-                            "  \"instructions\": [\"string\", \"string\", ...],\n" +
-                            "  \"cuisine\": \"string\",\n" +
-                            "  \"description\": \"string\",\n" +
-                            "  \"preparationTime\": integer (minutes),\n" +
-                            "  \"cookingTime\": integer (minutes),\n" +
-                            "  \"totalTime\": integer (minutes),\n" +
-                            "  \"servings\": integer,\n" +
-                            "  \"calories\": number (kcal per serving),\n" +
-                            "  \"protein\": number (grams per serving),\n" +
-                            "  \"carbohydrates\": number (grams per serving),\n" +
-                            "  \"fat\": number (grams per serving),\n" +
-                            "  \"difficulty\": \"string\" (one of \"easy\", \"medium\", \"hard\"),\n" +
-                            "  \"tags\": [\"string\", \"string\", ...],\n" +
-                            "  \"ingredients\": [\n" +
-                            "    {\n" +
-                            "      \"name\": \"string\",\n" +
-                            "      \"quantity\": number,\n" +
-                            "      \"unit\": \"string\"\n" +
-                            "    }\n" +
-                            "  ]\n" +
-                            "} " +
-                            "Ensure that the 'ingredients' list in each recipe clearly includes the detected ingredients whenever possible. " +
-                            "All numeric values must be realistic and consistent. " +
-                            "Do not include any explanation, commentary, or text outside the JSON object.";
+            // Load and format the recipe generation prompt
+            String prompt = promptLoader.loadAndFormatPrompt("recipe-generation.txt", Map.of(
+                    "INGREDIENTS", ingredientsString,
+                    "DIETARY_RESTRICTIONS", userPreference.getDietaryRestrictions() != null 
+                            ? String.join(", ", userPreference.getDietaryRestrictions()) : "",
+                    "FAVORITE_CUISINES", userPreference.getFavoriteCuisines() != null 
+                            ? String.join(", ", userPreference.getFavoriteCuisines()) : "",
+                    "DISLIKED_INGREDIENTS", userPreference.getDislikedIngredients() != null 
+                            ? String.join(", ", userPreference.getDislikedIngredients()) : ""
+            ));
 
 
             // Construct the OpenAI Request Body (text-only, no image)
@@ -253,74 +213,88 @@ public class AIRecipeService {
                     for (int i = 0; i < recipesArray.length(); i++) {
                         JSONObject obj = recipesArray.getJSONObject(i);
                         String recipeName = obj.optString("name", null);
-                        // Removed description extraction as it's not used immediately
-
-                        String ingredientKey = generateIngredientKey(recipeName);
-
-                        if (ingredientKey == null || ingredientKey.isBlank()) {
-                            logger.warn("Skipping recipe due to missing ingredientKey");
+                        
+                        if (recipeName == null || recipeName.trim().isEmpty()) {
+                            logger.warn("Skipping recipe due to missing name");
                             continue;
                         }
 
-                        Optional<Recipe> existingRecipeOpt = recipeRepo.findByIngredientKey(ingredientKey);
+                        // First check for similar recipe by name (90% similarity threshold)
+                        Optional<Recipe> similarRecipeOpt = findSimilarRecipe(recipeName);
                         Recipe recipe;
-                        if (existingRecipeOpt.isPresent()) {
-                            logger.info("Recipe with ingredientKey '{}' already exists. Using existing recipe.", ingredientKey);
-                            recipe = existingRecipeOpt.get();
-
+                        
+                        if (similarRecipeOpt.isPresent()) {
+                            logger.info("Found similar recipe '{}' for '{}'. Using existing recipe from database.", 
+                                       similarRecipeOpt.get().getName(), recipeName);
+                            recipe = similarRecipeOpt.get();
                         } else {
-                            recipe = new Recipe();
-                            recipe.setName(recipeName);
+                            // Check by ingredientKey as fallback
+                            String ingredientKey = generateIngredientKey(recipeName);
 
-                            List<String> instructions = new ArrayList<>();
-                            if (obj.has("instructions") && !obj.isNull("instructions")) {
-                                JSONArray instArray = obj.getJSONArray("instructions");
-                                for (int k = 0; k < instArray.length(); k++) {
-                                    instructions.add(instArray.optString(k, ""));
-                                }
-                            }
-                            recipe.setInstructions(instructions);
-                            recipe.setCuisine(obj.optString("cuisine"));
-                            recipe.setIngredientKey(ingredientKey);
-                            recipe.setDescription(obj.optString("description", ""));
-                            recipe.setPreparationTime(obj.optInt("preparationTime", 0));
-                            recipe.setCookingTime(obj.optInt("cookingTime", 0));
-                            recipe.setTotalTime(obj.optInt("totalTime", 0));
-                            recipe.setServings(obj.optInt("servings", 1));
-                            recipe.setCalories(obj.optDouble("calories", 0.0));
-                            recipe.setProtein(obj.optDouble("protein", 0.0));
-                            recipe.setCarbohydrates(obj.optDouble("carbohydrates", 0.0));
-                            recipe.setFat(obj.optDouble("fat", 0.0));
-                            recipe.setDifficulty(obj.optString("difficulty", ""));
-
-                            // Tags
-                            List<String> tags = new ArrayList<>();
-                            if (obj.has("tags") && !obj.isNull("tags")) {
-                                JSONArray tagsArray = obj.getJSONArray("tags");
-                                for (int t = 0; t < tagsArray.length(); t++) {
-                                    tags.add(tagsArray.optString(t, ""));
-                                }
-                            }
-                            recipe.setTags(tags);
-
-                            // Ingredients
-                            if (obj.has("ingredients") && !obj.isNull("ingredients")) {
-                                JSONArray ingredientsArray = obj.getJSONArray("ingredients");
-                                List<RecipeIngredient> ingredientList = new ArrayList<>();
-                                for (int j = 0; j < ingredientsArray.length(); j++) {
-                                    JSONObject ingObj = ingredientsArray.getJSONObject(j);
-                                    RecipeIngredient ingredient = new RecipeIngredient();
-                                    ingredient.setName(ingObj.optString("name"));
-                                    ingredient.setQuantity(ingObj.optString("quantity", "1"));
-                                    ingredient.setUnit(ingObj.optString("unit", ""));
-                                    ingredient.setRecipe(recipe);
-                                    ingredientList.add(ingredient);
-                                }
-                                recipe.setIngredients(ingredientList);
+                            if (ingredientKey == null || ingredientKey.isBlank()) {
+                                logger.warn("Skipping recipe due to missing ingredientKey");
+                                continue;
                             }
 
-                            // Save new recipe to DB
-                            recipe = recipeRepo.createRecipe(recipe);
+                            Optional<Recipe> existingRecipeOpt = recipeRepo.findByIngredientKey(ingredientKey);
+                            if (existingRecipeOpt.isPresent()) {
+                                logger.info("Recipe with ingredientKey '{}' already exists. Using existing recipe.", ingredientKey);
+                                recipe = existingRecipeOpt.get();
+                            } else {
+                                recipe = new Recipe();
+                                recipe.setName(recipeName);
+
+                                List<String> instructions = new ArrayList<>();
+                                if (obj.has("instructions") && !obj.isNull("instructions")) {
+                                    JSONArray instArray = obj.getJSONArray("instructions");
+                                    for (int k = 0; k < instArray.length(); k++) {
+                                        instructions.add(instArray.optString(k, ""));
+                                    }
+                                }
+                                recipe.setInstructions(instructions);
+                                recipe.setCuisine(obj.optString("cuisine"));
+                                recipe.setIngredientKey(ingredientKey);
+                                recipe.setDescription(obj.optString("description", ""));
+                                recipe.setPreparationTime(obj.optInt("preparationTime", 0));
+                                recipe.setCookingTime(obj.optInt("cookingTime", 0));
+                                recipe.setTotalTime(obj.optInt("totalTime", 0));
+                                recipe.setServings(obj.optInt("servings", 1));
+                                recipe.setCalories(obj.optDouble("calories", 0.0));
+                                recipe.setProtein(obj.optDouble("protein", 0.0));
+                                recipe.setCarbohydrates(obj.optDouble("carbohydrates", 0.0));
+                                recipe.setFat(obj.optDouble("fat", 0.0));
+                                recipe.setDifficulty(obj.optString("difficulty", ""));
+
+                                // Tags
+                                List<String> tags = new ArrayList<>();
+                                if (obj.has("tags") && !obj.isNull("tags")) {
+                                    JSONArray tagsArray = obj.getJSONArray("tags");
+                                    for (int t = 0; t < tagsArray.length(); t++) {
+                                        tags.add(tagsArray.optString(t, ""));
+                                    }
+                                }
+                                recipe.setTags(tags);
+
+                                // Ingredients
+                                if (obj.has("ingredients") && !obj.isNull("ingredients")) {
+                                    JSONArray ingredientsArray = obj.getJSONArray("ingredients");
+                                    List<RecipeIngredient> ingredientList = new ArrayList<>();
+                                    for (int j = 0; j < ingredientsArray.length(); j++) {
+                                        JSONObject ingObj = ingredientsArray.getJSONObject(j);
+                                        RecipeIngredient ingredient = new RecipeIngredient();
+                                        ingredient.setName(ingObj.optString("name"));
+                                        ingredient.setQuantity(ingObj.optString("quantity", "1"));
+                                        ingredient.setUnit(ingObj.optString("unit", ""));
+                                        ingredient.setRecipe(recipe);
+                                        ingredientList.add(ingredient);
+                                    }
+                                    recipe.setIngredients(ingredientList);
+                                }
+
+                                // Save new recipe to DB
+                                recipe = recipeRepo.createRecipe(recipe);
+                                logger.info("Created new recipe '{}' in database", recipeName);
+                            }
                         }
                         recipes.add(recipe);
                     }
@@ -409,5 +383,98 @@ public class AIRecipeService {
     public String generateIngredientKey(String recipeName) {
         if (recipeName == null) return null;
         return recipeName.trim().toLowerCase().replaceAll("[^a-z0-9\\s]", "").replaceAll("\\s+", "_");
+    }
+
+    /**
+     * Calculates the similarity between two strings using Levenshtein distance.
+     * Returns a value between 0.0 (completely different) and 1.0 (identical).
+     */
+    private double calculateSimilarity(String s1, String s2) {
+        if (s1 == null || s2 == null) {
+            return 0.0;
+        }
+        if (s1.equals(s2)) {
+            return 1.0;
+        }
+        
+        String lower1 = s1.toLowerCase().trim();
+        String lower2 = s2.toLowerCase().trim();
+        
+        if (lower1.equals(lower2)) {
+            return 1.0;
+        }
+        
+        int maxLength = Math.max(lower1.length(), lower2.length());
+        if (maxLength == 0) {
+            return 1.0;
+        }
+        
+        int distance = levenshteinDistance(lower1, lower2);
+        return 1.0 - ((double) distance / maxLength);
+    }
+
+    /**
+     * Calculates Levenshtein distance between two strings.
+     */
+    private int levenshteinDistance(String s1, String s2) {
+        int[][] dp = new int[s1.length() + 1][s2.length() + 1];
+        
+        for (int i = 0; i <= s1.length(); i++) {
+            dp[i][0] = i;
+        }
+        for (int j = 0; j <= s2.length(); j++) {
+            dp[0][j] = j;
+        }
+        
+        for (int i = 1; i <= s1.length(); i++) {
+            for (int j = 1; j <= s2.length(); j++) {
+                if (s1.charAt(i - 1) == s2.charAt(j - 1)) {
+                    dp[i][j] = dp[i - 1][j - 1];
+                } else {
+                    dp[i][j] = 1 + Math.min(Math.min(dp[i - 1][j], dp[i][j - 1]), dp[i - 1][j - 1]);
+                }
+            }
+        }
+        
+        return dp[s1.length()][s2.length()];
+    }
+
+    /**
+     * Finds a similar recipe in the database by name.
+     * Returns the most similar recipe if similarity is >= 0.9 (90%), otherwise returns empty.
+     */
+    private Optional<Recipe> findSimilarRecipe(String recipeName) {
+        if (recipeName == null || recipeName.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        
+        List<Recipe> allRecipes = recipeRepo.findAllRecipes();
+        if (allRecipes.isEmpty()) {
+            return Optional.empty();
+        }
+        
+        double maxSimilarity = 0.0;
+        Recipe mostSimilarRecipe = null;
+        
+        for (Recipe recipe : allRecipes) {
+            if (recipe.getName() == null) {
+                continue;
+            }
+            
+            double similarity = calculateSimilarity(recipeName, recipe.getName());
+            if (similarity > maxSimilarity) {
+                maxSimilarity = similarity;
+                mostSimilarRecipe = recipe;
+            }
+        }
+        
+        // Return recipe if similarity is >= 90% (0.9)
+        if (maxSimilarity >= 0.9 && mostSimilarRecipe != null) {
+            logger.info("Found similar recipe '{}' with {:.2f}% similarity to '{}'", 
+                       mostSimilarRecipe.getName(), maxSimilarity * 100, recipeName);
+            return Optional.of(mostSimilarRecipe);
+        }
+        
+        return Optional.empty();
     }
 }

@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.application.service.AI;
 
+import com.lamngo.mealsync.application.dto.recipe.DetectedIngredientDto;
 import com.lamngo.mealsync.presentation.error.AIServiceException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -7,6 +8,8 @@ import org.mockito.InjectMocks;
 import org.mockito.MockitoAnnotations;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -90,58 +93,65 @@ class IngredientDetectionServiceTest {
     }
 
     @Test
-    void detectIngredientsFromText_nullInput_throwsAIServiceException() {
+    void validateAndParseIngredientsFromText_nullInput_throwsAIServiceException() {
         AIServiceException exception = assertThrows(AIServiceException.class,
-            () -> ingredientDetectionService.detectIngredientsFromText(null));
+            () -> ingredientDetectionService.validateAndParseIngredientsFromText(null));
 
-        assertEquals("Text input is empty or null", exception.getMessage());
+        assertEquals("Ingredients list is empty or null", exception.getMessage());
     }
 
     @Test
-    void detectIngredientsFromText_emptyInput_throwsAIServiceException() {
+    void validateAndParseIngredientsFromText_emptyInput_throwsAIServiceException() {
         AIServiceException exception = assertThrows(AIServiceException.class,
-            () -> ingredientDetectionService.detectIngredientsFromText(""));
+            () -> ingredientDetectionService.validateAndParseIngredientsFromText(List.of()));
 
-        assertEquals("Text input is empty or null", exception.getMessage());
+        assertEquals("Ingredients list is empty or null", exception.getMessage());
     }
 
     @Test
-    void detectIngredientsFromText_whitespaceInput_throwsAIServiceException() {
-        AIServiceException exception = assertThrows(AIServiceException.class,
-            () -> ingredientDetectionService.detectIngredientsFromText("   "));
-
-        assertEquals("Text input is empty or null", exception.getMessage());
-    }
-
-    @Test
-    void detectIngredientsFromText_invalidApiConfiguration_throwsAIServiceException() {
+    void validateAndParseIngredientsFromText_invalidApiConfiguration_throwsAIServiceException() {
         // Set invalid configuration
         ReflectionTestUtils.setField(ingredientDetectionService, "openAIApiBaseUrl", null);
 
+        DetectedIngredientDto ingredient = new DetectedIngredientDto();
+        ingredient.setName("tomato");
+        ingredient.setQuantity("1");
+        ingredient.setUnit("piece");
+
         AIServiceException exception = assertThrows(AIServiceException.class,
-            () -> ingredientDetectionService.detectIngredientsFromText("tomatoes, onions, garlic"));
+            () -> ingredientDetectionService.validateAndParseIngredientsFromText(List.of(ingredient)));
 
         assertEquals("OpenAI API configuration error", exception.getMessage());
     }
 
     @Test
-    void detectIngredientsFromText_emptyApiKey_throwsAIServiceException() {
+    void validateAndParseIngredientsFromText_emptyApiKey_throwsAIServiceException() {
         // Set empty API key
         ReflectionTestUtils.setField(ingredientDetectionService, "openAIApiKey", "");
 
+        DetectedIngredientDto ingredient = new DetectedIngredientDto();
+        ingredient.setName("tomato");
+        ingredient.setQuantity("1");
+        ingredient.setUnit("piece");
+
         AIServiceException exception = assertThrows(AIServiceException.class,
-            () -> ingredientDetectionService.detectIngredientsFromText("tomatoes, onions, garlic"));
+            () -> ingredientDetectionService.validateAndParseIngredientsFromText(List.of(ingredient)));
 
         assertEquals("OpenAI API configuration error", exception.getMessage());
     }
 
     @Test
-    void detectIngredientsFromText_invalidUrlProtocol_throwsAIServiceException() {
+    void validateAndParseIngredientsFromText_invalidUrlProtocol_throwsAIServiceException() {
         // Set invalid URL (not https)
         ReflectionTestUtils.setField(ingredientDetectionService, "openAIApiBaseUrl", "http://api.openai.com");
 
+        DetectedIngredientDto ingredient = new DetectedIngredientDto();
+        ingredient.setName("tomato");
+        ingredient.setQuantity("1");
+        ingredient.setUnit("piece");
+
         AIServiceException exception = assertThrows(AIServiceException.class,
-            () -> ingredientDetectionService.detectIngredientsFromText("tomatoes, onions, garlic"));
+            () -> ingredientDetectionService.validateAndParseIngredientsFromText(List.of(ingredient)));
 
         assertEquals("OpenAI API configuration error", exception.getMessage());
     }

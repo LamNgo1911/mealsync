@@ -103,17 +103,27 @@ public class RecipeController {
         return ResponseEntity.ok(body);
     }
 
-    @PostMapping(value = "/detect-ingredients-from-text")
+    /**
+     * Validates ingredients provided by the user.
+     * Validates ingredient names, quantities, and units (metric/international units only).
+     * Returns only valid ingredients that pass all validation checks.
+     * 
+     * @param request Request containing list of ingredients to validate
+     * @return List of validated ingredients with metric units only
+     */
+    @PostMapping(value = "/validate-ingredients")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> detectIngredientsFromText(
+    public ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> validateAndParseIngredientsFromText(
             @RequestBody @Valid ManualIngredientDetectionRequest request) {
 
-        if (request.getTextInput() == null || request.getTextInput().trim().isEmpty()) {
-            throw new BadRequestException("Text input cannot be empty");
+        if (request.getIngredients() == null || request.getIngredients().isEmpty()) {
+            throw new BadRequestException("Ingredients list cannot be empty");
         }
 
-        logger.info("Detecting ingredients from manual text input");
-        List<DetectedIngredientDto> ingredients = ingredientDetectionService.detectIngredientsFromText(request.getTextInput());
+        logger.info("Validating {} ingredients provided by user (metric units only)", request.getIngredients().size());
+        List<DetectedIngredientDto> ingredients = ingredientDetectionService.validateAndParseIngredientsFromText(request.getIngredients());
+        logger.info("Successfully validated {} ingredients", ingredients.size());
+        
         SuccessResponseEntity<List<DetectedIngredientDto>> body = new SuccessResponseEntity<>();
         body.setData(ingredients);
         return ResponseEntity.ok(body);

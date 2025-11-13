@@ -28,6 +28,12 @@ public class ImageGeneratorService {
 
     @Value("${STABILITY_API_URL}")
     private String stabilityApiUrl;
+    
+    private final PromptLoader promptLoader;
+    
+    public ImageGeneratorService(PromptLoader promptLoader) {
+        this.promptLoader = promptLoader;
+    }
 
     @PostConstruct
     public void init() {
@@ -87,17 +93,12 @@ public class ImageGeneratorService {
         if (ingredients == null) {
             ingredients = List.of();
         }
-        String prompt = String.format(
-                "Ultra-realistic, high-resolution DSLR food photo of %s made with %s. "
-                        + "Freshly cooked, styled for a modern recipe app — clean, bright, and appetizing. "
-                        + "Overhead (top-down) composition on a white or light neutral background. "
-                        + "Soft natural daylight, gentle shadows, and realistic textures. "
-                        + "Shot with a 50mm lens, shallow depth of field, and true-to-life colors. "
-                        + "No text, no watermark, no illustration, no 3D render, no artificial look. %s",
-                recipeName,
-                String.join(", ", ingredients),
-                description
-        );
+        // Load and format the image generation prompt
+        String prompt = promptLoader.loadAndFormatPrompt("image-generation.txt", Map.of(
+                "RECIPE_NAME", recipeName != null ? recipeName : "",
+                "INGREDIENTS", String.join(", ", ingredients),
+                "DESCRIPTION", description != null ? description : ""
+        ));
 
         return callStabilityAiAPI(prompt);
     }

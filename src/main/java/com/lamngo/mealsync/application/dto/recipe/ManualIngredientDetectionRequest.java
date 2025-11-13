@@ -1,10 +1,13 @@
 package com.lamngo.mealsync.application.dto.recipe;
 
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 
 @Data
 @Builder
@@ -12,6 +15,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ManualIngredientDetectionRequest {
 
-    @NotBlank(message = "Text input cannot be blank")
-    private String textInput;
+    @NotEmpty(message = "Ingredients list cannot be empty")
+    @Valid
+    private List<DetectedIngredientDto> ingredients;
 }

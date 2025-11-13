@@ -149,21 +149,58 @@ class RecipeServiceTest {
         Recipe recipe = mock(Recipe.class);
         User user = mock(User.class);
         UserRecipe userRecipe = mock(UserRecipe.class);
-        UserRecipeReadDto userRecipeReadDto = mock(UserRecipeReadDto.class);
+        UserRecipeReadDto readDto = mock(UserRecipeReadDto.class);
+
         when(recipeRepo.getRecipeById(recipeId)).thenReturn(Optional.of(recipe));
         when(userRepo.findById(userId)).thenReturn(Optional.of(user));
-        when(userRecipeRepo.saveUserRecipe(any())).thenReturn(userRecipe);
-        when(userRecipeMapper.toUserRecipeReadDto(userRecipe)).thenReturn(userRecipeReadDto);
+        when(userRecipeRepo.getUserRecipeByUserIdAndRecipeIdAndType(userId, recipeId, UserRecipeType.SAVED))
+                .thenReturn(Optional.empty());
+        when(userRecipeRepo.saveUserRecipe(any(UserRecipe.class))).thenReturn(userRecipe);
+        when(userRecipeMapper.toUserRecipeReadDto(userRecipe)).thenReturn(readDto);
+
         UserRecipeReadDto result = recipeService.addRecipeToUser(userId, recipeId);
-        assertEquals(userRecipeReadDto, result);
+
+        assertEquals(readDto, result);
+        verify(recipeRepo).getRecipeById(recipeId);
+        verify(userRepo).findById(userId);
+        verify(userRecipeRepo).getUserRecipeByUserIdAndRecipeIdAndType(userId, recipeId, UserRecipeType.SAVED);
+        verify(userRecipeRepo).saveUserRecipe(any(UserRecipe.class));
+    }
+
+    @Test
+    void addRecipeToUser_alreadySaved_returnsExisting() {
+        UUID userId = UUID.randomUUID();
+        UUID recipeId = UUID.randomUUID();
+        Recipe recipe = mock(Recipe.class);
+        User user = mock(User.class);
+        UserRecipe existingUserRecipe = mock(UserRecipe.class);
+        UserRecipeReadDto readDto = mock(UserRecipeReadDto.class);
+
+        when(recipeRepo.getRecipeById(recipeId)).thenReturn(Optional.of(recipe));
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+        when(userRecipeRepo.getUserRecipeByUserIdAndRecipeIdAndType(userId, recipeId, UserRecipeType.SAVED))
+                .thenReturn(Optional.of(existingUserRecipe));
+        when(userRecipeMapper.toUserRecipeReadDto(existingUserRecipe)).thenReturn(readDto);
+
+        UserRecipeReadDto result = recipeService.addRecipeToUser(userId, recipeId);
+
+        assertEquals(readDto, result);
+        verify(recipeRepo).getRecipeById(recipeId);
+        verify(userRepo).findById(userId);
+        verify(userRecipeRepo).getUserRecipeByUserIdAndRecipeIdAndType(userId, recipeId, UserRecipeType.SAVED);
+        verify(userRecipeRepo, never()).saveUserRecipe(any(UserRecipe.class));
     }
 
     @Test
     void addRecipeToUser_recipeNotFound() {
         UUID userId = UUID.randomUUID();
         UUID recipeId = UUID.randomUUID();
+        User user = mock(User.class);
         when(recipeRepo.getRecipeById(recipeId)).thenReturn(Optional.empty());
+        when(userRepo.findById(userId)).thenReturn(Optional.of(user));
+
         assertThrows(ResourceNotFoundException.class, () -> recipeService.addRecipeToUser(userId, recipeId));
+        verify(userRecipeRepo, never()).saveUserRecipe(any(UserRecipe.class));
     }
 
     @Test
@@ -173,7 +210,9 @@ class RecipeServiceTest {
         Recipe recipe = mock(Recipe.class);
         when(recipeRepo.getRecipeById(recipeId)).thenReturn(Optional.of(recipe));
         when(userRepo.findById(userId)).thenReturn(Optional.empty());
+
         assertThrows(ResourceNotFoundException.class, () -> recipeService.addRecipeToUser(userId, recipeId));
+        verify(userRecipeRepo, never()).saveUserRecipe(any(UserRecipe.class));
     }
 
     @Test
@@ -491,38 +530,38 @@ class RecipeServiceTest {
         int limit = 5;
         int offset = 0;
 
+        UUID recipeId1 = UUID.randomUUID();
+        UUID recipeId2 = UUID.randomUUID();
         Recipe recipe1 = mock(Recipe.class);
+        when(recipe1.getId()).thenReturn(recipeId1);
         Recipe recipe2 = mock(Recipe.class);
+        when(recipe2.getId()).thenReturn(recipeId2);
 
         UserRecipe userRecipe1 = mock(UserRecipe.class);
         when(userRecipe1.getRecipe()).thenReturn(recipe1);
+        when(userRecipe1.getSavedAt()).thenReturn(LocalDateTime.now().minusDays(1));
 
         UserRecipe userRecipe2 = mock(UserRecipe.class);
         when(userRecipe2.getRecipe()).thenReturn(recipe2);
+        when(userRecipe2.getSavedAt()).thenReturn(LocalDateTime.now());
 
         List<UserRecipe> savedRecipes = List.of(userRecipe1, userRecipe2);
         UserRecipeReadDto readDto1 = mock(UserRecipeReadDto.class);
         UserRecipeReadDto readDto2 = mock(UserRecipeReadDto.class);
 
-        Page<UserRecipe> userRecipePage = mock(Page.class);
-        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class)))
-                .thenReturn(userRecipePage);
-        when(userRecipePage.getContent()).thenReturn(savedRecipes);
-        when(userRecipePage.getTotalElements()).thenReturn(2L);
-        when(userRecipePage.hasNext()).thenReturn(false);
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED)))
+                .thenReturn(savedRecipes);
         when(userRecipeMapper.toUserRecipeReadDto(userRecipe1)).thenReturn(readDto1);
         when(userRecipeMapper.toUserRecipeReadDto(userRecipe2)).thenReturn(readDto2);
 
         PaginationResponse<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit, offset);
 
         assertEquals(2, result.getData().size());
-        assertEquals(readDto1, result.getData().get(0));
-        assertEquals(readDto2, result.getData().get(1));
         assertEquals(0, result.getOffset());
         assertEquals(5, result.getLimit());
         assertEquals(2L, result.getTotalElements());
         assertEquals(false, result.isHasNext());
-        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class));
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED));
     }
 
     @Test
@@ -532,19 +571,18 @@ class RecipeServiceTest {
         int offset = 0;
 
         List<UserRecipe> savedRecipes = new ArrayList<>();
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 5; i++) {
             UserRecipe userRecipe = mock(UserRecipe.class);
             Recipe recipe = mock(Recipe.class);
+            UUID recipeId = UUID.randomUUID();
+            when(recipe.getId()).thenReturn(recipeId);
             when(userRecipe.getRecipe()).thenReturn(recipe);
+            when(userRecipe.getSavedAt()).thenReturn(LocalDateTime.now().minusDays(i));
             savedRecipes.add(userRecipe);
         }
 
-        Page<UserRecipe> userRecipePage = mock(Page.class);
-        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class)))
-                .thenReturn(userRecipePage);
-        when(userRecipePage.getContent()).thenReturn(savedRecipes);
-        when(userRecipePage.getTotalElements()).thenReturn(5L);
-        when(userRecipePage.hasNext()).thenReturn(true);
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED)))
+                .thenReturn(savedRecipes);
         when(userRecipeMapper.toUserRecipeReadDto(any(UserRecipe.class)))
                 .thenReturn(mock(UserRecipeReadDto.class));
 
@@ -554,7 +592,7 @@ class RecipeServiceTest {
         assertEquals(2, result.getLimit());
         assertEquals(5L, result.getTotalElements());
         assertEquals(true, result.isHasNext());
-        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class));
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED));
     }
 
     @Test
@@ -563,17 +601,58 @@ class RecipeServiceTest {
         int limit = 10;
         int offset = 0;
 
-        Page<UserRecipe> userRecipePage = mock(Page.class);
-        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class)))
-                .thenReturn(userRecipePage);
-        when(userRecipePage.getContent()).thenReturn(Collections.emptyList());
-        when(userRecipePage.getTotalElements()).thenReturn(0L);
-        when(userRecipePage.hasNext()).thenReturn(false);
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED)))
+                .thenReturn(Collections.emptyList());
 
         PaginationResponse<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit, offset);
 
         assertTrue(result.getData().isEmpty());
         assertEquals(0L, result.getTotalElements());
-        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class));
+        assertEquals(false, result.isHasNext());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED));
+    }
+
+    @Test
+    void getSavedRecipesByUserId_deduplicatesRecipes() {
+        UUID userId = UUID.randomUUID();
+        int limit = 10;
+        int offset = 0;
+
+        UUID recipeId1 = UUID.randomUUID();
+        UUID recipeId2 = UUID.randomUUID();
+        
+        Recipe recipe1 = mock(Recipe.class);
+        when(recipe1.getId()).thenReturn(recipeId1);
+        Recipe recipe2 = mock(Recipe.class);
+        when(recipe2.getId()).thenReturn(recipeId2);
+
+        // Create duplicate entries for recipe1 (older and newer)
+        UserRecipe userRecipe1Old = mock(UserRecipe.class);
+        when(userRecipe1Old.getRecipe()).thenReturn(recipe1);
+        when(userRecipe1Old.getSavedAt()).thenReturn(LocalDateTime.now().minusDays(2));
+
+        UserRecipe userRecipe1New = mock(UserRecipe.class);
+        when(userRecipe1New.getRecipe()).thenReturn(recipe1);
+        when(userRecipe1New.getSavedAt()).thenReturn(LocalDateTime.now()); // Most recent
+
+        UserRecipe userRecipe2 = mock(UserRecipe.class);
+        when(userRecipe2.getRecipe()).thenReturn(recipe2);
+        when(userRecipe2.getSavedAt()).thenReturn(LocalDateTime.now().minusDays(1));
+
+        List<UserRecipe> savedRecipes = List.of(userRecipe1Old, userRecipe1New, userRecipe2);
+        UserRecipeReadDto readDto1New = mock(UserRecipeReadDto.class);
+        UserRecipeReadDto readDto2 = mock(UserRecipeReadDto.class);
+
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED)))
+                .thenReturn(savedRecipes);
+        when(userRecipeMapper.toUserRecipeReadDto(userRecipe1New)).thenReturn(readDto1New);
+        when(userRecipeMapper.toUserRecipeReadDto(userRecipe2)).thenReturn(readDto2);
+
+        PaginationResponse<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit, offset);
+
+        // Should only return 2 unique recipes (recipe1 deduplicated, keeping most recent)
+        assertEquals(2, result.getData().size());
+        assertEquals(2L, result.getTotalElements());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED));
     }
 }

@@ -28,7 +28,8 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
 - **🤖 AI Services**
   - **Ingredient Detection**:
     - Upload a photo to detect raw ingredients from images
-    - Or manually describe ingredients in text for AI extraction and normalization
+    - Or validate manually entered ingredients (name, quantity, unit) with AI validation
+  - **Ingredient Validation**: Validates ingredient names, quantities, and units (metric/international units only)
   - **Recipe Generation**: Get creative recipes from detected or provided ingredients
   - **User Preference Matching**: Respects dietary restrictions, allergies, and cuisine preferences
   - **Nutrition Information**: Automatic calculation of calories, protein, carbs, and fat
@@ -43,10 +44,10 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
 
 MealSync uses a two-step AI process for recipe generation:
 
-1. **Ingredient Detection** (Optional)
+1. **Ingredient Detection/Validation** (Optional)
    - **Option A - Image Upload**: Upload a photo of your ingredients and OpenAI GPT-4o-mini Vision API analyzes the image
-   - **Option B - Text Input**: Describe your ingredients in natural language and AI extracts and normalizes them
-   - Returns a list of detected raw ingredients
+   - **Option B - Manual Validation**: Provide ingredients with name, quantity, and unit, and AI validates them (only metric/international units accepted)
+   - Returns a list of validated ingredients with metric units
 
 2. **Recipe Generation**
    - Provide ingredients (detected or manually entered)
@@ -450,15 +451,31 @@ All endpoints return a standardized response:
   - **Auth**: Required
   - **Description**: Upload a photo of ingredients to automatically detect what's in the image using AI vision. Returns ingredients with detected quantities and units.
 
-- **Detect Ingredients from Text**
+- **Validate Ingredients**
   ```
-  POST /detect-ingredients-from-text
+  POST /validate-ingredients
   ```
   - **Content-Type**: `application/json`
   - **Request Body**:
     ```json
     {
-      "textInput": "I have tomatoes, onions, garlic, chicken breast, and rice in my kitchen"
+      "ingredients": [
+        {
+          "name": "tomato",
+          "quantity": "2",
+          "unit": "pieces"
+        },
+        {
+          "name": "chicken breast",
+          "quantity": "200",
+          "unit": "grams"
+        },
+        {
+          "name": "olive oil",
+          "quantity": "250",
+          "unit": "milliliters"
+        }
+      ]
     }
     ```
   - **Response**:
@@ -475,12 +492,17 @@ All endpoints return a standardized response:
           "name": "chicken breast",
           "quantity": "200",
           "unit": "grams"
+        },
+        {
+          "name": "olive oil",
+          "quantity": "250",
+          "unit": "milliliters"
         }
       ]
     }
     ```
   - **Auth**: Required
-  - **Description**: Manually input a description of your ingredients as text and let AI extract and normalize the ingredient list with quantities and units
+  - **Description**: Validate ingredients provided by the user. Validates ingredient names (must be real, specific ingredients), quantities (numeric, fractions, or descriptive), and units. **Only metric/international units are accepted** (grams, kilograms, milliliters, liters). American/Imperial units (cups, tablespoons, pounds, ounces, etc.) are rejected. Returns only valid ingredients that pass all validation checks.
 
 - **Generate Recipes from Ingredients**
   ```

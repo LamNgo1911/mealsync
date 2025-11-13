@@ -69,6 +69,11 @@ public class RecipeRepo implements IRecipeRepo {
     }
 
     @Override
+    public List<Recipe> findAllRecipes() {
+        return _recipeJpaRepo.findAll();
+    }
+
+    @Override
     public Page<Recipe> getAllRecipesFiltered(OffsetPage pageable, String name, List<String> cuisines, List<String> tags,
                                                List<String> ingredients, String difficulty,
                                                Integer maxTotalTime, Integer minServings) {

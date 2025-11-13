@@ -27,4 +27,10 @@ public interface IRecipeRepo {
      * @return The saved recipe
      */
     Recipe saveRecipe(Recipe recipe);
+    
+    /**
+     * Finds all recipes for similarity checking
+     * @return List of all recipes
+     */
+    List<Recipe> findAllRecipes();
 }

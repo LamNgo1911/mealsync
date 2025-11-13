@@ -166,6 +166,16 @@ public class RecipeService implements IRecipeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Recipe not found with id: " + recipeId));
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+        
+        // Check if recipe is already saved for this user
+        Optional<UserRecipe> existingUserRecipe = userRecipeRepo.getUserRecipeByUserIdAndRecipeIdAndType(
+                userId, recipeId, UserRecipeType.SAVED);
+        
+        if (existingUserRecipe.isPresent()) {
+            logger.info("Recipe with ID {} is already saved for user with ID {}, returning existing entry", recipeId, userId);
+            return userRecipeMapper.toUserRecipeReadDto(existingUserRecipe.get());
+        }
+        
         UserRecipe userRecipe = new UserRecipe();
         userRecipe.setUser(user);
         userRecipe.setRecipe(recipe);
@@ -207,17 +217,44 @@ public class RecipeService implements IRecipeService {
     @Override
     @Transactional(readOnly = true)
     public PaginationResponse<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId, int limit, int offset) {
-        OffsetPage page = new OffsetPage(limit, offset, Sort.by(Sort.Direction.DESC, "savedAt"));
-        Page<UserRecipe> userRecipePage = userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED, page);
-        List<UserRecipeReadDto> userRecipeReadDtos = userRecipePage.getContent().stream()
-                .map(userRecipeMapper::toUserRecipeReadDto)
+        // Fetch all saved recipes for the user
+        List<UserRecipe> allUserRecipes = userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED);
+        
+        // Sort by savedAt DESC to ensure most recent entries come first
+        allUserRecipes.sort((a, b) -> {
+            if (a.getSavedAt() == null && b.getSavedAt() == null) return 0;
+            if (a.getSavedAt() == null) return 1;
+            if (b.getSavedAt() == null) return -1;
+            return b.getSavedAt().compareTo(a.getSavedAt()); // DESC order
+        });
+        
+        // Deduplicate by recipe ID, keeping the most recent entry (first in sorted list)
+        // Use LinkedHashMap to preserve insertion order (most recent first)
+        List<UserRecipeReadDto> deduplicatedRecipes = allUserRecipes.stream()
+                .collect(Collectors.toMap(
+                        ur -> ur.getRecipe().getId(), // Key: recipe ID
+                        userRecipeMapper::toUserRecipeReadDto, // Value: mapped DTO
+                        (existing, replacement) -> existing, // Keep first (most recent) if duplicate
+                        java.util.LinkedHashMap::new // Preserve insertion order
+                ))
+                .values()
+                .stream()
                 .collect(Collectors.toList());
+        
+        // Apply pagination to deduplicated list
+        int totalElements = deduplicatedRecipes.size();
+        int start = Math.min(offset, totalElements);
+        int end = Math.min(offset + limit, totalElements);
+        List<UserRecipeReadDto> paginatedRecipes = start < end 
+                ? deduplicatedRecipes.subList(start, end)
+                : List.of();
+        
         return PaginationResponse.<UserRecipeReadDto>builder()
-                .data(userRecipeReadDtos)
+                .data(paginatedRecipes)
                 .offset(offset)
                 .limit(limit)
-                .totalElements(userRecipePage.getTotalElements())
-                .hasNext(userRecipePage.hasNext())
+                .totalElements((long) totalElements)
+                .hasNext(end < totalElements)
                 .build();
     }
 

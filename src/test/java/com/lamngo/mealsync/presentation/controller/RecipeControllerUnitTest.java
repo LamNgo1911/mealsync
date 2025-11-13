@@ -280,10 +280,7 @@ class RecipeControllerUnitTest {
     }
 
     @Test
-    void detectIngredientsFromText_success() {
-        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
-        request.setTextInput("I have tomatoes, onions, garlic, and chicken breast in my kitchen");
-
+    void validateAndParseIngredientsFromText_success() {
         DetectedIngredientDto tomato = new DetectedIngredientDto();
         tomato.setName("tomato");
         tomato.setQuantity("2");
@@ -301,84 +298,86 @@ class RecipeControllerUnitTest {
         chicken.setQuantity("200");
         chicken.setUnit("grams");
 
-        List<DetectedIngredientDto> ingredients = List.of(tomato, onion, garlic, chicken);
-        when(ingredientDetectionService.detectIngredientsFromText(request.getTextInput())).thenReturn(ingredients);
+        List<DetectedIngredientDto> inputIngredients = List.of(tomato, onion, garlic, chicken);
+        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
+        request.setIngredients(inputIngredients);
+
+        List<DetectedIngredientDto> validatedIngredients = List.of(tomato, onion, garlic, chicken);
+        when(ingredientDetectionService.validateAndParseIngredientsFromText(inputIngredients)).thenReturn(validatedIngredients);
 
         ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> resp = 
-                controller.detectIngredientsFromText(request);
+                controller.validateAndParseIngredientsFromText(request);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
-        assertEquals(ingredients, resp.getBody().getData());
+        assertEquals(validatedIngredients, resp.getBody().getData());
         assertEquals(4, resp.getBody().getData().size());
-        verify(ingredientDetectionService).detectIngredientsFromText(request.getTextInput());
+        verify(ingredientDetectionService).validateAndParseIngredientsFromText(inputIngredients);
     }
 
     @Test
-    void detectIngredientsFromText_emptyText_throwsBadRequestException() {
+    void validateAndParseIngredientsFromText_emptyList_throwsBadRequestException() {
         ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
-        request.setTextInput("");
+        request.setIngredients(List.of());
 
-        assertThrows(BadRequestException.class, () -> controller.detectIngredientsFromText(request));
-        verify(ingredientDetectionService, never()).detectIngredientsFromText(any());
+        assertThrows(BadRequestException.class, () -> controller.validateAndParseIngredientsFromText(request));
+        verify(ingredientDetectionService, never()).validateAndParseIngredientsFromText(any());
     }
 
     @Test
-    void detectIngredientsFromText_nullText_throwsBadRequestException() {
+    void validateAndParseIngredientsFromText_nullList_throwsBadRequestException() {
         ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
-        request.setTextInput(null);
+        request.setIngredients(null);
 
-        assertThrows(BadRequestException.class, () -> controller.detectIngredientsFromText(request));
-        verify(ingredientDetectionService, never()).detectIngredientsFromText(any());
+        assertThrows(BadRequestException.class, () -> controller.validateAndParseIngredientsFromText(request));
+        verify(ingredientDetectionService, never()).validateAndParseIngredientsFromText(any());
     }
 
     @Test
-    void detectIngredientsFromText_whitespaceOnly_throwsBadRequestException() {
-        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
-        request.setTextInput("   ");
+    void validateAndParseIngredientsFromText_emptyResults() {
+        DetectedIngredientDto invalidIngredient = new DetectedIngredientDto();
+        invalidIngredient.setName("xyz123");
+        invalidIngredient.setQuantity("1");
+        invalidIngredient.setUnit("");
 
-        assertThrows(BadRequestException.class, () -> controller.detectIngredientsFromText(request));
-        verify(ingredientDetectionService, never()).detectIngredientsFromText(any());
-    }
-
-    @Test
-    void detectIngredientsFromText_emptyResults() {
+        List<DetectedIngredientDto> inputIngredients = List.of(invalidIngredient);
         ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
-        request.setTextInput("I have nothing in my kitchen");
+        request.setIngredients(inputIngredients);
 
         List<DetectedIngredientDto> emptyIngredients = List.of();
-        when(ingredientDetectionService.detectIngredientsFromText(request.getTextInput())).thenReturn(emptyIngredients);
+        when(ingredientDetectionService.validateAndParseIngredientsFromText(inputIngredients)).thenReturn(emptyIngredients);
 
         ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> resp = 
-                controller.detectIngredientsFromText(request);
+                controller.validateAndParseIngredientsFromText(request);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertTrue(resp.getBody().getData().isEmpty());
-        verify(ingredientDetectionService).detectIngredientsFromText(request.getTextInput());
+        verify(ingredientDetectionService).validateAndParseIngredientsFromText(inputIngredients);
     }
 
     @Test
-    void detectIngredientsFromText_singleIngredient() {
-        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
-        request.setTextInput("I have some beef");
-
+    void validateAndParseIngredientsFromText_singleIngredient() {
         DetectedIngredientDto beef = new DetectedIngredientDto();
         beef.setName("beef");
         beef.setQuantity("200");
         beef.setUnit("grams");
 
-        List<DetectedIngredientDto> ingredients = List.of(beef);
-        when(ingredientDetectionService.detectIngredientsFromText(request.getTextInput())).thenReturn(ingredients);
+        List<DetectedIngredientDto> inputIngredients = List.of(beef);
+        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
+        request.setIngredients(inputIngredients);
+
+        List<DetectedIngredientDto> validatedIngredients = List.of(beef);
+        when(ingredientDetectionService.validateAndParseIngredientsFromText(inputIngredients)).thenReturn(validatedIngredients);
 
         ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> resp = 
-                controller.detectIngredientsFromText(request);
+                controller.validateAndParseIngredientsFromText(request);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertEquals(1, resp.getBody().getData().size());
         assertEquals(beef, resp.getBody().getData().get(0));
-        verify(ingredientDetectionService).detectIngredientsFromText(request.getTextInput());
+        verify(ingredientDetectionService).validateAndParseIngredientsFromText(inputIngredients);
     }
 
     @Test
