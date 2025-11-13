@@ -16,14 +16,20 @@ import static org.mockito.Mockito.*;
 class ImageGeneratorServiceTest {
     private ImageGeneratorService service;
     private WebClient webClient;
+    private PromptLoader promptLoader;
 
     @BeforeEach
     void setUp() {
-        service = new ImageGeneratorService();
+        promptLoader = mock(PromptLoader.class);
+        service = new ImageGeneratorService(promptLoader);
         webClient = mock(WebClient.class);
         ReflectionTestUtils.setField(service, "webClient", webClient);
         ReflectionTestUtils.setField(service, "stabilityApiKey", "dummy");
         ReflectionTestUtils.setField(service, "stabilityApiUrl", "http://dummy.url");
+        
+        // Mock prompt loader to return a simple prompt
+        when(promptLoader.loadAndFormatPrompt(anyString(), any(Map.class)))
+                .thenReturn("Ultra-realistic, high-resolution DSLR food photo");
     }
 
     @Test

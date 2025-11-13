@@ -18,6 +18,7 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -51,6 +53,11 @@ public class AIRecipeService {
     private final ImageGeneratorService imageGeneratorService;
     private final S3Service s3Service;
     private final PromptLoader promptLoader;
+    
+    // Cache for all recipes to avoid repeated database queries
+    private volatile List<Recipe> cachedAllRecipes = null;
+    private volatile long cacheTimestamp = 0;
+    private static final long CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
 
     // Remove IRecipeIngredient if it's unused in the constructor
     public AIRecipeService(
@@ -87,14 +94,10 @@ public class AIRecipeService {
             List<RecipeReadDto> recipeDtos = fetchRecipesFromOpenAI(ingredients, userPreference);
             logger.info("Successfully fetched {} recipes from OpenAI", recipeDtos.size());
 
+            // Generate images asynchronously - don't block the response
+            // Images will be added in the background
             for (RecipeReadDto dto : recipeDtos) {
-                try {
-                    addImageToRecipe(dto);
-                    logger.debug("Successfully added image to recipe: {}", dto.getName());
-                } catch (Exception e) {
-                    logger.error("Failed to add image to recipe {}: {}", dto.getName(), e.getMessage(), e);
-                    // Continue with other recipes even if one fails
-                }
+                addImageToRecipeAsync(dto);
             }
 
             return recipeDtos;
@@ -442,29 +445,49 @@ public class AIRecipeService {
     /**
      * Finds a similar recipe in the database by name.
      * Returns the most similar recipe if similarity is >= 0.9 (90%), otherwise returns empty.
+     * Uses cached recipe list for better performance.
      */
     private Optional<Recipe> findSimilarRecipe(String recipeName) {
         if (recipeName == null || recipeName.trim().isEmpty()) {
             return Optional.empty();
         }
         
-        List<Recipe> allRecipes = recipeRepo.findAllRecipes();
+        List<Recipe> allRecipes = getCachedAllRecipes();
         if (allRecipes.isEmpty()) {
             return Optional.empty();
         }
         
+        String normalizedName = recipeName.toLowerCase().trim();
         double maxSimilarity = 0.0;
         Recipe mostSimilarRecipe = null;
         
+        // Early exit optimization: if exact match found, return immediately
         for (Recipe recipe : allRecipes) {
             if (recipe.getName() == null) {
                 continue;
             }
             
-            double similarity = calculateSimilarity(recipeName, recipe.getName());
+            String recipeNameLower = recipe.getName().toLowerCase().trim();
+            if (normalizedName.equals(recipeNameLower)) {
+                logger.info("Found exact match for recipe '{}'", recipeName);
+                return Optional.of(recipe);
+            }
+            
+            // Only calculate similarity if names are similar length (optimization)
+            int lengthDiff = Math.abs(normalizedName.length() - recipeNameLower.length());
+            if (lengthDiff > normalizedName.length() * 0.3) {
+                continue; // Skip if length difference is too large
+            }
+            
+            double similarity = calculateSimilarity(normalizedName, recipeNameLower);
             if (similarity > maxSimilarity) {
                 maxSimilarity = similarity;
                 mostSimilarRecipe = recipe;
+                
+                // Early exit if we found a perfect match
+                if (maxSimilarity >= 1.0) {
+                    break;
+                }
             }
         }
         
@@ -476,5 +499,38 @@ public class AIRecipeService {
         }
         
         return Optional.empty();
+    }
+    
+    /**
+     * Gets cached list of all recipes, refreshing if cache is stale.
+     */
+    private List<Recipe> getCachedAllRecipes() {
+        long currentTime = System.currentTimeMillis();
+        if (cachedAllRecipes == null || (currentTime - cacheTimestamp) > CACHE_TTL_MS) {
+            synchronized (this) {
+                // Double-check locking pattern
+                if (cachedAllRecipes == null || (currentTime - cacheTimestamp) > CACHE_TTL_MS) {
+                    logger.debug("Refreshing cached recipes list");
+                    cachedAllRecipes = recipeRepo.findAllRecipes();
+                    cacheTimestamp = currentTime;
+                }
+            }
+        }
+        return cachedAllRecipes;
+    }
+    
+    /**
+     * Adds image to recipe asynchronously without blocking the response.
+     */
+    @Async("taskExecutor")
+    public CompletableFuture<Void> addImageToRecipeAsync(RecipeReadDto dto) {
+        try {
+            addImageToRecipe(dto);
+            logger.debug("Successfully added image to recipe asynchronously: {}", dto.getName());
+            return CompletableFuture.completedFuture(null);
+        } catch (Exception e) {
+            logger.error("Failed to add image to recipe {} asynchronously: {}", dto.getName(), e.getMessage(), e);
+            return CompletableFuture.failedFuture(e);
+        }
     }
 }

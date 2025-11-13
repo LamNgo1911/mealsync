@@ -19,6 +19,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import okhttp3.ConnectionPool;
 
 /**
  * Service for detecting raw ingredients from images using OpenAI Vision API.
@@ -38,12 +39,46 @@ public class IngredientDetectionService {
     private static final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
+            .connectionPool(new ConnectionPool(10, 5, TimeUnit.MINUTES)) // Optimize connection pooling
+            .retryOnConnectionFailure(true)
             .build();
     
     private final PromptLoader promptLoader;
     
+    // Cache prompts to avoid repeated file I/O
+    private volatile String cachedValidationPrompt = null;
+    private volatile String cachedImageDetectionPrompt = null;
+    
     public IngredientDetectionService(PromptLoader promptLoader) {
         this.promptLoader = promptLoader;
+    }
+    
+    /**
+     * Gets the validation prompt, loading from cache if available.
+     */
+    private String getValidationPrompt() {
+        if (cachedValidationPrompt == null) {
+            synchronized (this) {
+                if (cachedValidationPrompt == null) {
+                    cachedValidationPrompt = promptLoader.loadPrompt("ingredient-validation.txt");
+                }
+            }
+        }
+        return cachedValidationPrompt;
+    }
+    
+    /**
+     * Gets the image detection prompt, loading from cache if available.
+     */
+    private String getImageDetectionPrompt() {
+        if (cachedImageDetectionPrompt == null) {
+            synchronized (this) {
+                if (cachedImageDetectionPrompt == null) {
+                    cachedImageDetectionPrompt = promptLoader.loadPrompt("ingredient-detection-image.txt");
+                }
+            }
+        }
+        return cachedImageDetectionPrompt;
     }
 
     /**
@@ -106,19 +141,22 @@ public class IngredientDetectionService {
                 throw new AIServiceException("OpenAI API configuration error");
             }
 
-            // Convert ingredients list to JSON for the prompt
-            JSONArray ingredientsJsonArray = new JSONArray();
+            // Convert ingredients list to JSON for the prompt (optimized)
+            JSONArray ingredientsJsonArray = new JSONArray(ingredients.size());
             for (DetectedIngredientDto ingredient : ingredients) {
                 JSONObject ingObj = new JSONObject();
-                ingObj.put("name", ingredient.getName() != null ? ingredient.getName() : "");
-                ingObj.put("quantity", ingredient.getQuantity() != null ? ingredient.getQuantity() : "");
-                ingObj.put("unit", ingredient.getUnit() != null ? ingredient.getUnit() : "");
+                String name = ingredient.getName();
+                String quantity = ingredient.getQuantity();
+                String unit = ingredient.getUnit();
+                ingObj.put("name", name != null ? name : "");
+                ingObj.put("quantity", quantity != null ? quantity : "");
+                ingObj.put("unit", unit != null ? unit : "");
                 ingredientsJsonArray.put(ingObj);
             }
             String ingredientsJsonString = ingredientsJsonArray.toString();
 
-            // Load the ingredient validation prompt
-            String prompt = promptLoader.loadPrompt("ingredient-validation.txt");
+            // Get cached validation prompt
+            String prompt = getValidationPrompt();
 
             // Construct the OpenAI Request Body
             JSONObject requestBody = new JSONObject();
@@ -180,7 +218,8 @@ public class IngredientDetectionService {
                     }
 
                     JSONArray ingredientsArray = contentObject.getJSONArray("ingredients");
-                    List<DetectedIngredientDto> validatedIngredients = new ArrayList<>();
+                    // Pre-size ArrayList to avoid resizing
+                    List<DetectedIngredientDto> validatedIngredients = new ArrayList<>(ingredientsArray.length());
                     int skippedCount = 0;
 
                     for (int i = 0; i < ingredientsArray.length(); i++) {
@@ -245,13 +284,13 @@ public class IngredientDetectionService {
             }
 
             // Prepare Base64 Image Data
-            String base64Image = Base64.getEncoder().encodeToString(imageFile.getBytes());
+            byte[] imageBytes = imageFile.getBytes();
+            String base64Image = Base64.getEncoder().encodeToString(imageBytes);
             String mimeType = Optional.ofNullable(imageFile.getContentType())
                     .orElse(MimeTypeUtils.IMAGE_JPEG_VALUE);
 
-            // Prompt for ingredient detection with quantities and units
-            // Load the ingredient detection from image prompt
-            String prompt = promptLoader.loadPrompt("ingredient-detection-image.txt");
+            // Get cached image detection prompt
+            String prompt = getImageDetectionPrompt();
 
             // Construct the OpenAI Multimodal Request Body
             JSONObject requestBody = new JSONObject();
@@ -314,7 +353,8 @@ public class IngredientDetectionService {
                     }
 
                     JSONArray ingredientsArray = contentObject.getJSONArray("ingredients");
-                    List<DetectedIngredientDto> ingredients = new ArrayList<>();
+                    // Pre-size ArrayList to avoid resizing
+                    List<DetectedIngredientDto> ingredients = new ArrayList<>(ingredientsArray.length());
                     int skippedCount = 0;
 
                     for (int i = 0; i < ingredientsArray.length(); i++) {
