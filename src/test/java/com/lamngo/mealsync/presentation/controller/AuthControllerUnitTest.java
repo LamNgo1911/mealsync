@@ -6,11 +6,11 @@ import com.lamngo.mealsync.application.mapper.user.UserMapper;
 import com.lamngo.mealsync.application.service.auth.AuthService;
 import com.lamngo.mealsync.application.service.auth.GoogleVerifierService;
 import com.lamngo.mealsync.application.service.auth.RefreshTokenService;
-import com.lamngo.mealsync.domain.model.user.RefreshToken;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.model.user.UserRole;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
 import com.lamngo.mealsync.infrastructure.security.JwtTokenProvider;
+import com.lamngo.mealsync.presentation.error.BadRequestException;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -108,5 +108,74 @@ class AuthControllerUnitTest {
         when(googleVerifierService.verify("invalid_token")).thenReturn(null);
         Exception ex = assertThrows(RuntimeException.class, () -> authController.googleLogin(tokenDto));
         assertTrue(ex.getMessage().contains("Invalid Google ID token"));
+    }
+
+    @Test
+    void refresh_success() {
+        RefreshTokenRequestDto requestDto = new RefreshTokenRequestDto();
+        requestDto.setRefreshToken("valid_refresh_token");
+
+        UserInfoDto userInfoDto = new UserInfoDto();
+        userInfoDto.setId(UUID.randomUUID().toString());
+        userInfoDto.setEmail("test@example.com");
+        userInfoDto.setName("Test User");
+        userInfoDto.setToken("new_access_token");
+        RefreshTokenReadDto refreshTokenReadDto = new RefreshTokenReadDto();
+        userInfoDto.setRefreshToken(refreshTokenReadDto);
+
+        when(authService.refreshToken("valid_refresh_token")).thenReturn(userInfoDto);
+
+        ResponseEntity<SuccessResponseEntity<UserInfoDto>> response = authController.refresh(requestDto);
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertNotNull(response.getBody());
+        UserInfoDto result = response.getBody().getData();
+        assertEquals("test@example.com", result.getEmail());
+        assertEquals("Test User", result.getName());
+        assertEquals("new_access_token", result.getToken());
+        assertNotNull(result.getRefreshToken());
+        verify(authService).refreshToken("valid_refresh_token");
+    }
+
+    @Test
+    void refresh_invalidToken() {
+        RefreshTokenRequestDto requestDto = new RefreshTokenRequestDto();
+        requestDto.setRefreshToken("invalid_refresh_token");
+
+        when(authService.refreshToken("invalid_refresh_token"))
+                .thenThrow(new BadRequestException("Refresh token is not valid"));
+
+        BadRequestException exception = assertThrows(BadRequestException.class, 
+                () -> authController.refresh(requestDto));
+        assertEquals("Refresh token is not valid", exception.getMessage());
+        verify(authService).refreshToken("invalid_refresh_token");
+    }
+
+    @Test
+    void refresh_expiredToken() {
+        RefreshTokenRequestDto requestDto = new RefreshTokenRequestDto();
+        requestDto.setRefreshToken("expired_refresh_token");
+
+        when(authService.refreshToken("expired_refresh_token"))
+                .thenThrow(new BadRequestException("Refresh token is expired"));
+
+        BadRequestException exception = assertThrows(BadRequestException.class, 
+                () -> authController.refresh(requestDto));
+        assertEquals("Refresh token is expired", exception.getMessage());
+        verify(authService).refreshToken("expired_refresh_token");
+    }
+
+    @Test
+    void refresh_revokedToken() {
+        RefreshTokenRequestDto requestDto = new RefreshTokenRequestDto();
+        requestDto.setRefreshToken("revoked_refresh_token");
+
+        when(authService.refreshToken("revoked_refresh_token"))
+                .thenThrow(new BadRequestException("Refresh token has been revoked"));
+
+        BadRequestException exception = assertThrows(BadRequestException.class, 
+                () -> authController.refresh(requestDto));
+        assertEquals("Refresh token has been revoked", exception.getMessage());
+        verify(authService).refreshToken("revoked_refresh_token");
     }
 }

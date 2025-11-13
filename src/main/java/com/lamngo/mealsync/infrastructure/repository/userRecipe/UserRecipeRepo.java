@@ -1,8 +1,10 @@
 package com.lamngo.mealsync.infrastructure.repository.userRecipe;
 
+import com.lamngo.mealsync.application.shared.OffsetPage;
 import com.lamngo.mealsync.domain.model.UserRecipe;
 import com.lamngo.mealsync.domain.model.UserRecipeType;
 import com.lamngo.mealsync.domain.repository.IUserRecipeRepo;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -28,8 +30,18 @@ public class UserRecipeRepo implements IUserRecipeRepo {
     }
 
     @Override
+    public Page<UserRecipe> getUserRecipesByUserId(UUID userId, OffsetPage pageable) {
+        return userRecipeJpaRepo.findAllByUserId(userId, pageable);
+    }
+
+    @Override
     public List<UserRecipe> getUserRecipesByUserIdAndType(UUID userId, UserRecipeType type) {
         return userRecipeJpaRepo.findAllByUserIdAndType(userId, type);
+    }
+
+    @Override
+    public Page<UserRecipe> getUserRecipesByUserIdAndType(UUID userId, UserRecipeType type, OffsetPage pageable) {
+        return userRecipeJpaRepo.findAllByUserIdAndType(userId, type, pageable);
     }
 
     @Override

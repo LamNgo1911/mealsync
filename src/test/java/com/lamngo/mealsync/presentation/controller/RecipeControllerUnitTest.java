@@ -115,17 +115,26 @@ class RecipeControllerUnitTest {
         UserRecipeReadDto savedRecipe2 = new UserRecipeReadDto();
         savedRecipe2.setId(UUID.randomUUID());
 
-        List<UserRecipeReadDto> savedRecipes = List.of(savedRecipe1, savedRecipe2);
-        when(recipeService.getSavedRecipesByUserId(userId, 6)).thenReturn(savedRecipes);
+        PaginationResponse<UserRecipeReadDto> paginationResponse = PaginationResponse.<UserRecipeReadDto>builder()
+                .data(List.of(savedRecipe1, savedRecipe2))
+                .offset(0)
+                .limit(6)
+                .totalElements(2L)
+                .hasNext(false)
+                .build();
+        when(recipeService.getSavedRecipesByUserId(userId, 6, 0)).thenReturn(paginationResponse);
 
-        ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> resp =
-                controller.getSavedRecipes(user, 6);
+        ResponseEntity<PaginationResponse<UserRecipeReadDto>> resp =
+                controller.getSavedRecipes(user, 0, 6);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertEquals(2, resp.getBody().getData().size());
-        assertEquals(savedRecipes, resp.getBody().getData());
-        verify(recipeService).getSavedRecipesByUserId(userId, 6);
+        assertEquals(0, resp.getBody().getOffset());
+        assertEquals(6, resp.getBody().getLimit());
+        assertEquals(2L, resp.getBody().getTotalElements());
+        assertEquals(false, resp.getBody().isHasNext());
+        verify(recipeService).getSavedRecipesByUserId(userId, 6, 0);
     }
 
     @Test
@@ -134,16 +143,23 @@ class RecipeControllerUnitTest {
         UUID userId = UUID.randomUUID();
         when(user.getId()).thenReturn(userId);
 
-        List<UserRecipeReadDto> emptyList = List.of();
-        when(recipeService.getSavedRecipesByUserId(userId, 6)).thenReturn(emptyList);
+        PaginationResponse<UserRecipeReadDto> paginationResponse = PaginationResponse.<UserRecipeReadDto>builder()
+                .data(List.of())
+                .offset(0)
+                .limit(6)
+                .totalElements(0L)
+                .hasNext(false)
+                .build();
+        when(recipeService.getSavedRecipesByUserId(userId, 6, 0)).thenReturn(paginationResponse);
 
-        ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> resp =
-                controller.getSavedRecipes(user, 6);
+        ResponseEntity<PaginationResponse<UserRecipeReadDto>> resp =
+                controller.getSavedRecipes(user, 0, 6);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertTrue(resp.getBody().getData().isEmpty());
-        verify(recipeService).getSavedRecipesByUserId(userId, 6);
+        assertEquals(0L, resp.getBody().getTotalElements());
+        verify(recipeService).getSavedRecipesByUserId(userId, 6, 0);
     }
 
     @Test
@@ -264,6 +280,108 @@ class RecipeControllerUnitTest {
     }
 
     @Test
+    void detectIngredientsFromText_success() {
+        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
+        request.setTextInput("I have tomatoes, onions, garlic, and chicken breast in my kitchen");
+
+        DetectedIngredientDto tomato = new DetectedIngredientDto();
+        tomato.setName("tomato");
+        tomato.setQuantity("2");
+        tomato.setUnit("pieces");
+        DetectedIngredientDto onion = new DetectedIngredientDto();
+        onion.setName("onion");
+        onion.setQuantity("1");
+        onion.setUnit("piece");
+        DetectedIngredientDto garlic = new DetectedIngredientDto();
+        garlic.setName("garlic");
+        garlic.setQuantity("3");
+        garlic.setUnit("cloves");
+        DetectedIngredientDto chicken = new DetectedIngredientDto();
+        chicken.setName("chicken breast");
+        chicken.setQuantity("200");
+        chicken.setUnit("grams");
+
+        List<DetectedIngredientDto> ingredients = List.of(tomato, onion, garlic, chicken);
+        when(ingredientDetectionService.detectIngredientsFromText(request.getTextInput())).thenReturn(ingredients);
+
+        ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> resp = 
+                controller.detectIngredientsFromText(request);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertEquals(ingredients, resp.getBody().getData());
+        assertEquals(4, resp.getBody().getData().size());
+        verify(ingredientDetectionService).detectIngredientsFromText(request.getTextInput());
+    }
+
+    @Test
+    void detectIngredientsFromText_emptyText_throwsBadRequestException() {
+        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
+        request.setTextInput("");
+
+        assertThrows(BadRequestException.class, () -> controller.detectIngredientsFromText(request));
+        verify(ingredientDetectionService, never()).detectIngredientsFromText(any());
+    }
+
+    @Test
+    void detectIngredientsFromText_nullText_throwsBadRequestException() {
+        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
+        request.setTextInput(null);
+
+        assertThrows(BadRequestException.class, () -> controller.detectIngredientsFromText(request));
+        verify(ingredientDetectionService, never()).detectIngredientsFromText(any());
+    }
+
+    @Test
+    void detectIngredientsFromText_whitespaceOnly_throwsBadRequestException() {
+        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
+        request.setTextInput("   ");
+
+        assertThrows(BadRequestException.class, () -> controller.detectIngredientsFromText(request));
+        verify(ingredientDetectionService, never()).detectIngredientsFromText(any());
+    }
+
+    @Test
+    void detectIngredientsFromText_emptyResults() {
+        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
+        request.setTextInput("I have nothing in my kitchen");
+
+        List<DetectedIngredientDto> emptyIngredients = List.of();
+        when(ingredientDetectionService.detectIngredientsFromText(request.getTextInput())).thenReturn(emptyIngredients);
+
+        ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> resp = 
+                controller.detectIngredientsFromText(request);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertTrue(resp.getBody().getData().isEmpty());
+        verify(ingredientDetectionService).detectIngredientsFromText(request.getTextInput());
+    }
+
+    @Test
+    void detectIngredientsFromText_singleIngredient() {
+        ManualIngredientDetectionRequest request = new ManualIngredientDetectionRequest();
+        request.setTextInput("I have some beef");
+
+        DetectedIngredientDto beef = new DetectedIngredientDto();
+        beef.setName("beef");
+        beef.setQuantity("200");
+        beef.setUnit("grams");
+
+        List<DetectedIngredientDto> ingredients = List.of(beef);
+        when(ingredientDetectionService.detectIngredientsFromText(request.getTextInput())).thenReturn(ingredients);
+
+        ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> resp = 
+                controller.detectIngredientsFromText(request);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertEquals(1, resp.getBody().getData().size());
+        assertEquals(beef, resp.getBody().getData().get(0));
+        verify(ingredientDetectionService).detectIngredientsFromText(request.getTextInput());
+    }
+
+    @Test
     void getTodayPicks_success() {
         User user = mock(User.class);
         UUID userId = UUID.randomUUID();
@@ -342,17 +460,26 @@ class RecipeControllerUnitTest {
         recipe2.setId(UUID.randomUUID());
         recipe2.setName("Recent Recipe 2");
 
-        List<RecipeReadDto> recentRecipes = List.of(recipe1, recipe2);
-        when(recipeService.getRecentGeneratedRecipes(userId, 6)).thenReturn(recentRecipes);
+        PaginationResponse<RecipeReadDto> paginationResponse = PaginationResponse.<RecipeReadDto>builder()
+                .data(List.of(recipe1, recipe2))
+                .offset(0)
+                .limit(6)
+                .totalElements(2L)
+                .hasNext(false)
+                .build();
+        when(recipeService.getRecentGeneratedRecipes(userId, 6, 0)).thenReturn(paginationResponse);
 
-        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp =
-                controller.getRecentGeneratedRecipes(user, 6);
+        ResponseEntity<PaginationResponse<RecipeReadDto>> resp =
+                controller.getRecentGeneratedRecipes(user, 0, 6);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertEquals(2, resp.getBody().getData().size());
-        assertEquals(recentRecipes, resp.getBody().getData());
-        verify(recipeService).getRecentGeneratedRecipes(userId, 6);
+        assertEquals(0, resp.getBody().getOffset());
+        assertEquals(6, resp.getBody().getLimit());
+        assertEquals(2L, resp.getBody().getTotalElements());
+        assertEquals(false, resp.getBody().isHasNext());
+        verify(recipeService).getRecentGeneratedRecipes(userId, 6, 0);
     }
 
     @Test
@@ -361,16 +488,23 @@ class RecipeControllerUnitTest {
         UUID userId = UUID.randomUUID();
         when(user.getId()).thenReturn(userId);
 
-        List<RecipeReadDto> emptyList = List.of();
-        when(recipeService.getRecentGeneratedRecipes(userId, 6)).thenReturn(emptyList);
+        PaginationResponse<RecipeReadDto> paginationResponse = PaginationResponse.<RecipeReadDto>builder()
+                .data(List.of())
+                .offset(0)
+                .limit(6)
+                .totalElements(0L)
+                .hasNext(false)
+                .build();
+        when(recipeService.getRecentGeneratedRecipes(userId, 6, 0)).thenReturn(paginationResponse);
 
-        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp =
-                controller.getRecentGeneratedRecipes(user, 6);
+        ResponseEntity<PaginationResponse<RecipeReadDto>> resp =
+                controller.getRecentGeneratedRecipes(user, 0, 6);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertTrue(resp.getBody().getData().isEmpty());
-        verify(recipeService).getRecentGeneratedRecipes(userId, 6);
+        assertEquals(0L, resp.getBody().getTotalElements());
+        verify(recipeService).getRecentGeneratedRecipes(userId, 6, 0);
     }
 
     @Test
@@ -379,16 +513,23 @@ class RecipeControllerUnitTest {
         UUID userId = UUID.randomUUID();
         when(user.getId()).thenReturn(userId);
 
-        List<RecipeReadDto> recipes = List.of(new RecipeReadDto(), new RecipeReadDto());
-        when(recipeService.getRecentGeneratedRecipes(userId, 20)).thenReturn(recipes);
+        PaginationResponse<RecipeReadDto> paginationResponse = PaginationResponse.<RecipeReadDto>builder()
+                .data(List.of(new RecipeReadDto(), new RecipeReadDto()))
+                .offset(0)
+                .limit(20)
+                .totalElements(2L)
+                .hasNext(false)
+                .build();
+        when(recipeService.getRecentGeneratedRecipes(userId, 20, 0)).thenReturn(paginationResponse);
 
-        ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp =
-                controller.getRecentGeneratedRecipes(user, 20);
+        ResponseEntity<PaginationResponse<RecipeReadDto>> resp =
+                controller.getRecentGeneratedRecipes(user, 0, 20);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertEquals(2, resp.getBody().getData().size());
-        verify(recipeService).getRecentGeneratedRecipes(userId, 20);
+        assertEquals(20, resp.getBody().getLimit());
+        verify(recipeService).getRecentGeneratedRecipes(userId, 20, 0);
     }
 
     @Test

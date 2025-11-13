@@ -143,8 +143,16 @@ public class AIRecipeService {
                             "dietary restrictions: " + userPreference.getDietaryRestrictions() + ", " +
                             "favorite cuisines: " + userPreference.getFavoriteCuisines() + ", " +
                             "disliked ingredients: " + userPreference.getDislikedIngredients() + ". " +
+                            "RECIPE SELECTION STRATEGY: " +
+                            "1. Prioritize well-known, popular, and commonly made recipes that use these ingredients. " +
+                            "2. Choose classic, recognizable dishes that home cooks would be familiar with (e.g., stir-fries, pasta dishes, soups, salads, simple roasts, one-pot meals). " +
+                            "3. Recognize common ingredient combinations and suggest the most popular dishes for them (e.g., tomatoes+basil+mozzarella → Caprese salad or Margherita pizza; chicken+rice+vegetables → fried rice or chicken stir-fry). " +
+                            "4. Prioritize practical recipes with reasonable cooking times (under 60 minutes total time) unless the ingredients specifically require longer cooking. " +
+                            "5. Ensure diversity between the 2 recipes - make them different styles (e.g., one quick meal, one more elaborate; one warm dish, one cold dish; different cuisines). " +
+                            "6. Avoid obscure or overly experimental recipes - focus on dishes that are proven, popular, and achievable for home cooking. " +
                             "Generate exactly 2 creative and realistic recipes that comply fully with these preferences " +
                             "and utilize the detected ingredients as the primary base. " +
+                            "The recipes should be practical, well-known dishes that home cooks would recognize and want to make. " +
                             "Respond ONLY with a valid JSON object with a 'recipes' array containing exactly 2 recipe objects, with no extra commentary. " +
                             "The JSON structure must be:\n" +
                             "{ \"recipes\": [ recipe1, recipe2 ] }\n" +

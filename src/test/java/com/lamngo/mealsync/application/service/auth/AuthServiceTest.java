@@ -16,7 +16,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
@@ -216,5 +215,16 @@ class AuthServiceTest {
         when(refreshTokenService.verifyExpiration(refreshToken)).thenReturn(false);
         BadRequestException exception = assertThrows(BadRequestException.class, () -> authService.refreshToken("expiredToken"));
         assertEquals("Refresh token is expired", exception.getMessage());
+    }
+
+    @Test
+    void refreshToken_shouldThrowException_whenTokenIsRevoked() {
+        RefreshToken refreshToken = new RefreshToken();
+        refreshToken.setRevoked(true);
+        when(refreshTokenRepo.findByToken(any())).thenReturn(refreshToken);
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> authService.refreshToken("revokedToken"));
+        assertEquals("Refresh token has been revoked", exception.getMessage());
+        // Should not call verifyExpiration if token is revoked
+        verify(refreshTokenService, never()).verifyExpiration(any());
     }
 }

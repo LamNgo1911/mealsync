@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -205,13 +206,19 @@ public class RecipeService implements IRecipeService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId, int limit) {
-        List<UserRecipe> userRecipes = userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED);
-
-        return userRecipes.stream()
-                .limit(limit)
+    public PaginationResponse<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId, int limit, int offset) {
+        OffsetPage page = new OffsetPage(limit, offset, Sort.by(Sort.Direction.DESC, "savedAt"));
+        Page<UserRecipe> userRecipePage = userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED, page);
+        List<UserRecipeReadDto> userRecipeReadDtos = userRecipePage.getContent().stream()
                 .map(userRecipeMapper::toUserRecipeReadDto)
-                .toList();
+                .collect(Collectors.toList());
+        return PaginationResponse.<UserRecipeReadDto>builder()
+                .data(userRecipeReadDtos)
+                .offset(offset)
+                .limit(limit)
+                .totalElements(userRecipePage.getTotalElements())
+                .hasNext(userRecipePage.hasNext())
+                .build();
     }
 
     @Override
@@ -277,15 +284,21 @@ public class RecipeService implements IRecipeService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<RecipeReadDto> getRecentGeneratedRecipes(UUID userId, int limit) {
+    public PaginationResponse<RecipeReadDto> getRecentGeneratedRecipes(UUID userId, int limit, int offset) {
         logger.info("Getting recent generated recipes for user with ID: {}", userId);
-        List<UserRecipe> userRecipes = userRecipeRepo.getUserRecipesByUserId(userId);
-
-        return userRecipes.stream()
-                .filter(ur -> ur.getType() == UserRecipeType.GENERATED)
-                .sorted((ur1, ur2) -> ur2.getSavedAt().compareTo(ur1.getSavedAt())) // Sort by most recent first
-                .limit(limit)
+        OffsetPage page = new OffsetPage(limit, offset, Sort.by(Sort.Direction.DESC, "savedAt"));
+        Page<UserRecipe> userRecipePage = userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.GENERATED, page);
+        
+        List<RecipeReadDto> recipeReadDtos = userRecipePage.getContent().stream()
                 .map(ur -> recipeMapper.toRecipeReadDto(ur.getRecipe()))
-                .toList();
+                .collect(Collectors.toList());
+        
+        return PaginationResponse.<RecipeReadDto>builder()
+                .data(recipeReadDtos)
+                .offset(offset)
+                .limit(limit)
+                .totalElements(userRecipePage.getTotalElements())
+                .hasNext(userRecipePage.hasNext())
+                .build();
     }
 }

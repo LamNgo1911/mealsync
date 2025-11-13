@@ -180,31 +180,29 @@ public class RecipeController {
 
     @GetMapping("/saved")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SuccessResponseEntity<List<UserRecipeReadDto>>> getSavedRecipes(
+    public ResponseEntity<PaginationResponse<UserRecipeReadDto>> getSavedRecipes(
             @AuthenticationPrincipal User user,
+            @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "6") int limit) {
 
         UUID userId = user.getId();
-        List<UserRecipeReadDto> savedRecipes = recipeService.getSavedRecipesByUserId(userId, limit);
+        PaginationResponse<UserRecipeReadDto> savedRecipes = recipeService.getSavedRecipesByUserId(userId, limit, offset);
 
-        SuccessResponseEntity<List<UserRecipeReadDto>> body = new SuccessResponseEntity<>();
-        body.setData(savedRecipes);
-        return ResponseEntity.ok(body);
+        return ResponseEntity.ok(savedRecipes);
     }
 
     @GetMapping("/recent")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> getRecentGeneratedRecipes(
+    public ResponseEntity<PaginationResponse<RecipeReadDto>> getRecentGeneratedRecipes(
             @AuthenticationPrincipal User user,
+            @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "6") int limit) {
 
         logger.info("Getting recent generated recipes for user: {}", user.getId());
         UUID userId = user.getId();
-        List<RecipeReadDto> recentRecipes = recipeService.getRecentGeneratedRecipes(userId, limit);
+        PaginationResponse<RecipeReadDto> recentRecipes = recipeService.getRecentGeneratedRecipes(userId, limit, offset);
 
-        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
-        body.setData(recentRecipes);
-        return ResponseEntity.ok(body);
+        return ResponseEntity.ok(recentRecipes);
     }
 
     @GetMapping("/{id}")

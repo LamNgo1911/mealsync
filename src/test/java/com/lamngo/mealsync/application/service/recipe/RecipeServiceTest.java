@@ -299,10 +299,10 @@ class RecipeServiceTest {
     void getRecentGeneratedRecipes_success() {
         UUID userId = UUID.randomUUID();
         int limit = 5;
+        int offset = 0;
 
         Recipe recipe1 = mock(Recipe.class);
         Recipe recipe2 = mock(Recipe.class);
-        Recipe recipe3 = mock(Recipe.class);
 
         UserRecipe userRecipe1 = new UserRecipe();
         userRecipe1.setRecipe(recipe1);
@@ -314,68 +314,81 @@ class RecipeServiceTest {
         userRecipe2.setType(UserRecipeType.GENERATED);
         userRecipe2.setSavedAt(LocalDateTime.now().minusHours(2));
 
-        UserRecipe userRecipe3 = new UserRecipe();
-        userRecipe3.setRecipe(recipe3);
-        userRecipe3.setType(UserRecipeType.SAVED);
-        userRecipe3.setSavedAt(LocalDateTime.now().minusMinutes(30));
-
-        List<UserRecipe> userRecipes = List.of(userRecipe1, userRecipe2, userRecipe3);
+        List<UserRecipe> userRecipes = List.of(userRecipe1, userRecipe2);
+        Page<UserRecipe> userRecipePage = mock(Page.class);
 
         RecipeReadDto readDto1 = mock(RecipeReadDto.class);
         RecipeReadDto readDto2 = mock(RecipeReadDto.class);
 
-        when(userRecipeRepo.getUserRecipesByUserId(userId)).thenReturn(userRecipes);
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED), any(OffsetPage.class)))
+                .thenReturn(userRecipePage);
+        when(userRecipePage.getContent()).thenReturn(userRecipes);
+        when(userRecipePage.getTotalElements()).thenReturn(2L);
+        when(userRecipePage.hasNext()).thenReturn(false);
         when(recipeMapper.toRecipeReadDto(recipe1)).thenReturn(readDto1);
         when(recipeMapper.toRecipeReadDto(recipe2)).thenReturn(readDto2);
 
-        List<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit);
+        PaginationResponse<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit, offset);
 
         // Should only return GENERATED type recipes, sorted by most recent first
-        assertEquals(2, result.size());
-        assertEquals(readDto1, result.get(0)); // Most recent
-        assertEquals(readDto2, result.get(1));
-        verify(userRecipeRepo).getUserRecipesByUserId(userId);
+        assertEquals(2, result.getData().size());
+        assertEquals(readDto1, result.getData().get(0)); // Most recent
+        assertEquals(readDto2, result.getData().get(1));
+        assertEquals(0, result.getOffset());
+        assertEquals(5, result.getLimit());
+        assertEquals(2L, result.getTotalElements());
+        assertEquals(false, result.isHasNext());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED), any(OffsetPage.class));
     }
 
     @Test
     void getRecentGeneratedRecipes_emptyList() {
         UUID userId = UUID.randomUUID();
         int limit = 10;
+        int offset = 0;
 
-        when(userRecipeRepo.getUserRecipesByUserId(userId)).thenReturn(Collections.emptyList());
+        Page<UserRecipe> userRecipePage = mock(Page.class);
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED), any(OffsetPage.class)))
+                .thenReturn(userRecipePage);
+        when(userRecipePage.getContent()).thenReturn(Collections.emptyList());
+        when(userRecipePage.getTotalElements()).thenReturn(0L);
+        when(userRecipePage.hasNext()).thenReturn(false);
 
-        List<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit);
+        PaginationResponse<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit, offset);
 
-        assertTrue(result.isEmpty());
-        verify(userRecipeRepo).getUserRecipesByUserId(userId);
+        assertTrue(result.getData().isEmpty());
+        assertEquals(0L, result.getTotalElements());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED), any(OffsetPage.class));
     }
 
     @Test
     void getRecentGeneratedRecipes_onlySavedRecipes() {
         UUID userId = UUID.randomUUID();
         int limit = 10;
+        int offset = 0;
 
-        Recipe recipe = mock(Recipe.class);
-        UserRecipe userRecipe = new UserRecipe();
-        userRecipe.setRecipe(recipe);
-        userRecipe.setType(UserRecipeType.SAVED);
-        userRecipe.setSavedAt(LocalDateTime.now());
+        Page<UserRecipe> userRecipePage = mock(Page.class);
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED), any(OffsetPage.class)))
+                .thenReturn(userRecipePage);
+        when(userRecipePage.getContent()).thenReturn(Collections.emptyList());
+        when(userRecipePage.getTotalElements()).thenReturn(0L);
+        when(userRecipePage.hasNext()).thenReturn(false);
 
-        when(userRecipeRepo.getUserRecipesByUserId(userId)).thenReturn(List.of(userRecipe));
+        PaginationResponse<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit, offset);
 
-        List<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit);
-
-        assertTrue(result.isEmpty());
-        verify(userRecipeRepo).getUserRecipesByUserId(userId);
+        assertTrue(result.getData().isEmpty());
+        assertEquals(0L, result.getTotalElements());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED), any(OffsetPage.class));
     }
 
     @Test
     void getRecentGeneratedRecipes_respectsLimit() {
         UUID userId = UUID.randomUUID();
         int limit = 2;
+        int offset = 0;
 
         List<UserRecipe> userRecipes = new ArrayList<>();
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 2; i++) {
             Recipe recipe = mock(Recipe.class);
             UserRecipe userRecipe = new UserRecipe();
             userRecipe.setRecipe(recipe);
@@ -384,14 +397,22 @@ class RecipeServiceTest {
             userRecipes.add(userRecipe);
         }
 
-        when(userRecipeRepo.getUserRecipesByUserId(userId)).thenReturn(userRecipes);
+        Page<UserRecipe> userRecipePage = mock(Page.class);
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED), any(OffsetPage.class)))
+                .thenReturn(userRecipePage);
+        when(userRecipePage.getContent()).thenReturn(userRecipes);
+        when(userRecipePage.getTotalElements()).thenReturn(5L);
+        when(userRecipePage.hasNext()).thenReturn(true);
         when(recipeMapper.toRecipeReadDto(any(Recipe.class)))
                 .thenReturn(mock(RecipeReadDto.class));
 
-        List<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit);
+        PaginationResponse<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit, offset);
 
-        assertEquals(2, result.size());
-        verify(userRecipeRepo).getUserRecipesByUserId(userId);
+        assertEquals(2, result.getData().size());
+        assertEquals(2, result.getLimit());
+        assertEquals(5L, result.getTotalElements());
+        assertEquals(true, result.isHasNext());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED), any(OffsetPage.class));
     }
 
     @Test
@@ -468,6 +489,7 @@ class RecipeServiceTest {
     void getSavedRecipesByUserId_success() {
         UUID userId = UUID.randomUUID();
         int limit = 5;
+        int offset = 0;
 
         Recipe recipe1 = mock(Recipe.class);
         Recipe recipe2 = mock(Recipe.class);
@@ -482,54 +504,76 @@ class RecipeServiceTest {
         UserRecipeReadDto readDto1 = mock(UserRecipeReadDto.class);
         UserRecipeReadDto readDto2 = mock(UserRecipeReadDto.class);
 
-        when(userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED))
-                .thenReturn(savedRecipes);
+        Page<UserRecipe> userRecipePage = mock(Page.class);
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class)))
+                .thenReturn(userRecipePage);
+        when(userRecipePage.getContent()).thenReturn(savedRecipes);
+        when(userRecipePage.getTotalElements()).thenReturn(2L);
+        when(userRecipePage.hasNext()).thenReturn(false);
         when(userRecipeMapper.toUserRecipeReadDto(userRecipe1)).thenReturn(readDto1);
         when(userRecipeMapper.toUserRecipeReadDto(userRecipe2)).thenReturn(readDto2);
 
-        List<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit);
+        PaginationResponse<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit, offset);
 
-        assertEquals(2, result.size());
-        assertEquals(readDto1, result.get(0));
-        assertEquals(readDto2, result.get(1));
-        verify(userRecipeRepo).getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED);
+        assertEquals(2, result.getData().size());
+        assertEquals(readDto1, result.getData().get(0));
+        assertEquals(readDto2, result.getData().get(1));
+        assertEquals(0, result.getOffset());
+        assertEquals(5, result.getLimit());
+        assertEquals(2L, result.getTotalElements());
+        assertEquals(false, result.isHasNext());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class));
     }
 
     @Test
     void getSavedRecipesByUserId_respectsLimit() {
         UUID userId = UUID.randomUUID();
         int limit = 2;
+        int offset = 0;
 
         List<UserRecipe> savedRecipes = new ArrayList<>();
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 2; i++) {
             UserRecipe userRecipe = mock(UserRecipe.class);
             Recipe recipe = mock(Recipe.class);
             when(userRecipe.getRecipe()).thenReturn(recipe);
             savedRecipes.add(userRecipe);
         }
 
-        when(userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED))
-                .thenReturn(savedRecipes);
+        Page<UserRecipe> userRecipePage = mock(Page.class);
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class)))
+                .thenReturn(userRecipePage);
+        when(userRecipePage.getContent()).thenReturn(savedRecipes);
+        when(userRecipePage.getTotalElements()).thenReturn(5L);
+        when(userRecipePage.hasNext()).thenReturn(true);
         when(userRecipeMapper.toUserRecipeReadDto(any(UserRecipe.class)))
                 .thenReturn(mock(UserRecipeReadDto.class));
 
-        List<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit);
+        PaginationResponse<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit, offset);
 
-        assertEquals(2, result.size());
-        verify(userRecipeRepo).getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED);
+        assertEquals(2, result.getData().size());
+        assertEquals(2, result.getLimit());
+        assertEquals(5L, result.getTotalElements());
+        assertEquals(true, result.isHasNext());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class));
     }
 
     @Test
     void getSavedRecipesByUserId_emptyList() {
         UUID userId = UUID.randomUUID();
         int limit = 10;
+        int offset = 0;
 
-        when(userRecipeRepo.getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED))
-                .thenReturn(Collections.emptyList());
+        Page<UserRecipe> userRecipePage = mock(Page.class);
+        when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class)))
+                .thenReturn(userRecipePage);
+        when(userRecipePage.getContent()).thenReturn(Collections.emptyList());
+        when(userRecipePage.getTotalElements()).thenReturn(0L);
+        when(userRecipePage.hasNext()).thenReturn(false);
 
-        List<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit);
+        PaginationResponse<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit, offset);
 
-        assertTrue(result.isEmpty());
-        verify(userRecipeRepo).getUserRecipesByUserIdAndType(userId, UserRecipeType.SAVED);
+        assertTrue(result.getData().isEmpty());
+        assertEquals(0L, result.getTotalElements());
+        verify(userRecipeRepo).getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED), any(OffsetPage.class));
     }
 }

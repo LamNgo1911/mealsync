@@ -22,8 +22,8 @@ public interface IRecipeService {
     UserRecipeReadDto addRecipeToUser(UUID userId, UUID recipeId);
     void removeRecipeFromUser(UUID userId, UUID recipeId);
     List<RecipeReadDto> getRecommendedRecipes(UUID userId, int limit);
-    List<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId, int limit);
+    PaginationResponse<UserRecipeReadDto> getSavedRecipesByUserId(UUID userId, int limit, int offset);
     List<RecipeReadDto> getTodayPicks(UUID userId);
     void addGeneratedRecipesToUser(UUID userId, List<UUID> recipeIds);
-    List<RecipeReadDto> getRecentGeneratedRecipes(UUID userId, int limit);
+    PaginationResponse<RecipeReadDto> getRecentGeneratedRecipes(UUID userId, int limit, int offset);
 }

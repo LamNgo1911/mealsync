@@ -97,12 +97,190 @@ MealSync uses a two-step AI process for recipe generation:
    - API: `http://localhost/api/v1`
    - Health: `http://localhost/actuator/health`
 
+## 🧪 Testing
+
+The project includes comprehensive test coverage with both unit tests and integration tests.
+
+### Test Structure
+
+```
+src/test/java/com/lamngo/mealsync/
+├── application/          # Service layer unit tests
+│   ├── service/
+│   └── dto/
+├── presentation/         # Controller unit tests
+│   └── controller/
+└── integration/          # Integration tests
+    ├── auth/
+    ├── recipe/
+    └── e2e/
+```
+
+### Running Tests
+
+#### Run All Tests
+```bash
+# Run unit tests and integration tests
+mvn verify
+```
+
+#### Run Only Unit Tests
+```bash
+# Fast unit tests (mocked dependencies)
+mvn test
+```
+
+#### Run Only Integration Tests
+```bash
+# Integration tests (real database, full Spring context)
+mvn verify -Dtest=*IntegrationTest
+```
+
+#### Run Specific Test Class
+```bash
+# Run a specific test class
+mvn test -Dtest=RecipeControllerUnitTest
+mvn verify -Dtest=AuthControllerIntegrationTest
+```
+
+#### Run Tests in Docker
+```bash
+# Run tests in Docker container
+docker compose -f docker-compose.dev.yml run --rm mealsync-app mvn verify
+```
+
+### Test Types
+
+#### Unit Tests
+- **Location**: `src/test/java/com/lamngo/mealsync/application/` and `presentation/`
+- **Purpose**: Test individual components in isolation
+- **Dependencies**: Mocked using Mockito
+- **Execution**: Fast (< 10 seconds)
+- **Coverage**: Controllers, Services, DTOs, Mappers
+
+**Example Unit Tests:**
+- `RecipeControllerUnitTest` - Controller endpoint testing
+- `AuthServiceTest` - Authentication service logic
+- `RecipeServiceTest` - Recipe business logic
+
+#### Integration Tests
+- **Location**: `src/test/java/com/lamngo/mealsync/integration/`
+- **Purpose**: Test complete workflows with real database
+- **Database**: H2 in-memory database
+- **Execution**: Moderate speed (< 30 seconds)
+- **Coverage**: End-to-end API flows, database interactions, security
+
+**Example Integration Tests:**
+- `AuthControllerIntegrationTest` - Complete authentication flow
+- `RecipeControllerIntegrationTest` - Recipe CRUD with database
+- `UserRecipeIntegrationTest` - User-recipe relationships
+
+### Test Configuration
+
+#### Unit Tests
+- Use `@Mock` and `@InjectMocks` for dependency injection
+- Mock external services (OpenAI, AWS S3, etc.)
+- Fast execution with no database setup
+
+#### Integration Tests
+- Use `@SpringBootTest` with `@AutoConfigureMockMvc`
+- Real H2 in-memory database
+- `@Transactional` for automatic rollback
+- Mock external APIs but use real database
+
+### Test Coverage
+
+The project aims for:
+- **Unit Test Coverage**: 80%+ for all services and controllers
+- **Integration Test Coverage**: Critical user flows (auth, recipe CRUD, user-recipe relationships)
+- **Total Test Count**: 30+ unit tests, 20+ integration tests
+
+### Writing New Tests
+
+#### Unit Test Template
+```java
+@ExtendWith(MockitoExtension.class)
+class MyServiceTest {
+    @Mock
+    private Dependency dependency;
+    
+    @InjectMocks
+    private MyService service;
+    
+    @Test
+    void testMethod_success() {
+        // Given
+        when(dependency.method()).thenReturn(value);
+        
+        // When
+        Result result = service.method();
+        
+        // Then
+        assertNotNull(result);
+        verify(dependency).method();
+    }
+}
+```
+
+#### Integration Test Template
+```java
+class MyControllerIntegrationTest extends BaseIntegrationTest {
+    @Test
+    void endpoint_success() throws Exception {
+        // Given
+        String token = createUserAndGetToken("test@example.com", "password", "Test User");
+        
+        // When & Then
+        mockMvc.perform(get("/api/v1/endpoint")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk());
+    }
+}
+```
+
+### CI/CD Integration
+
+Tests run automatically in GitHub Actions:
+- **On Push**: All unit tests
+- **On Pull Request**: Unit tests + integration tests
+- **On Merge to Main**: Full test suite before deployment
+
+### Test Best Practices
+
+1. **Isolation**: Each test should be independent
+2. **Naming**: Use descriptive names like `method_scenario_expectedResult`
+3. **AAA Pattern**: Arrange, Act, Assert
+4. **Mock External Services**: Don't call real APIs in tests
+5. **Database Cleanup**: Use `@Transactional` for automatic rollback
+6. **Test Data**: Use builders or factories for test data creation
+
+### Troubleshooting Tests
+
+#### Tests Failing Locally
+```bash
+# Clean and rebuild
+mvn clean test
+
+# Run with verbose output
+mvn test -X
+
+# Run single test with debug
+mvn -Dtest=MyTest -Dmaven.surefire.debug test
+```
+
+#### Integration Test Issues
+- Ensure H2 database is configured correctly
+- Check that external services are mocked
+- Verify `@Transactional` is used for cleanup
+
+For more details, see [Integration Testing Recommendations](docs/INTEGRATION_TESTING_RECOMMENDATIONS.md).
+
 ## 📚 API Documentation
 
 ### Base URLs
 - **Production**: `http://13.49.27.132/api/v1`
 - **Local**: `http://localhost/api/v1`
-h
+
 ### Authentication
 Include JWT token in the `Authorization` header:
 ```
@@ -162,6 +340,35 @@ All endpoints return a standardized response:
     ```
   - **Auth**: Not required
 
+- **Refresh Access Token**
+  ```
+  POST /refresh
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "refreshToken": "your-refresh-token"
+    }
+    ```
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "uuid",
+        "email": "user@example.com",
+        "name": "John Doe",
+        "token": "new-access-token",
+        "refreshToken": {
+          "token": "new-refresh-token",
+          "expiryDate": "2024-12-31T23:59:59Z"
+        }
+      }
+    }
+    ```
+  - **Auth**: Not required
+  - **Description**: Refresh your access token using a valid refresh token. Returns a new access token and refresh token pair.
+
 #### 👥 Users (`/api/v1/users`)
 
 - **List Users**
@@ -206,6 +413,14 @@ All endpoints return a standardized response:
     ```
   - **Auth**: Admin or self
 
+- **Delete User**
+  ```
+  DELETE /{id}
+  ```
+  - **Response**: 204 No Content
+  - **Auth**: Admin only
+  - **Description**: Permanently delete a user account
+
 #### 🍽️ Recipes (`/api/v1/recipes`)
 
 - **Detect Ingredients from Image**
@@ -218,11 +433,22 @@ All endpoints return a standardized response:
     ```json
     {
       "success": true,
-      "data": ["tomato", "onion", "garlic", "chicken", "rice"]
+      "data": [
+        {
+          "name": "tomato",
+          "quantity": "2",
+          "unit": "pieces"
+        },
+        {
+          "name": "chicken",
+          "quantity": "200",
+          "unit": "grams"
+        }
+      ]
     }
     ```
   - **Auth**: Required
-  - **Description**: Upload a photo of ingredients to automatically detect what's in the image using AI vision
+  - **Description**: Upload a photo of ingredients to automatically detect what's in the image using AI vision. Returns ingredients with detected quantities and units.
 
 - **Detect Ingredients from Text**
   ```
@@ -239,11 +465,22 @@ All endpoints return a standardized response:
     ```json
     {
       "success": true,
-      "data": ["tomato", "onion", "garlic", "chicken", "rice"]
+      "data": [
+        {
+          "name": "tomato",
+          "quantity": "2",
+          "unit": "pieces"
+        },
+        {
+          "name": "chicken breast",
+          "quantity": "200",
+          "unit": "grams"
+        }
+      ]
     }
     ```
   - **Auth**: Required
-  - **Description**: Manually input a description of your ingredients as text and let AI extract and normalize the ingredient list
+  - **Description**: Manually input a description of your ingredients as text and let AI extract and normalize the ingredient list with quantities and units
 
 - **Generate Recipes from Ingredients**
   ```
@@ -253,9 +490,20 @@ All endpoints return a standardized response:
   - **Request Body**:
     ```json
     {
-      "ingredients": ["chicken", "rice", "vegetables"],
+      "ingredients": [
+        {
+          "name": "chicken",
+          "quantity": "200",
+          "unit": "grams"
+        },
+        {
+          "name": "rice",
+          "quantity": "300",
+          "unit": "grams"
+        }
+      ],
       "userPreference": {
-         "dietaryRestrictions": ["vegetarian", "gluten-free"],
+        "dietaryRestrictions": ["vegetarian", "gluten-free"],
         "favoriteCuisines": ["Italian", "Asian"],
         "dislikedIngredients": ["mushrooms", "olives"]
       }
@@ -414,18 +662,40 @@ All endpoints return a standardized response:
   GET /saved
   ```
   - **Query Params**:
-    - `limit`: Number of recipes (default: 6)
+    - `offset`: Pagination offset (default: 0)
+    - `limit`: Number of recipes per page (default: 6)
+  - **Response**: Returns `PaginationResponse` with:
+    ```json
+    {
+      "data": [...],
+      "offset": 0,
+      "limit": 6,
+      "totalElements": 25,
+      "hasNext": true
+    }
+    ```
   - **Auth**: Required
-  - **Description**: Retrieve all recipes the user has saved to their favorites
+  - **Description**: Retrieve paginated list of recipes the user has saved to their favorites, sorted by most recently saved first
 
 - **Get Recent Generated Recipes**
   ```
   GET /recent
   ```
   - **Query Params**:
-    - `limit`: Number of recipes (default: 6)
+    - `offset`: Pagination offset (default: 0)
+    - `limit`: Number of recipes per page (default: 6)
+  - **Response**: Returns `PaginationResponse` with:
+    ```json
+    {
+      "data": [...],
+      "offset": 0,
+      "limit": 6,
+      "totalElements": 15,
+      "hasNext": true
+    }
+    ```
   - **Auth**: Required
-  - **Description**: Get the most recently AI-generated recipes for the authenticated user
+  - **Description**: Get paginated list of the most recently AI-generated recipes for the authenticated user, sorted by most recent first
 
 #### 🖼️ Media (`/api/v1/photos`)
 
@@ -514,6 +784,7 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ### CI/CD
 - GitHub Actions for automated testing and deployment
+- Runs full test suite (unit + integration tests) before deployment
 - Auto-deploys to AWS EC2 on `main` branch updates
 
 ## 📄 License
@@ -529,13 +800,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   </a>
 </div>
 
-### Infrastructure Documentation
+### Documentation
 
-For comprehensive infrastructure guides:
+For comprehensive guides:
 
 - **[Infrastructure Overview](docs/INFRASTRUCTURE.md)** - Architecture, Docker best practices, deployment strategies
 - **[Scaling Guide](docs/SCALING_GUIDE.md)** - How to scale from 500 to 10,000+ users
 - **[Deployment Cheat Sheet](docs/DEPLOYMENT_CHEATSHEET.md)** - Quick reference for common tasks
+- **[Integration Testing Recommendations](docs/INTEGRATION_TESTING_RECOMMENDATIONS.md)** - Guide for writing integration tests
 
 ### Helper Scripts
 

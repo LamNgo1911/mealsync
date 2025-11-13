@@ -65,6 +65,19 @@ public class IngredientDetectionService {
             return null;
         }
         
+        // Check for generic terms that are too vague - these should be filtered out
+        String[] genericTerms = {
+            "meat", "poultry", "seafood", "fish", "vegetables", "vegetable", 
+            "fruit", "fruits", "dairy", "protein", "grain", "grains",
+            "spice", "spices", "herb", "herbs", "condiment", "condiments"
+        };
+        for (String generic : genericTerms) {
+            if (lowerName.equals(generic) || lowerName.equals(generic + "s")) {
+                logger.warn("Skipping ingredient with generic term '{}': {}", generic, name);
+                return null;
+            }
+        }
+        
         // Get quantity with default
         String quantity = ingObj.optString("quantity", "").trim();
         if (quantity == null || quantity.isEmpty() || quantity.equals("?") || quantity.equals("unknown")) {
@@ -113,9 +126,15 @@ public class IngredientDetectionService {
                     "You are a professional chef and food recognition expert. " +
                             "Analyze the provided text and identify all raw, edible ingredients mentioned. " +
                             "Focus ONLY on food items that can be used as ingredients in cooking. " +
+                            "CRITICAL: Always use SPECIFIC ingredient names. NEVER use generic terms like 'meat', 'vegetables', 'fruit', 'poultry', 'seafood', etc. " +
+                            "Instead, identify the specific type: " +
+                            "- If you see 'meat', determine if it's 'beef', 'pork', 'lamb', 'veal', etc. " +
+                            "- If you see 'chicken' or 'poultry', use 'chicken' (or 'turkey', 'duck', etc. if specified) " +
+                            "- If you see 'vegetables', identify specific types like 'carrots', 'broccoli', 'onions', etc. " +
+                            "- If you see 'fish' or 'seafood', identify the specific type like 'salmon', 'tuna', 'shrimp', etc. " +
+                            "- If the specific type cannot be determined from context, skip that ingredient rather than using a generic term. " +
                             "IMPORTANT: Extract quantities, units, and preparation details when available. " +
                             "If a quantity is unclear or cannot be determined, use quantity='1' and unit=''. " +
-                            "If an ingredient name is ambiguous or unclear, use your best judgment but keep it as a valid ingredient name. " +
                             "For example: " +
                             "- '200grams cut beef' → name='beef', quantity='200', unit='grams' " +
                             "- 'some tomatoes' → name='tomatoes', quantity='1', unit='' " +
@@ -123,6 +142,8 @@ public class IngredientDetectionService {
                             "- 'beef' (unclear quantity) → name='beef', quantity='1', unit='' " +
                             "- '2 large tomatoes' → name='tomatoes', quantity='2', unit='pieces' " +
                             "- 'diced chicken breast' → name='chicken breast', quantity='1', unit='piece' " +
+                            "- 'meat' (unclear type) → SKIP this, do not include in ingredients array " +
+                            "- 'ground meat' → determine type: if context suggests beef, use 'ground beef', otherwise skip " +
                             "Standardize ingredient names to their common culinary form (e.g., 'tomatos' -> 'tomatoes'). " +
                             "Return ONLY a JSON object with an 'ingredients' array containing ingredient objects. " +
                             "The structure must be: {\"ingredients\": [{\"name\": \"ingredient1\", \"quantity\": \"qty\", \"unit\": \"unit1\"}, ...]}. " +
@@ -263,12 +284,20 @@ public class IngredientDetectionService {
                     "You are a professional chef and food recognition expert. " +
                             "Analyze the provided image and identify all raw, edible ingredients visible in the image. " +
                             "Focus ONLY on food items that can be used as ingredients in cooking. " +
+                            "CRITICAL: Always use SPECIFIC ingredient names. NEVER use generic terms like 'meat', 'vegetables', 'fruit', 'poultry', 'seafood', etc. " +
+                            "Instead, identify the specific type based on what you can see: " +
+                            "- If you see meat, identify the specific type: 'beef', 'pork', 'lamb', 'chicken', 'turkey', etc. " +
+                            "- If you see vegetables, identify specific types: 'carrots', 'broccoli', 'onions', 'tomatoes', 'peppers', etc. " +
+                            "- If you see fish or seafood, identify the specific type: 'salmon', 'tuna', 'shrimp', 'cod', etc. " +
+                            "- If the specific type cannot be determined from the image, skip that ingredient rather than using a generic term. " +
                             "If you can estimate quantities or see preparation details (e.g., diced, sliced, cut), include them. " +
                             "If quantity cannot be determined, use quantity='1' and unit=''. " +
                             "For example: " +
                             "- If you see a clear amount like '200g of beef', use name='beef', quantity='200', unit='grams' " +
                             "- If you see 'some tomatoes', use name='tomatoes', quantity='1', unit='' " +
-                            "- If you see diced vegetables, use name='vegetables', quantity='1', unit='' " +
+                            "- If you see diced carrots, use name='carrots', quantity='1', unit='' (NOT 'vegetables') " +
+                            "- If you see chicken pieces, use name='chicken', quantity='1', unit='' (NOT 'meat' or 'poultry') " +
+                            "- If you see meat but cannot identify the type, SKIP it, do not include in ingredients array " +
                             "Ignore any non-food items, containers, utensils, or packaging. " +
                             "Return ONLY a JSON object with an 'ingredients' array containing ingredient objects. " +
                             "The structure must be: {\"ingredients\": [{\"name\": \"ingredient1\", \"quantity\": \"qty\", \"unit\": \"unit1\"}, ...]}. " +
