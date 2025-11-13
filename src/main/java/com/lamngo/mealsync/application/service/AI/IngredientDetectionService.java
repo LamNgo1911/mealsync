@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.application.service.AI;
 
+import com.lamngo.mealsync.application.dto.recipe.DetectedIngredientDto;
 import com.lamngo.mealsync.presentation.error.AIServiceException;
 import okhttp3.*;
 import org.json.JSONArray;
@@ -40,14 +41,60 @@ public class IngredientDetectionService {
             .build();
 
     /**
+     * Validates and sanitizes a detected ingredient, applying defaults for missing data
+     */
+    private DetectedIngredientDto validateAndSanitizeIngredient(JSONObject ingObj) {
+        if (ingObj == null) {
+            logger.warn("Ingredient object is null");
+            return null;
+        }
+        
+        String name = ingObj.optString("name", "").trim();
+        
+        // If name is empty or too vague, skip it
+        if (name == null || name.isEmpty() || name.length() < 2) {
+            logger.warn("Skipping ingredient with invalid name: {}", name);
+            return null;
+        }
+        
+        // Check for obviously invalid names
+        String lowerName = name.toLowerCase();
+        if (lowerName.equals("unknown") || lowerName.equals("unclear") || 
+            lowerName.equals("?") || lowerName.startsWith("unidentified")) {
+            logger.warn("Skipping ingredient with unclear name: {}", name);
+            return null;
+        }
+        
+        // Get quantity with default
+        String quantity = ingObj.optString("quantity", "").trim();
+        if (quantity == null || quantity.isEmpty() || quantity.equals("?") || quantity.equals("unknown")) {
+            quantity = "1";  // Default to 1 if unclear
+            logger.debug("Using default quantity=1 for ingredient: {}", name);
+        }
+        
+        // Get unit with default
+        String unit = ingObj.optString("unit", "").trim();
+        if (unit == null) {
+            unit = "";
+        }
+        // Unit can be empty, that's fine
+        
+        DetectedIngredientDto dto = new DetectedIngredientDto();
+        dto.setName(name);
+        dto.setQuantity(quantity);
+        dto.setUnit(unit);
+        return dto;
+    }
+
+    /**
      * Detects and validates ingredients from manually entered text using OpenAI API.
-     * This method processes user input, identifies valid ingredients, and standardizes their names.
+     * This method processes user input, identifies valid ingredients, and extracts quantities and units.
      *
      * @param textInput The user's manual text input describing ingredients
-     * @return List of detected and standardized ingredient names
+     * @return List of detected ingredients with name, quantity, and unit
      * @throws AIServiceException if the detection fails
      */
-    public List<String> detectIngredientsFromText(String textInput) {
+    public List<DetectedIngredientDto> detectIngredientsFromText(String textInput) {
         if (textInput == null || textInput.trim().isEmpty()) {
             logger.warn("Text input is empty or null for ingredient detection");
             throw new AIServiceException("Text input is empty or null");
@@ -61,17 +108,26 @@ public class IngredientDetectionService {
                 throw new AIServiceException("OpenAI API configuration error");
             }
 
-            // Prompt for ingredient detection from text
+            // Prompt for ingredient detection from text with quantities and units
             String prompt =
                     "You are a professional chef and food recognition expert. " +
                             "Analyze the provided text and identify all raw, edible ingredients mentioned. " +
                             "Focus ONLY on food items that can be used as ingredients in cooking. " +
-                            "Standardize ingredient names to their common culinary form (e.g., 'tomatos' -> 'tomatoes', '2 eggs' -> 'eggs'). " +
-                            "Ignore any quantities, measurements, or non-food items. " +
-                            "Return ONLY a JSON object with an 'ingredients' array containing the standardized names of detected ingredients as strings. " +
-                            "The structure must be: {\"ingredients\": [\"ingredient1\", \"ingredient2\", ...]}. " +
-                            "Do not include any extra text, explanation, or commentary outside the JSON object. " +
-                            "If no valid ingredients are detected, return {\"ingredients\": []}.";
+                            "IMPORTANT: Extract quantities, units, and preparation details when available. " +
+                            "If a quantity is unclear or cannot be determined, use quantity='1' and unit=''. " +
+                            "If an ingredient name is ambiguous or unclear, use your best judgment but keep it as a valid ingredient name. " +
+                            "For example: " +
+                            "- '200grams cut beef' → name='beef', quantity='200', unit='grams' " +
+                            "- 'some tomatoes' → name='tomatoes', quantity='1', unit='' " +
+                            "- 'a bit of salt' → name='salt', quantity='1', unit='pinch' " +
+                            "- 'beef' (unclear quantity) → name='beef', quantity='1', unit='' " +
+                            "- '2 large tomatoes' → name='tomatoes', quantity='2', unit='pieces' " +
+                            "- 'diced chicken breast' → name='chicken breast', quantity='1', unit='piece' " +
+                            "Standardize ingredient names to their common culinary form (e.g., 'tomatos' -> 'tomatoes'). " +
+                            "Return ONLY a JSON object with an 'ingredients' array containing ingredient objects. " +
+                            "The structure must be: {\"ingredients\": [{\"name\": \"ingredient1\", \"quantity\": \"qty\", \"unit\": \"unit1\"}, ...]}. " +
+                            "If no valid ingredients are detected, return {\"ingredients\": []}. " +
+                            "Do not include any extra text, explanation, or commentary outside the JSON object.";
 
             // Construct the OpenAI Request Body
             JSONObject requestBody = new JSONObject();
@@ -133,15 +189,35 @@ public class IngredientDetectionService {
                     }
 
                     JSONArray ingredientsArray = contentObject.getJSONArray("ingredients");
-                    List<String> ingredients = new ArrayList<>();
+                    List<DetectedIngredientDto> ingredients = new ArrayList<>();
+                    int skippedCount = 0;
+
                     for (int i = 0; i < ingredientsArray.length(); i++) {
-                        String ingredient = ingredientsArray.getString(i);
-                        if (ingredient != null && !ingredient.trim().isEmpty()) {
-                            ingredients.add(ingredient.trim());
+                        try {
+                            JSONObject ingObj = ingredientsArray.getJSONObject(i);
+                            DetectedIngredientDto ingredient = validateAndSanitizeIngredient(ingObj);
+                            
+                            if (ingredient != null) {
+                                ingredients.add(ingredient);
+                            } else {
+                                skippedCount++;
+                            }
+                        } catch (JSONException e) {
+                            logger.warn("Failed to parse ingredient at index {}: {}", i, e.getMessage());
+                            skippedCount++;
                         }
                     }
 
-                    logger.info("Successfully detected {} ingredients from text input", ingredients.size());
+                    if (skippedCount > 0) {
+                        logger.warn("Skipped {} invalid or unclear ingredients during detection", skippedCount);
+                    }
+
+                    if (ingredients.isEmpty()) {
+                        logger.warn("No valid ingredients detected after validation");
+                    }
+
+                    logger.info("Successfully detected {} valid ingredients from text input (skipped {} invalid)", 
+                                ingredients.size(), skippedCount);
                     return ingredients;
 
                 } catch (JSONException e) {
@@ -157,13 +233,13 @@ public class IngredientDetectionService {
 
     /**
      * Detects raw ingredients from an uploaded image using OpenAI Vision API.
-     * Returns a simple array of ingredient names without generating full recipes.
+     * Returns a list of ingredients with name, quantity, and unit.
      *
      * @param imageFile The uploaded image file containing ingredients
-     * @return List of detected ingredient names
+     * @return List of detected ingredients with name, quantity, and unit
      * @throws AIServiceException if the detection fails
      */
-    public List<String> detectRawIngredients(MultipartFile imageFile) {
+    public List<DetectedIngredientDto> detectRawIngredients(MultipartFile imageFile) {
         if (imageFile == null || imageFile.isEmpty()) {
             logger.warn("Image file is empty or null for ingredient detection");
             throw new AIServiceException("Image file is empty or null");
@@ -182,16 +258,22 @@ public class IngredientDetectionService {
             String mimeType = Optional.ofNullable(imageFile.getContentType())
                     .orElse(MimeTypeUtils.IMAGE_JPEG_VALUE);
 
-            // Prompt for ingredient detection only
+            // Prompt for ingredient detection with quantities and units
             String prompt =
                     "You are a professional chef and food recognition expert. " +
                             "Analyze the provided image and identify all raw, edible ingredients visible in the image. " +
                             "Focus ONLY on food items that can be used as ingredients in cooking. " +
+                            "If you can estimate quantities or see preparation details (e.g., diced, sliced, cut), include them. " +
+                            "If quantity cannot be determined, use quantity='1' and unit=''. " +
+                            "For example: " +
+                            "- If you see a clear amount like '200g of beef', use name='beef', quantity='200', unit='grams' " +
+                            "- If you see 'some tomatoes', use name='tomatoes', quantity='1', unit='' " +
+                            "- If you see diced vegetables, use name='vegetables', quantity='1', unit='' " +
                             "Ignore any non-food items, containers, utensils, or packaging. " +
-                            "Return ONLY a JSON object with an 'ingredients' array containing the names of detected ingredients as strings. " +
-                            "The structure must be: {\"ingredients\": [\"ingredient1\", \"ingredient2\", ...]}. " +
-                            "Do not include any extra text, explanation, or commentary outside the JSON object. " +
-                            "If no valid ingredients are detected, return {\"ingredients\": []}.";
+                            "Return ONLY a JSON object with an 'ingredients' array containing ingredient objects. " +
+                            "The structure must be: {\"ingredients\": [{\"name\": \"ingredient1\", \"quantity\": \"qty\", \"unit\": \"unit1\"}, ...]}. " +
+                            "If no valid ingredients are detected, return {\"ingredients\": []}. " +
+                            "Do not include any extra text, explanation, or commentary outside the JSON object.";
 
             // Construct the OpenAI Multimodal Request Body
             JSONObject requestBody = new JSONObject();
@@ -254,15 +336,35 @@ public class IngredientDetectionService {
                     }
 
                     JSONArray ingredientsArray = contentObject.getJSONArray("ingredients");
-                    List<String> ingredients = new ArrayList<>();
+                    List<DetectedIngredientDto> ingredients = new ArrayList<>();
+                    int skippedCount = 0;
+
                     for (int i = 0; i < ingredientsArray.length(); i++) {
-                        String ingredient = ingredientsArray.getString(i);
-                        if (ingredient != null && !ingredient.trim().isEmpty()) {
-                            ingredients.add(ingredient.trim());
+                        try {
+                            JSONObject ingObj = ingredientsArray.getJSONObject(i);
+                            DetectedIngredientDto ingredient = validateAndSanitizeIngredient(ingObj);
+                            
+                            if (ingredient != null) {
+                                ingredients.add(ingredient);
+                            } else {
+                                skippedCount++;
+                            }
+                        } catch (JSONException e) {
+                            logger.warn("Failed to parse ingredient at index {}: {}", i, e.getMessage());
+                            skippedCount++;
                         }
                     }
 
-                    logger.info("Successfully detected {} ingredients from image", ingredients.size());
+                    if (skippedCount > 0) {
+                        logger.warn("Skipped {} invalid or unclear ingredients during detection", skippedCount);
+                    }
+
+                    if (ingredients.isEmpty()) {
+                        logger.warn("No valid ingredients detected after validation");
+                    }
+
+                    logger.info("Successfully detected {} valid ingredients from image (skipped {} invalid)", 
+                                ingredients.size(), skippedCount);
                     return ingredients;
 
                 } catch (JSONException e) {

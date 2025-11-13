@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.presentation.controller;
 
+import com.lamngo.mealsync.application.dto.recipe.DetectedIngredientDto;
 import com.lamngo.mealsync.application.dto.recipe.GenerateRecipeRequest;
 import com.lamngo.mealsync.application.dto.recipe.ManualIngredientDetectionRequest;
 import com.lamngo.mealsync.application.dto.recipe.RecipeCreateDto;
@@ -49,7 +50,7 @@ public class RecipeController {
            @RequestBody @Valid GenerateRecipeRequest request,
            @AuthenticationPrincipal User user) {
 
-        List<String> ingredients = request.getIngredients();
+        List<DetectedIngredientDto> ingredients = request.getIngredients();
 
         if (ingredients == null || ingredients.isEmpty()) {
             throw new BadRequestException("Ingredients list is empty or null");
@@ -88,7 +89,7 @@ public class RecipeController {
 
     @PostMapping(value = "/detect-ingredients", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SuccessResponseEntity<List<String>>> detectIngredients(
+    public ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> detectIngredients(
             @RequestPart("image") MultipartFile image) {
 
         if (image == null || image.isEmpty()) {
@@ -96,15 +97,15 @@ public class RecipeController {
         }
 
         logger.info("Detecting raw ingredients from uploaded image: {}", image.getOriginalFilename());
-        List<String> ingredients = ingredientDetectionService.detectRawIngredients(image);
-        SuccessResponseEntity<List<String>> body = new SuccessResponseEntity<>();
+        List<DetectedIngredientDto> ingredients = ingredientDetectionService.detectRawIngredients(image);
+        SuccessResponseEntity<List<DetectedIngredientDto>> body = new SuccessResponseEntity<>();
         body.setData(ingredients);
         return ResponseEntity.ok(body);
     }
 
     @PostMapping(value = "/detect-ingredients-from-text")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SuccessResponseEntity<List<String>>> detectIngredientsFromText(
+    public ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> detectIngredientsFromText(
             @RequestBody @Valid ManualIngredientDetectionRequest request) {
 
         if (request.getTextInput() == null || request.getTextInput().trim().isEmpty()) {
@@ -112,8 +113,8 @@ public class RecipeController {
         }
 
         logger.info("Detecting ingredients from manual text input");
-        List<String> ingredients = ingredientDetectionService.detectIngredientsFromText(request.getTextInput());
-        SuccessResponseEntity<List<String>> body = new SuccessResponseEntity<>();
+        List<DetectedIngredientDto> ingredients = ingredientDetectionService.detectIngredientsFromText(request.getTextInput());
+        SuccessResponseEntity<List<DetectedIngredientDto>> body = new SuccessResponseEntity<>();
         body.setData(ingredients);
         return ResponseEntity.ok(body);
     }

@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.application.service.AI;
 
+import com.lamngo.mealsync.application.dto.recipe.DetectedIngredientDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeMapper;
 import com.lamngo.mealsync.application.service.AWS.S3Service;
@@ -18,8 +19,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-import org.springframework.util.MimeTypeUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -64,9 +63,9 @@ public class AIRecipeService {
         this.s3Service = s3Service;
     }
 
-    // Generate recipes from a list of ingredient names
+    // Generate recipes from a list of detected ingredients with quantities and units
     @Transactional
-    public List<RecipeReadDto> generateRecipes(List<String> ingredients, UserPreference userPreference) {
+    public List<RecipeReadDto> generateRecipes(List<DetectedIngredientDto> ingredients, UserPreference userPreference) {
         System.out.println("Ingredients: " + ingredients);
         System.out.println("User preference: " + userPreference);
 
@@ -104,8 +103,8 @@ public class AIRecipeService {
         }
     }
 
-    // Fetch recipes from OpenAI API using text-based ingredients list
-    public List<RecipeReadDto> fetchRecipesFromOpenAI(List<String> ingredients, UserPreference userPreference) {
+    // Fetch recipes from OpenAI API using detected ingredients with quantities and units
+    public List<RecipeReadDto> fetchRecipesFromOpenAI(List<DetectedIngredientDto> ingredients, UserPreference userPreference) {
         try {
             if (openAIApiBaseUrl == null || !openAIApiBaseUrl.startsWith("https://")
                     || openAIApiKey == null || openAIApiKey.isEmpty() ) {
@@ -113,18 +112,32 @@ public class AIRecipeService {
                 throw new AIServiceException("OpenAI API configuration error.");
             }
             System.out.println("Ingredients: " + ingredients);
-            // Build ingredients string
-            String ingredientsString = String.join(", ", ingredients);
-            System.out.println("Ingredients string: " + ingredientsString);
-            System.out.println("User dietary restrictions: " + userPreference.getDietaryRestrictions());
-            System.out.println("User favorite cuisines: " + userPreference.getFavoriteCuisines());
-            System.out.println("User disliked ingredients: " + userPreference.getDislikedIngredients());
+            // Build ingredients string with quantities and units
+            StringBuilder ingredientsStringBuilder = new StringBuilder();
+            for (DetectedIngredientDto ing : ingredients) {
+                if (ingredientsStringBuilder.length() > 0) {
+                    ingredientsStringBuilder.append(", ");
+                }
+                String ingStr = ing.getName();
+                if (ing.getQuantity() != null && !ing.getQuantity().isEmpty() && !ing.getQuantity().equals("1")) {
+                    ingStr = ing.getQuantity() + " " + ingStr;
+                }
+                if (ing.getUnit() != null && !ing.getUnit().isEmpty()) {
+                    ingStr = ingStr + " (" + ing.getUnit() + ")";
+                }
+                ingredientsStringBuilder.append(ingStr);
+            }
+            String ingredientsString = ingredientsStringBuilder.toString();
 
             // The Text Prompt
             String prompt =
                     "You are a professional chef and AI recipe creator. " +
-                            "You are given the following detected ingredients: " + ingredientsString + ". " +
-                            "You must use ALL or MOST of these detected ingredients as the main components of the recipes. " +
+                            "You are given the following detected ingredients with their quantities: " + ingredientsString + ". " +
+                            "IMPORTANT: Pay close attention to the quantities and units provided. " +
+                            "For example, if an ingredient is '200 (grams) beef', use approximately 200g of beef, not a whole steak. " +
+                            "If an ingredient is '2 (pieces) tomatoes', use 2 tomatoes, not more. " +
+                            "If a quantity is '1' with no unit, it may mean the quantity was unclear - use reasonable amounts for that ingredient. " +
+                            "You must use ALL or MOST of these detected ingredients as the main components of the recipes, respecting their quantities when specified. " +
                             "You may only add minimal extra pantry items such as oil, salt, pepper, or common spices if needed. " +
                             "Consider the following user preferences: " +
                             "dietary restrictions: " + userPreference.getDietaryRestrictions() + ", " +

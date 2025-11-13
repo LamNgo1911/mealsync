@@ -1,5 +1,6 @@
 package com.lamngo.mealsync.presentation.controller;
 
+import com.lamngo.mealsync.application.dto.recipe.DetectedIngredientDto;
 import com.lamngo.mealsync.application.dto.recipe.*;
 import com.lamngo.mealsync.application.dto.user.UserPreferenceRequestDto;
 import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeCreateDto;
@@ -39,7 +40,15 @@ class RecipeControllerUnitTest {
     @Test
     void generateRecipesFromIngredients_success() {
         GenerateRecipeRequest request = new GenerateRecipeRequest();
-        request.setIngredients(List.of("egg", "milk"));
+        DetectedIngredientDto egg = new DetectedIngredientDto();
+        egg.setName("egg");
+        egg.setQuantity("2");
+        egg.setUnit("pieces");
+        DetectedIngredientDto milk = new DetectedIngredientDto();
+        milk.setName("milk");
+        milk.setQuantity("200");
+        milk.setUnit("ml");
+        request.setIngredients(List.of(egg, milk));
         UserPreferenceRequestDto userPreferenceDto = new UserPreferenceRequestDto();
         userPreferenceDto.setDietaryRestrictions(List.of());
         userPreferenceDto.setFavoriteCuisines(List.of());
@@ -196,10 +205,26 @@ class RecipeControllerUnitTest {
     void detectIngredients_success() {
         MultipartFile image = mock(MultipartFile.class);
         when(image.isEmpty()).thenReturn(false);
-        List<String> ingredients = List.of("tomato", "onion", "garlic", "chicken");
+        DetectedIngredientDto tomato = new DetectedIngredientDto();
+        tomato.setName("tomato");
+        tomato.setQuantity("2");
+        tomato.setUnit("pieces");
+        DetectedIngredientDto onion = new DetectedIngredientDto();
+        onion.setName("onion");
+        onion.setQuantity("1");
+        onion.setUnit("piece");
+        DetectedIngredientDto garlic = new DetectedIngredientDto();
+        garlic.setName("garlic");
+        garlic.setQuantity("3");
+        garlic.setUnit("cloves");
+        DetectedIngredientDto chicken = new DetectedIngredientDto();
+        chicken.setName("chicken");
+        chicken.setQuantity("200");
+        chicken.setUnit("grams");
+        List<DetectedIngredientDto> ingredients = List.of(tomato, onion, garlic, chicken);
         when(ingredientDetectionService.detectRawIngredients(image)).thenReturn(ingredients);
 
-        ResponseEntity<SuccessResponseEntity<List<String>>> resp = controller.detectIngredients(image);
+        ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> resp = controller.detectIngredients(image);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
@@ -227,10 +252,10 @@ class RecipeControllerUnitTest {
     void detectIngredients_emptyResults() {
         MultipartFile image = mock(MultipartFile.class);
         when(image.isEmpty()).thenReturn(false);
-        List<String> emptyIngredients = List.of();
+        List<DetectedIngredientDto> emptyIngredients = List.of();
         when(ingredientDetectionService.detectRawIngredients(image)).thenReturn(emptyIngredients);
 
-        ResponseEntity<SuccessResponseEntity<List<String>>> resp = controller.detectIngredients(image);
+        ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> resp = controller.detectIngredients(image);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
@@ -373,7 +398,19 @@ class RecipeControllerUnitTest {
         when(user.getId()).thenReturn(userId);
 
         GenerateRecipeRequest request = new GenerateRecipeRequest();
-        request.setIngredients(List.of("chicken", "rice", "tomato"));
+        DetectedIngredientDto chicken = new DetectedIngredientDto();
+        chicken.setName("chicken");
+        chicken.setQuantity("300");
+        chicken.setUnit("grams");
+        DetectedIngredientDto rice = new DetectedIngredientDto();
+        rice.setName("rice");
+        rice.setQuantity("200");
+        rice.setUnit("grams");
+        DetectedIngredientDto tomato = new DetectedIngredientDto();
+        tomato.setName("tomato");
+        tomato.setQuantity("2");
+        tomato.setUnit("pieces");
+        request.setIngredients(List.of(chicken, rice, tomato));
         UserPreferenceRequestDto userPreferenceDto = new UserPreferenceRequestDto();
         userPreferenceDto.setDietaryRestrictions(List.of("vegetarian"));
         userPreferenceDto.setFavoriteCuisines(List.of("Italian"));

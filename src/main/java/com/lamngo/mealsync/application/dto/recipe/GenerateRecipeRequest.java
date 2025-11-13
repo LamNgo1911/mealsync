@@ -15,7 +15,7 @@ public class GenerateRecipeRequest {
 
     @NotNull(message = "Ingredients list cannot be null")
     @NotEmpty(message = "Ingredients list cannot be empty")
-    private List<String> ingredients;
+    private List<DetectedIngredientDto> ingredients;
 
     private UserPreferenceRequestDto userPreference;
 }
