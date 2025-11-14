@@ -4,14 +4,13 @@ You must VALIDATE each ingredient and return only the valid ones.
 
 VALIDATION RULES:
 1. INGREDIENT NAME VALIDATION:
-   - Must be a real, edible ingredient that exists in cooking (e.g., 'chicken', 'tomatoes', 'salt', 'olive oil')
-   - Must be SPECIFIC: NEVER use generic terms like 'meat', 'vegetables', 'fruit', 'poultry', 'seafood', 'dairy', 'protein', 'grain', 'spice', 'herb', 'condiment'
-   - If you see generic terms, identify the specific type:
-     * 'meat' → determine if it's 'beef', 'pork', 'lamb', 'veal', etc. If unclear, SKIP it
-     * 'chicken' or 'poultry' → use 'chicken' (or 'turkey', 'duck' if specified)
-     * 'vegetables' → identify specific types like 'carrots', 'broccoli', 'onions', etc. If unclear, SKIP it
-     * 'fish' or 'seafood' → identify specific type like 'salmon', 'tuna', 'shrimp', etc. If unclear, SKIP it
-   - Skip invalid ingredients like 'unknown', 'unclear', '?', or non-food items
+   - Accept any real, edible ingredient that exists in cooking
+   - Examples of VALID ingredients: 'chicken', 'beef', 'tomatoes', 'banana', 'mango', 'salt', 'olive oil', 'flour', 'rice', 'salmon', 'cheese', 'onions', 'garlic', 'basil', 'pepper', etc.
+   - Only reject ingredients in these cases:
+     a) Generic category terms when used alone (too vague): 'meat', 'vegetables', 'vegetable', 'fruit', 'fruits', 'seafood', 'poultry', 'dairy'
+     b) Non-food items: 'plastic', 'metal', 'wood', 'paper', 'glass', 'steel', 'aluminum', 'rubber', 'fabric', 'cloth', 'leather', 'stone', 'rock', 'ceramic', 'pottery', 'cardboard', 'foam', 'styrofoam', 'wire', 'string', 'rope', 'tape', 'glue', or any other inedible material
+     c) Invalid/unclear: 'unknown', 'unclear', '?', 'n/a', 'none', or clearly not a food item
+   - Be permissive: If it's a real food ingredient, accept it even if it's not in the examples above
    - Standardize names to common culinary form (e.g., 'tomatos' -> 'tomatoes')
 
 2. QUANTITY VALIDATION:
@@ -36,22 +35,43 @@ VALIDATION RULES:
    - Standardize units to full names (e.g., 'g' -> 'grams', 'ml' -> 'milliliters', 'kg' -> 'kilograms')
    - If unit is invalid or unclear, use unit='' (empty string)
 
-EXAMPLES:
-- {"name": "beef", "quantity": "200", "unit": "grams"} → name='beef', quantity='200', unit='grams' ✓ VALID
-- {"name": "tomatoes", "quantity": "1", "unit": ""} → name='tomatoes', quantity='1', unit='' ✓ VALID
-- {"name": "salt", "quantity": "1", "unit": "pinch"} → name='salt', quantity='1', unit='pinch' ✓ VALID
-- {"name": "olive oil", "quantity": "250", "unit": "milliliters"} → name='olive oil', quantity='250', unit='milliliters' ✓ VALID
-- {"name": "flour", "quantity": "500", "unit": "grams"} → name='flour', quantity='500', unit='grams' ✓ VALID
-- {"name": "chicken", "quantity": "1", "unit": "cup"} → name='chicken', quantity='1', unit='' (American unit rejected) ✓
-- {"name": "sugar", "quantity": "2", "unit": "tablespoons"} → name='sugar', quantity='2', unit='' (American unit rejected) ✓
-- {"name": "meat", "quantity": "1", "unit": ""} → SKIP (invalid ingredient name - too generic) ✗
+EXAMPLES OF VALID INGREDIENTS:
+- {"name": "beef", "quantity": "200", "unit": "grams"} → ✓ VALID
+- {"name": "tomatoes", "quantity": "1", "unit": ""} → ✓ VALID
+- {"name": "banana", "quantity": "2", "unit": "pieces"} → ✓ VALID
+- {"name": "mango", "quantity": "1", "unit": ""} → ✓ VALID
+- {"name": "chicken wings", "quantity": "500", "unit": "grams"} → ✓ VALID
+- {"name": "salt", "quantity": "1", "unit": "pinch"} → ✓ VALID
+- {"name": "olive oil", "quantity": "250", "unit": "milliliters"} → ✓ VALID
+- {"name": "flour", "quantity": "500", "unit": "grams"} → ✓ VALID
+- {"name": "rice", "quantity": "200", "unit": "grams"} → ✓ VALID
+- {"name": "salmon", "quantity": "300", "unit": "grams"} → ✓ VALID
+- {"name": "cheese", "quantity": "100", "unit": "grams"} → ✓ VALID
+- {"name": "chicken", "quantity": "1", "unit": "cup"} → name='chicken', quantity='1', unit='' (American unit rejected, but ingredient is valid) ✓
+- {"name": "sugar", "quantity": "2", "unit": "tablespoons"} → name='sugar', quantity='2', unit='' (American unit rejected, but ingredient is valid) ✓
+- {"name": "tomatoes", "quantity": "2", "unit": "invalidunit"} → name='tomatoes', quantity='2', unit='' (invalid unit replaced with empty, but ingredient is valid) ✓
+
+EXAMPLES OF INVALID INGREDIENTS (SKIP THESE):
+- {"name": "meat", "quantity": "1", "unit": ""} → SKIP (too generic - use specific type like 'beef', 'pork', 'chicken') ✗
+- {"name": "vegetables", "quantity": "2", "unit": ""} → SKIP (too generic - use specific type like 'carrots', 'broccoli') ✗
+- {"name": "fruit", "quantity": "2", "unit": ""} → SKIP (too generic - use specific type like 'banana', 'mango', 'apple') ✗
+- {"name": "seafood", "quantity": "1", "unit": ""} → SKIP (too generic - use specific type like 'salmon', 'shrimp') ✗
+- {"name": "poultry", "quantity": "1", "unit": ""} → SKIP (too generic - use specific type like 'chicken', 'turkey') ✗
+- {"name": "dairy", "quantity": "1", "unit": ""} → SKIP (too generic - use specific type like 'milk', 'cheese') ✗
+- {"name": "plastic", "quantity": "1", "unit": ""} → SKIP (non-food item) ✗
+- {"name": "metal", "quantity": "1", "unit": ""} → SKIP (non-food item) ✗
+- {"name": "wood", "quantity": "1", "unit": ""} → SKIP (non-food item) ✗
+- {"name": "paper", "quantity": "1", "unit": ""} → SKIP (non-food item) ✗
 - {"name": "xyz123", "quantity": "1", "unit": ""} → SKIP (not a real ingredient) ✗
 - {"name": "chicken", "quantity": "abc123", "unit": ""} → SKIP (invalid quantity) ✗
-- {"name": "tomatoes", "quantity": "2", "unit": "invalidunit"} → name='tomatoes', quantity='2', unit='' (invalid unit replaced with empty) ✓
 
-Return ONLY a JSON object with an 'ingredients' array containing VALIDATED ingredient objects. 
-The structure must be: {"ingredients": [{"name": "ingredient1", "quantity": "qty", "unit": "unit1"}, ...]}. 
-Only include ingredients that pass ALL validation checks (valid name, valid quantity, valid unit). 
-If no valid ingredients are detected, return {"ingredients": []}. 
+Return ONLY a JSON object with an 'ingredients' array containing VALIDATED ingredient objects.
+The structure must be: {"ingredients": [{"name": "ingredient1", "quantity": "qty", "unit": "unit1"}, ...]}.
+Only include ingredients that pass ALL validation checks (valid name, valid quantity, valid unit).
+If no valid ingredients are detected, return {"ingredients": []}.
 Do not include any extra text, explanation, or commentary outside the JSON object.
 
+REMINDERS:
+- Be PERMISSIVE: Accept any real food ingredient, even if not explicitly listed in examples
+- Only reject: (1) obvious generic terms like 'meat', 'vegetables', 'fruit' when used alone, (2) non-food items, (3) invalid/unclear entries
+- When in doubt, if it's a real food ingredient, accept it

@@ -35,6 +35,8 @@ public class IngredientDetectionService {
     @Value("${OPENAI_API_KEY}")
     private String openAIApiKey;
 
+    // NOTE: Using gpt-4o-mini for cost efficiency. For better instruction-following and validation accuracy,
+    // consider upgrading to "gpt-4" or "gpt-4-turbo" if validation quality issues persist.
     private static final String GPT_MODEL = "gpt-4o-mini";
     private static final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -46,6 +48,7 @@ public class IngredientDetectionService {
     private final PromptLoader promptLoader;
     
     // Cache prompts to avoid repeated file I/O
+    // Note: Cache is cleared on application restart, so prompt changes require a restart
     private volatile String cachedValidationPrompt = null;
     private volatile String cachedImageDetectionPrompt = null;
     
@@ -55,12 +58,14 @@ public class IngredientDetectionService {
     
     /**
      * Gets the validation prompt, loading from cache if available.
+     * Cache is cleared on application restart.
      */
     private String getValidationPrompt() {
         if (cachedValidationPrompt == null) {
             synchronized (this) {
                 if (cachedValidationPrompt == null) {
                     cachedValidationPrompt = promptLoader.loadPrompt("ingredient-validation.txt");
+                    logger.debug("Loaded and cached ingredient validation prompt");
                 }
             }
         }
@@ -69,17 +74,20 @@ public class IngredientDetectionService {
     
     /**
      * Gets the image detection prompt, loading from cache if available.
+     * Cache is cleared on application restart.
      */
     private String getImageDetectionPrompt() {
         if (cachedImageDetectionPrompt == null) {
             synchronized (this) {
                 if (cachedImageDetectionPrompt == null) {
                     cachedImageDetectionPrompt = promptLoader.loadPrompt("ingredient-detection-image.txt");
+                    logger.debug("Loaded and cached image detection prompt");
                 }
             }
         }
         return cachedImageDetectionPrompt;
     }
+
 
     /**
      * Sanitizes a validated ingredient from AI response (basic null checks and trimming).
@@ -94,12 +102,15 @@ public class IngredientDetectionService {
         String name = ingObj.optString("name", "").trim();
         String quantity = ingObj.optString("quantity", "").trim();
         String unit = ingObj.optString("unit", "").trim();
-        
+
         // Basic null/empty checks - if name is missing, skip it
         if (name == null || name.isEmpty()) {
             logger.warn("Skipping ingredient with missing name");
             return null;
         }
+
+        // Rely on AI prompt validation - the prompt is explicit and temperature=0 ensures consistency
+        // Programmatic validation removed to avoid false positives (e.g., "chicken wings")
         
         // If quantity is missing, set default (though prompt should handle this)
         if (quantity == null || quantity.isEmpty()) {
@@ -155,35 +166,37 @@ public class IngredientDetectionService {
             }
             String ingredientsJsonString = ingredientsJsonArray.toString();
 
-            // Get cached validation prompt
+            // Get cached validation prompt and combine with ingredients
             String prompt = getValidationPrompt();
+            String fullPrompt = prompt + "\n\nPlease validate these ingredients: " + ingredientsJsonString;
+            
+            logger.debug("Sending validation request with {} ingredients: {}", ingredients.size(), ingredientsJsonString);
 
-            // Construct the OpenAI Request Body
+            // Construct the OpenAI Request Body (text-only, no image)
             JSONObject requestBody = new JSONObject();
             requestBody.put("model", GPT_MODEL);
+            requestBody.put("temperature", 0); // Set to 0 for maximum consistency and deterministic responses
             requestBody.put("response_format", new JSONObject().put("type", "json_object"));
 
-            // Build the messages array with the prompt and ingredients JSON
+            // Build simple text message
             requestBody.put("messages", new JSONArray()
                     .put(new JSONObject()
-                            .put("role", "system")
-                            .put("content", prompt))
-                    .put(new JSONObject()
                             .put("role", "user")
-                            .put("content", "Please validate these ingredients: " + ingredientsJsonString)));
+                            .put("content", fullPrompt)));
 
             RequestBody body = RequestBody.create(
                     requestBody.toString(),
                     MediaType.parse("application/json")
             );
 
+            String fullUrl = openAIApiBaseUrl; // OpenAI usually has one base URL
             Request request = new Request.Builder()
-                    .url(openAIApiBaseUrl)
+                    .url(fullUrl)
                     .post(body)
-                    .header("Authorization", "Bearer " + openAIApiKey)
+                    .header("Authorization", "Bearer " + openAIApiKey) // Use API Key in header
                     .build();
 
-            logger.info("Sending text-based ingredient validation and parsing request to OpenAI API using {}", GPT_MODEL);
+            logger.info("Sending request to OpenAI API using {}", GPT_MODEL);
 
             try (Response response = client.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
@@ -209,6 +222,7 @@ public class IngredientDetectionService {
                     JSONObject message = choice.getJSONObject("message");
                     String ingredientsJson = message.getString("content").trim();
 
+                    logger.info("Raw OpenAI validation response: {}", ingredientsJson);
                     logger.debug("Raw OpenAI ingredient detection response: {}", ingredientsJson);
 
                     JSONObject contentObject = new JSONObject(ingredientsJson);
@@ -225,11 +239,14 @@ public class IngredientDetectionService {
                     for (int i = 0; i < ingredientsArray.length(); i++) {
                         try {
                             JSONObject ingObj = ingredientsArray.getJSONObject(i);
+                            logger.debug("Processing ingredient from AI response: {}", ingObj.toString());
                             DetectedIngredientDto ingredient = sanitizeIngredient(ingObj);
                             
                             if (ingredient != null) {
+                                logger.debug("Accepted ingredient: {}", ingredient.getName());
                                 validatedIngredients.add(ingredient);
                             } else {
+                                logger.warn("Skipped ingredient at index {}: {}", i, ingObj.toString());
                                 skippedCount++;
                             }
                         } catch (JSONException e) {
@@ -295,6 +312,7 @@ public class IngredientDetectionService {
             // Construct the OpenAI Multimodal Request Body
             JSONObject requestBody = new JSONObject();
             requestBody.put("model", GPT_MODEL);
+            requestBody.put("temperature", 0); // Set to 0 for maximum consistency and deterministic responses
             requestBody.put("response_format", new JSONObject().put("type", "json_object"));
 
             // Build the contents array with image and text
