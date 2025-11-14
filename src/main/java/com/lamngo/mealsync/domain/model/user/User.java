@@ -64,6 +64,9 @@ public class User implements UserDetails {
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private RefreshToken refreshToken;
 
+    @Column(nullable = false)
+    private boolean emailVerified = false;
+
     @Override
     public boolean isEnabled() {
         return status == UserStatus.ACTIVE;

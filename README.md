@@ -14,6 +14,7 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
 
 - **🔐 Authentication**
   - JWT & Google OAuth 2.0
+  - Email verification for account security
   - Role-based access control
   - Secure password hashing
 
@@ -314,7 +315,20 @@ All endpoints return a standardized response:
       "name": "John Doe"
     }
     ```
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "uuid",
+        "email": "user@example.com",
+        "name": "John Doe",
+        "emailVerified": false
+      }
+    }
+    ```
   - **Auth**: Not required
+  - **Description**: Creates a new user account. A verification email is automatically sent to the provided email address. The user must verify their email before they can log in.
 
 - **Login**
   ```
@@ -327,7 +341,101 @@ All endpoints return a standardized response:
       "password": "securePassword123"
     }
     ```
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "uuid",
+        "email": "user@example.com",
+        "name": "John Doe",
+        "token": "jwt-access-token",
+        "refreshToken": {
+          "token": "refresh-token",
+          "expiryDate": "2024-12-31T23:59:59Z"
+        }
+      }
+    }
+    ```
   - **Auth**: Not required
+  - **Description**: Authenticates a user and returns JWT tokens. **Note**: Email must be verified before login is allowed. Returns 400 error if email is not verified.
+
+- **Verify Email**
+  ```
+  GET /verify-email?token={verification-token}
+  ```
+  - **Query Parameters**:
+    - `token` (required): Email verification token received via email
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": "Email verified successfully. You can now log in."
+    }
+    ```
+  - **Auth**: Not required
+  - **Description**: Verifies a user's email address using the token sent to their email. The token expires after 24 hours and can only be used once. After verification, the user can log in.
+
+- **Resend Verification Email**
+  ```
+  POST /resend-verification
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "email": "user@example.com"
+    }
+    ```
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": "Verification email sent successfully"
+    }
+    ```
+  - **Auth**: Not required
+  - **Description**: Resends a verification email to the specified email address. Only works for unverified accounts. Returns 400 error if email is already verified.
+
+- **Forgot Password**
+  ```
+  POST /forgot-password
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "email": "user@example.com"
+    }
+    ```
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": "Password reset email sent successfully. Please check your inbox."
+    }
+    ```
+  - **Auth**: Not required
+  - **Description**: Sends a password reset email to the specified email address. The email contains a secure token that expires in 1 hour. Returns 404 if the user is not found.
+
+- **Reset Password**
+  ```
+  POST /reset-password
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "token": "password-reset-token-from-email",
+      "newPassword": "newSecurePassword123"
+    }
+    ```
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": "Password reset successfully. You can now log in with your new password."
+    }
+    ```
+  - **Auth**: Not required
+  - **Description**: Resets the user's password using a valid password reset token. The token must be from the forgot password email and must not be expired or already used. The new password must be at least 6 characters long. After successful reset, the token is marked as used and cannot be reused.
 
 - **Google OAuth Login**
   ```
@@ -795,7 +903,22 @@ GOOGLE_VISION_CREDENTIALS_PATH=/path/to/credentials.json
 
 # Stability AI (for image generation)
 STABILITY_API_KEY=your-stability-key
+
+# AWS SES Email Configuration (for email verification and password reset)
+AWS_SES_FROM_EMAIL=noreply@yourdomain.com
+app.base-url=http://localhost:8081
 ```
+
+**Note on AWS SES Configuration:**
+- **AWS SES Setup**: 
+  1. Verify your domain or email address in AWS SES Console
+  2. Move out of SES Sandbox mode (if needed) to send emails to any address
+  3. Set `AWS_SES_FROM_EMAIL` to a verified email address or domain
+  4. Ensure your AWS credentials have `ses:SendEmail` permission
+- **SES Sandbox Mode**: In sandbox mode, you can only send emails to verified email addresses
+- **Production**: Move out of sandbox mode and verify your sending domain for production use
+- `app.base-url` should be set to your production domain in production environments
+- Uses the same AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`) as S3
 
 ## 🚀 Deployment
 
@@ -849,6 +972,7 @@ sudo ./scripts/setup-ssl.sh yourdomain.com
 This application implements:
 - HTTPS enforcement
 - JWT-based authentication
+- **Email verification** - Users must verify their email before accessing the application
 - Password encryption
 - CORS configuration
 - Input validation

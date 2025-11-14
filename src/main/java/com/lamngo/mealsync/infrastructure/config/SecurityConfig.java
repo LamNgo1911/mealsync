@@ -42,6 +42,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/login/google").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/refresh").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/verify-email").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/users/resend-verification").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/users/forgot-password").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/users/reset-password").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/recipes").permitAll()
                         // All other requests require authentication
                         .anyRequest().authenticated()

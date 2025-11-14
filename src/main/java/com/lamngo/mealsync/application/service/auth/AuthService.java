@@ -2,6 +2,7 @@ package com.lamngo.mealsync.application.service.auth;
 
 import com.lamngo.mealsync.application.dto.user.*;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
+import com.lamngo.mealsync.application.service.email.EmailService;
 import com.lamngo.mealsync.domain.model.user.*;
 import com.lamngo.mealsync.domain.repository.user.IRefreshTokenRepo;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
@@ -29,6 +30,9 @@ public class AuthService implements IAuthService {
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
     private final IRefreshTokenRepo refreshTokenRepo;
+    private final EmailVerificationTokenService emailVerificationTokenService;
+    private final EmailService emailService;
+    private final PasswordResetTokenService passwordResetTokenService;
 
     @Autowired
     UserMapper userMapper;
@@ -38,8 +42,11 @@ public class AuthService implements IAuthService {
             JwtTokenProvider jwtTokenProvider,
             IUserRepo userRepo,
             PasswordEncoder passwordEncoder,
-            RefreshTokenService refreshTokenService
-            , IRefreshTokenRepo refreshTokenRepo
+            RefreshTokenService refreshTokenService,
+            IRefreshTokenRepo refreshTokenRepo,
+            EmailVerificationTokenService emailVerificationTokenService,
+            EmailService emailService,
+            PasswordResetTokenService passwordResetTokenService
     ) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
@@ -47,6 +54,9 @@ public class AuthService implements IAuthService {
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenService = refreshTokenService;
         this.refreshTokenRepo = refreshTokenRepo;
+        this.emailVerificationTokenService = emailVerificationTokenService;
+        this.emailService = emailService;
+        this.passwordResetTokenService = passwordResetTokenService;
     }
 
     @Override
@@ -63,6 +73,7 @@ public class AuthService implements IAuthService {
         user.setName(userCreateDto.getName());
         user.setRole(userCreateDto.getRole() == null ? UserRole.USER : userCreateDto.getRole());
         user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(false);
 
         UserPreference preference = new UserPreference();
         preference.setDietaryRestrictions(new ArrayList<>());
@@ -71,8 +82,13 @@ public class AuthService implements IAuthService {
         preference.setUser(user);
 
         user.setUserPreference(preference);
+        user = userRepo.save(user);
 
-        return userMapper.toUserReadDto(userRepo.save(user));
+        // Generate and send verification token
+        var token = emailVerificationTokenService.createToken(user);
+        emailService.sendVerificationEmail(user.getEmail(), token.getToken(), user.getName());
+
+        return userMapper.toUserReadDto(user);
     }
 
     @Override
@@ -85,6 +101,14 @@ public class AuthService implements IAuthService {
             throw new BadRequestException("Email and password must not be null");
         }
 
+        // Check if user exists and email is verified
+        User user = userRepo.findByEmail(email)
+            .orElseThrow(() -> new BadRequestException("Invalid email or password"));
+        
+        if (!user.isEmailVerified()) {
+            throw new BadRequestException("Please verify your email before logging in");
+        }
+
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(email, password)
         );
@@ -94,8 +118,6 @@ public class AuthService implements IAuthService {
         }
 
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-        User user = (User) userDetails;
-
         String token = jwtTokenProvider.generateToken(userDetails);
         RefreshTokenReadDto refreshToken = refreshTokenService.createRefreshToken(user.getId());
 
@@ -176,5 +198,34 @@ public class AuthService implements IAuthService {
                 .token(newAccessToken)
                 .refreshToken(newRefreshToken)
                 .build();
+    }
+
+    @Transactional
+    public void forgotPassword(String email) {
+        User user = userRepo.findByEmail(email)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+        
+        // Create password reset token
+        var token = passwordResetTokenService.createToken(user);
+        
+        // Send password reset email
+        emailService.sendPasswordResetEmail(user.getEmail(), token.getToken(), user.getName());
+    }
+
+    @Transactional
+    public void resetPassword(String token, String newPassword) {
+        if (newPassword == null || newPassword.trim().isEmpty()) {
+            throw new BadRequestException("New password cannot be empty");
+        }
+        
+        // Validate token and get user
+        User user = passwordResetTokenService.validateToken(token);
+        
+        // Update password
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepo.save(user);
+        
+        // Mark token as used
+        passwordResetTokenService.markTokenAsUsed(token);
     }
 }

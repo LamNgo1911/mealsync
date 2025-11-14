@@ -3,6 +3,7 @@ package com.lamngo.mealsync.application.service.auth;
 import com.lamngo.mealsync.application.dto.user.*;
 import com.lamngo.mealsync.application.mapper.user.RefreshTokenMapper;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
+import com.lamngo.mealsync.application.service.email.EmailService;
 import com.lamngo.mealsync.domain.model.user.*;
 import com.lamngo.mealsync.domain.repository.user.IRefreshTokenRepo;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
@@ -31,6 +32,9 @@ class AuthServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private RefreshTokenService refreshTokenService;
     @Mock private IRefreshTokenRepo refreshTokenRepo;
+    @Mock private EmailVerificationTokenService emailVerificationTokenService;
+    @Mock private EmailService emailService;
+    @Mock private PasswordResetTokenService passwordResetTokenService;
     @Mock private UserMapper userMapper;
     @Mock private RefreshTokenMapper refreshTokenMapper;
     @InjectMocks private AuthService authService;
@@ -38,7 +42,8 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        authService = new AuthService(authenticationManager, jwtTokenProvider, userRepo, passwordEncoder, refreshTokenService, refreshTokenRepo);
+        authService = new AuthService(authenticationManager, jwtTokenProvider, userRepo, passwordEncoder, 
+            refreshTokenService, refreshTokenRepo, emailVerificationTokenService, emailService, passwordResetTokenService);
         authService.userMapper = userMapper;
 
     }
@@ -62,7 +67,39 @@ class AuthServiceTest {
         when(passwordEncoder.encode(any())).thenReturn("encoded");
         when(userRepo.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
         when(userMapper.toUserReadDto(any(User.class))).thenReturn(new UserReadDto());
+        
+        var token = new EmailVerificationToken();
+        token.setToken("test-token");
+        when(emailVerificationTokenService.createToken(any(User.class))).thenReturn(token);
+        doNothing().when(emailService).sendVerificationEmail(anyString(), anyString(), anyString());
+        
         assertNotNull(authService.register(dto));
+        verify(emailVerificationTokenService).createToken(any(User.class));
+        verify(emailService).sendVerificationEmail(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void register_shouldSetEmailVerifiedToFalse() {
+        UserCreateDto dto = new UserCreateDto();
+        dto.setEmail("test2@example.com");
+        dto.setPassword("pass");
+        dto.setName("Test");
+
+        when(userRepo.findByEmail(dto.getEmail())).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(any())).thenReturn("encoded");
+        when(userRepo.save(any(User.class))).thenAnswer(i -> {
+            User user = i.getArgument(0);
+            assertFalse(user.isEmailVerified());
+            return user;
+        });
+        when(userMapper.toUserReadDto(any(User.class))).thenReturn(new UserReadDto());
+        
+        var token = new EmailVerificationToken();
+        token.setToken("test-token");
+        when(emailVerificationTokenService.createToken(any(User.class))).thenReturn(token);
+        doNothing().when(emailService).sendVerificationEmail(anyString(), anyString(), anyString());
+        
+        authService.register(dto);
     }
 
     @Test
@@ -78,8 +115,23 @@ class AuthServiceTest {
         UserLoginDto dto = new UserLoginDto();
         dto.setEmail("test@example.com");
         dto.setPassword("pass");
-        when(authenticationManager.authenticate(any())).thenReturn(null);
+        when(userRepo.findByEmail(dto.getEmail())).thenReturn(Optional.empty());
         assertThrows(BadRequestException.class, () -> authService.login(dto));
+    }
+
+    @Test
+    void login_shouldThrowException_whenEmailNotVerified() {
+        UserLoginDto dto = new UserLoginDto();
+        dto.setEmail("test@example.com");
+        dto.setPassword("pass");
+        
+        User user = new User();
+        user.setEmail(dto.getEmail());
+        user.setEmailVerified(false);
+        when(userRepo.findByEmail(dto.getEmail())).thenReturn(Optional.of(user));
+        
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> authService.login(dto));
+        assertEquals("Please verify your email before logging in", exception.getMessage());
     }
 
     // Removed: login_shouldThrowException_whenUserNotFound
@@ -226,5 +278,85 @@ class AuthServiceTest {
         assertEquals("Refresh token has been revoked", exception.getMessage());
         // Should not call verifyExpiration if token is revoked
         verify(refreshTokenService, never()).verifyExpiration(any());
+    }
+
+    @Test
+    void forgotPassword_shouldSendResetEmail_whenUserExists() {
+        // Given
+        String email = "test@example.com";
+        User user = new User();
+        user.setEmail(email);
+        user.setName("Test User");
+        when(userRepo.findByEmail(email)).thenReturn(Optional.of(user));
+        
+        var token = new com.lamngo.mealsync.domain.model.user.PasswordResetToken();
+        token.setToken("reset-token");
+        when(passwordResetTokenService.createToken(user)).thenReturn(token);
+        doNothing().when(emailService).sendPasswordResetEmail(anyString(), anyString(), anyString());
+
+        // When
+        authService.forgotPassword(email);
+
+        // Then
+        verify(passwordResetTokenService).createToken(user);
+        verify(emailService).sendPasswordResetEmail(email, token.getToken(), user.getName());
+    }
+
+    @Test
+    void forgotPassword_shouldThrowException_whenUserNotFound() {
+        // Given
+        String email = "nonexistent@example.com";
+        when(userRepo.findByEmail(email)).thenReturn(Optional.empty());
+
+        // When & Then
+        assertThrows(ResourceNotFoundException.class, () -> authService.forgotPassword(email));
+    }
+
+    @Test
+    void resetPassword_shouldUpdatePassword_whenTokenValid() {
+        // Given
+        String token = "valid-token";
+        String newPassword = "newpassword123";
+        User user = new User();
+        user.setEmail("test@example.com");
+        user.setPassword("old-encoded-password");
+        
+        when(passwordResetTokenService.validateToken(token)).thenReturn(user);
+        when(passwordEncoder.encode(newPassword)).thenReturn("new-encoded-password");
+        when(userRepo.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doNothing().when(passwordResetTokenService).markTokenAsUsed(token);
+
+        // When
+        authService.resetPassword(token, newPassword);
+
+        // Then
+        verify(passwordResetTokenService).validateToken(token);
+        verify(passwordEncoder).encode(newPassword);
+        verify(userRepo).save(user);
+        verify(passwordResetTokenService).markTokenAsUsed(token);
+        assertEquals("new-encoded-password", user.getPassword());
+    }
+
+    @Test
+    void resetPassword_shouldThrowException_whenPasswordEmpty() {
+        // Given
+        String token = "valid-token";
+        String emptyPassword = "";
+
+        // When & Then
+        BadRequestException exception = assertThrows(BadRequestException.class, 
+            () -> authService.resetPassword(token, emptyPassword));
+        assertEquals("New password cannot be empty", exception.getMessage());
+    }
+
+    @Test
+    void resetPassword_shouldThrowException_whenPasswordNull() {
+        // Given
+        String token = "valid-token";
+
+        // When & Then
+        BadRequestException exception = assertThrows(BadRequestException.class, 
+            () -> authService.resetPassword(token, null));
+        assertEquals("New password cannot be empty", exception.getMessage());
     }
 }

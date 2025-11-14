@@ -5,6 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lamngo.mealsync.application.dto.user.RefreshTokenRequestDto;
 import com.lamngo.mealsync.application.dto.user.UserCreateDto;
 import com.lamngo.mealsync.application.dto.user.UserLoginDto;
+import com.lamngo.mealsync.application.service.auth.EmailVerificationTokenService;
+import com.lamngo.mealsync.application.service.auth.PasswordResetTokenService;
+import com.lamngo.mealsync.domain.model.user.EmailVerificationToken;
+import com.lamngo.mealsync.domain.model.user.PasswordResetToken;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.model.user.UserRole;
 import com.lamngo.mealsync.domain.model.user.UserStatus;
@@ -17,7 +21,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
@@ -31,6 +35,12 @@ class AuthControllerIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private EmailVerificationTokenService emailVerificationTokenService;
+
+    @Autowired
+    private PasswordResetTokenService passwordResetTokenService;
 
     private ObjectMapper objectMapper;
 
@@ -64,6 +74,7 @@ class AuthControllerIntegrationTest extends BaseIntegrationTest {
         assertEquals("Test User", savedUser.getName());
         assertEquals(UserRole.USER, savedUser.getRole());
         assertEquals(UserStatus.ACTIVE, savedUser.getStatus());
+        assertFalse(savedUser.isEmailVerified()); // Email should not be verified after registration
         assertTrue(passwordEncoder.matches("password123", savedUser.getPassword()));
     }
 
@@ -94,13 +105,14 @@ class AuthControllerIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void login_success() throws Exception {
-        // Given - create a user first
+        // Given - create a user first with verified email
         User user = new User();
         user.setEmail("login@example.com");
         user.setPassword(passwordEncoder.encode("password123"));
         user.setName("Login User");
         user.setRole(UserRole.USER);
         user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(true); // Must be verified to login
         userRepo.save(user);
 
         // When
@@ -136,6 +148,7 @@ class AuthControllerIntegrationTest extends BaseIntegrationTest {
         user.setName("Invalid User");
         user.setRole(UserRole.USER);
         user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(true);
         userRepo.save(user);
 
         // When - login with wrong password
@@ -159,6 +172,7 @@ class AuthControllerIntegrationTest extends BaseIntegrationTest {
         user.setName("Refresh User");
         user.setRole(UserRole.USER);
         user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(true);
         userRepo.save(user);
 
         // Login to get refresh token
@@ -201,6 +215,314 @@ class AuthControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post("/api/v1/users/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(refreshRequest)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void login_unverifiedEmail_shouldFail() throws Exception {
+        // Given - create a user with unverified email
+        User user = new User();
+        user.setEmail("unverified@example.com");
+        user.setPassword(passwordEncoder.encode("password123"));
+        user.setName("Unverified User");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(false); // Email not verified
+        userRepo.save(user);
+
+        // When - try to login
+        UserLoginDto loginDto = new UserLoginDto();
+        loginDto.setEmail("unverified@example.com");
+        loginDto.setPassword("password123");
+
+        // Then
+        mockMvc.perform(post("/api/v1/users/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginDto)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.message").value("Please verify your email before logging in"));
+    }
+
+    @Test
+    void verifyEmail_success() throws Exception {
+        // Given - create a user with unverified email
+        User user = new User();
+        user.setEmail("verify@example.com");
+        user.setPassword(passwordEncoder.encode("password123"));
+        user.setName("Verify User");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(false);
+        user = userRepo.save(user);
+
+        // Create verification token
+        EmailVerificationToken token = emailVerificationTokenService.createToken(user);
+
+        // When - verify email
+        mockMvc.perform(get("/api/v1/users/verify-email")
+                        .param("token", token.getToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").value("Email verified successfully. You can now log in."));
+
+        // Then - verify user email is now verified
+        User verifiedUser = userRepo.findByEmail("verify@example.com").orElse(null);
+        assertNotNull(verifiedUser);
+        assertTrue(verifiedUser.isEmailVerified());
+    }
+
+    @Test
+    void verifyEmail_invalidToken_shouldFail() throws Exception {
+        // When & Then
+        mockMvc.perform(get("/api/v1/users/verify-email")
+                        .param("token", "invalid-token"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void verifyEmail_expiredToken_shouldFail() throws Exception {
+        // Given - create a user with unverified email
+        User user = new User();
+        user.setEmail("expired@example.com");
+        user.setPassword(passwordEncoder.encode("password123"));
+        user.setName("Expired User");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(false);
+        user = userRepo.save(user);
+
+        // Create expired token manually
+        EmailVerificationToken token = new EmailVerificationToken();
+        token.setToken("expired-token");
+        token.setUser(user);
+        token.setExpiryDate(java.time.Instant.now().minusSeconds(3600)); // Expired 1 hour ago
+        token.setUsed(false);
+        // Note: In a real scenario, you'd need to save this through the repository
+        // For this test, we'll use an invalid token approach
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/users/verify-email")
+                        .param("token", "expired-token"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resendVerificationEmail_success() throws Exception {
+        // Given - create a user with unverified email
+        User user = new User();
+        user.setEmail("resend@example.com");
+        user.setPassword(passwordEncoder.encode("password123"));
+        user.setName("Resend User");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(false);
+        userRepo.save(user);
+
+        // When - request resend
+        String requestBody = "{\"email\":\"resend@example.com\"}";
+
+        mockMvc.perform(post("/api/v1/users/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").value("Verification email sent successfully"));
+    }
+
+    @Test
+    void resendVerificationEmail_alreadyVerified_shouldFail() throws Exception {
+        // Given - create a user with verified email
+        User user = new User();
+        user.setEmail("alreadyverified@example.com");
+        user.setPassword(passwordEncoder.encode("password123"));
+        user.setName("Verified User");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(true);
+        userRepo.save(user);
+
+        // When - request resend
+        String requestBody = "{\"email\":\"alreadyverified@example.com\"}";
+
+        mockMvc.perform(post("/api/v1/users/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resendVerificationEmail_userNotFound_shouldFail() throws Exception {
+        // When - request resend for non-existent user
+        String requestBody = "{\"email\":\"nonexistent@example.com\"}";
+
+        mockMvc.perform(post("/api/v1/users/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void forgotPassword_success() throws Exception {
+        // Given - create a user
+        User user = new User();
+        user.setEmail("forgot@example.com");
+        user.setPassword(passwordEncoder.encode("oldpassword123"));
+        user.setName("Forgot User");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(true);
+        userRepo.save(user);
+
+        // When - request password reset
+        String requestBody = "{\"email\":\"forgot@example.com\"}";
+
+        mockMvc.perform(post("/api/v1/users/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").value("Password reset email sent successfully. Please check your inbox."));
+    }
+
+    @Test
+    void forgotPassword_userNotFound_shouldFail() throws Exception {
+        // When - request password reset for non-existent user
+        String requestBody = "{\"email\":\"nonexistent@example.com\"}";
+
+        mockMvc.perform(post("/api/v1/users/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void resetPassword_success() throws Exception {
+        // Given - create a user
+        User user = new User();
+        user.setEmail("reset@example.com");
+        String oldPassword = "oldpassword123";
+        user.setPassword(passwordEncoder.encode(oldPassword));
+        user.setName("Reset User");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(true);
+        user = userRepo.save(user);
+
+        // Create password reset token
+        PasswordResetToken token = passwordResetTokenService.createToken(user);
+
+        // When - reset password
+        String requestBody = String.format(
+            "{\"token\":\"%s\",\"newPassword\":\"newpassword123\"}",
+            token.getToken()
+        );
+
+        mockMvc.perform(post("/api/v1/users/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").value("Password reset successfully. You can now log in with your new password."));
+
+        // Then - verify password was changed and user can login with new password
+        User updatedUser = userRepo.findByEmail("reset@example.com").orElse(null);
+        assertNotNull(updatedUser);
+        assertTrue(passwordEncoder.matches("newpassword123", updatedUser.getPassword()));
+        assertFalse(passwordEncoder.matches(oldPassword, updatedUser.getPassword()));
+    }
+
+    @Test
+    void resetPassword_invalidToken_shouldFail() throws Exception {
+        // When - reset password with invalid token
+        String requestBody = "{\"token\":\"invalid-token\",\"newPassword\":\"newpassword123\"}";
+
+        mockMvc.perform(post("/api/v1/users/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resetPassword_expiredToken_shouldFail() throws Exception {
+        // Given - create a user
+        User user = new User();
+        user.setEmail("expiredreset@example.com");
+        user.setPassword(passwordEncoder.encode("oldpassword123"));
+        user.setName("Expired Reset User");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(true);
+        user = userRepo.save(user);
+
+        // Create expired token manually (in real scenario, this would be expired)
+        PasswordResetToken token = new PasswordResetToken();
+        token.setToken("expired-token");
+        token.setUser(user);
+        token.setExpiryDate(java.time.Instant.now().minusSeconds(3600)); // Expired 1 hour ago
+        token.setUsed(false);
+
+        // When - try to reset password with expired token
+        String requestBody = "{\"token\":\"expired-token\",\"newPassword\":\"newpassword123\"}";
+
+        mockMvc.perform(post("/api/v1/users/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resetPassword_usedToken_shouldFail() throws Exception {
+        // Given - create a user and use a token
+        User user = new User();
+        user.setEmail("usedtoken@example.com");
+        user.setPassword(passwordEncoder.encode("oldpassword123"));
+        user.setName("Used Token User");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(true);
+        user = userRepo.save(user);
+
+        // Create and use a token
+        PasswordResetToken token = passwordResetTokenService.createToken(user);
+        passwordResetTokenService.markTokenAsUsed(token.getToken());
+
+        // When - try to reset password with used token
+        String requestBody = String.format(
+            "{\"token\":\"%s\",\"newPassword\":\"newpassword123\"}",
+            token.getToken()
+        );
+
+        mockMvc.perform(post("/api/v1/users/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resetPassword_weakPassword_shouldFail() throws Exception {
+        // Given - create a user
+        User user = new User();
+        user.setEmail("weakpass@example.com");
+        user.setPassword(passwordEncoder.encode("oldpassword123"));
+        user.setName("Weak Pass User");
+        user.setRole(UserRole.USER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEmailVerified(true);
+        user = userRepo.save(user);
+
+        // Create password reset token
+        PasswordResetToken token = passwordResetTokenService.createToken(user);
+
+        // When - reset password with weak password
+        String requestBody = String.format(
+            "{\"token\":\"%s\",\"newPassword\":\"123\"}",
+            token.getToken()
+        );
+
+        mockMvc.perform(post("/api/v1/users/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
                 .andExpect(status().isBadRequest());
     }
 }

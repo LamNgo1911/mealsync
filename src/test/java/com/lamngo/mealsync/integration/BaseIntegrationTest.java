@@ -81,6 +81,7 @@ public abstract class BaseIntegrationTest {
         user.setName(name);
         user.setRole(UserRole.USER);
         user.setStatus(com.lamngo.mealsync.domain.model.user.UserStatus.ACTIVE);
+        user.setEmailVerified(true); // Set to true for test users to allow login
 
         // Create user preference
         com.lamngo.mealsync.domain.model.user.UserPreference preference = 
