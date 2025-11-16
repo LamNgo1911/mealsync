@@ -10,25 +10,28 @@ import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.domain.repository.recipe.IRecipeRepo;
 import com.lamngo.mealsync.presentation.error.AIServiceException; // New exception name
 import com.lamngo.mealsync.presentation.error.GeminiServiceException;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
-import okhttp3.*;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 @Service
 @Transactional
@@ -42,22 +45,24 @@ public class AIRecipeService {
     @Value("${OPENAI_API_KEY}")
     private String openAIApiKey;
 
-    private static final String GPT_MODEL = "gpt-4o-mini"; // Define the model
-    private static final OkHttpClient client = new OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS) // Increased timeout for multimodal
-            .readTimeout(60, TimeUnit.SECONDS)   // Increased read timeout for multimodal
-            .build();
-
+    private static final String GPT_MODEL = "gpt-5-mini"; // Define the model
+    
+    private WebClient openAIWebClient;
+    
     private final RecipeMapper recipeMapper;
     private final IRecipeRepo recipeRepo;
     private final ImageGeneratorService imageGeneratorService;
     private final S3Service s3Service;
     private final PromptLoader promptLoader;
+    private final com.lamngo.mealsync.application.service.recipe.RecipeService recipeService;
     
     // Cache for all recipes to avoid repeated database queries
     private volatile List<Recipe> cachedAllRecipes = null;
     private volatile long cacheTimestamp = 0;
     private static final long CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
+    
+    // Cache for recipe generation prompt to avoid file I/O
+    private volatile String cachedRecipePrompt = null;
 
     // Remove IRecipeIngredient if it's unused in the constructor
     public AIRecipeService(
@@ -66,20 +71,43 @@ public class AIRecipeService {
             // IRecipeIngredient recipeIngredientRepo, // Removed if not needed
             ImageGeneratorService imageGeneratorService,
             S3Service s3Service,
-            PromptLoader promptLoader) {
+            PromptLoader promptLoader,
+            com.lamngo.mealsync.application.service.recipe.RecipeService recipeService) {
         this.recipeMapper = recipeMapper;
         this.recipeRepo = recipeRepo;
         this.imageGeneratorService = imageGeneratorService;
         this.s3Service = s3Service;
         this.promptLoader = promptLoader;
+        this.recipeService = recipeService;
+    }
+    
+    @PostConstruct
+    public void init() {
+        // Initialize WebClient for async OpenAI API calls
+        this.openAIWebClient = WebClient.builder()
+                .baseUrl(openAIApiBaseUrl)
+                .defaultHeader("Authorization", "Bearer " + openAIApiKey)
+                .defaultHeader("Content-Type", "application/json")
+                .build();
+    }
+    
+    /**
+     * Gets the cached recipe generation prompt, loading from cache if available.
+     */
+    private String getRecipePrompt() {
+        if (cachedRecipePrompt == null) {
+            synchronized (this) {
+                if (cachedRecipePrompt == null) {
+                    cachedRecipePrompt = promptLoader.loadPrompt("recipe-generation.txt");
+                    logger.debug("Loaded and cached recipe generation prompt");
+                }
+            }
+        }
+        return cachedRecipePrompt;
     }
 
     // Generate recipes from a list of detected ingredients with quantities and units
-    @Transactional
     public List<RecipeReadDto> generateRecipes(List<DetectedIngredientDto> ingredients, UserPreference userPreference) {
-        System.out.println("Ingredients: " + ingredients);
-        System.out.println("User preference: " + userPreference);
-
         if (ingredients == null || ingredients.isEmpty()) {
             logger.warn("Ingredients list is empty or null");
             throw new AIServiceException("Ingredients list is empty or null");
@@ -91,11 +119,15 @@ public class AIRecipeService {
 
         logger.info("Generating recipes from {} ingredients", ingredients.size());
         try {
-            List<RecipeReadDto> recipeDtos = fetchRecipesFromOpenAI(ingredients, userPreference);
+            // Use async OpenAI call but block to get results immediately
+            // This is still faster than blocking OkHttpClient because WebClient is more efficient
+            List<RecipeReadDto> recipeDtos = fetchRecipesFromOpenAIAsync(ingredients, userPreference)
+                    .join(); // Block here to get results, but WebClient handles connection pooling better
+            
             logger.info("Successfully fetched {} recipes from OpenAI", recipeDtos.size());
 
-            // Generate images in batch mode to save costs with Gemini 2.5 Flash Image
-            addImagesToRecipesBatch(recipeDtos);
+            // Generate images completely asynchronously - don't wait (saves ~10s)
+            addImagesToRecipesBatchAsync(recipeDtos);  // Fire and forget
 
             return recipeDtos;
         } catch (AIServiceException e) {
@@ -107,209 +139,262 @@ public class AIRecipeService {
         }
     }
 
-    // Fetch recipes from OpenAI API using detected ingredients with quantities and units
-    public List<RecipeReadDto> fetchRecipesFromOpenAI(List<DetectedIngredientDto> ingredients, UserPreference userPreference) {
-        try {
-            if (openAIApiBaseUrl == null || !openAIApiBaseUrl.startsWith("https://")
-                    || openAIApiKey == null || openAIApiKey.isEmpty() ) {
-                logger.error("OPENAI_API_BASE_URL or OPENAI_API_KEY is not set properly. Check your env.properties file.");
-                throw new AIServiceException("OpenAI API configuration error.");
-            }
-            System.out.println("Ingredients: " + ingredients);
-            // Build ingredients string with quantities and units
-            StringBuilder ingredientsStringBuilder = new StringBuilder();
-            for (DetectedIngredientDto ing : ingredients) {
-                if (ingredientsStringBuilder.length() > 0) {
-                    ingredientsStringBuilder.append(", ");
-                }
-                String ingStr = ing.getName();
-                if (ing.getQuantity() != null && !ing.getQuantity().isEmpty() && !ing.getQuantity().equals("1")) {
-                    ingStr = ing.getQuantity() + " " + ingStr;
-                }
-                if (ing.getUnit() != null && !ing.getUnit().isEmpty()) {
-                    ingStr = ingStr + " (" + ing.getUnit() + ")";
-                }
-                ingredientsStringBuilder.append(ingStr);
-            }
-            String ingredientsString = ingredientsStringBuilder.toString();
-
-            // Load and format the recipe generation prompt
-            String prompt = promptLoader.loadAndFormatPrompt("recipe-generation.txt", Map.of(
-                    "INGREDIENTS", ingredientsString,
-                    "DIETARY_RESTRICTIONS", userPreference.getDietaryRestrictions() != null 
-                            ? String.join(", ", userPreference.getDietaryRestrictions()) : "",
-                    "FAVORITE_CUISINES", userPreference.getFavoriteCuisines() != null 
-                            ? String.join(", ", userPreference.getFavoriteCuisines()) : "",
-                    "DISLIKED_INGREDIENTS", userPreference.getDislikedIngredients() != null 
-                            ? String.join(", ", userPreference.getDislikedIngredients()) : ""
-            ));
-
-
-            // Construct the OpenAI Request Body (text-only, no image)
-            JSONObject requestBody = new JSONObject();
-            requestBody.put("model", GPT_MODEL);
-            requestBody.put("response_format", new JSONObject().put("type", "json_object"));
-
-            // Build simple text message
-            requestBody.put("messages", new JSONArray()
-                    .put(new JSONObject()
-                            .put("role", "user")
-                            .put("content", prompt)));
-
-
-            RequestBody body = RequestBody.create(
-                    requestBody.toString(),
-                    MediaType.parse("application/json")
-            );
-
-            String fullUrl = openAIApiBaseUrl; // OpenAI usually has one base URL
-            Request request = new Request.Builder()
-                    .url(fullUrl)
-                    .post(body)
-                    .header("Authorization", "Bearer " + openAIApiKey) // Use API Key in header
-                    .build();
-
-            logger.info("Sending request to OpenAI API using {}", GPT_MODEL);
-
-            try (Response response = client.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    String errorBody = response.body() != null ? response.body().string() : response.message();
-                    logger.error("OpenAI API call failed: HTTP {} - {}", response.code(), errorBody);
-                    throw new AIServiceException("OpenAI API call failed: HTTP " + response.code() + " - " + errorBody);
-                }
-
-                String responseBody = response.body() != null ? response.body().string() : null;
-                if (responseBody == null) {
-                    logger.error("Empty response from OpenAI API");
-                    throw new AIServiceException("Empty response from OpenAI API");
-                }
-
-                try {
-                    JSONObject json = new JSONObject(responseBody);
-                    if (!json.has("choices") || json.getJSONArray("choices").isEmpty()) {
-                        logger.error("No choices returned from OpenAI API");
-                        throw new AIServiceException("No choices returned from OpenAI API");
-                    }
-
-                    JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
-                    JSONObject message = choice.getJSONObject("message");
-                    String recipesJson = message.getString("content").trim();
-
-                    // Log the raw response for debugging
-                    logger.debug("Raw OpenAI response content: {}", recipesJson);
-
-                    // Since we're using response_format: "json_object", the response
-                    // will be a JSON object containing a "recipes" array
-                    JSONObject contentObject = new JSONObject(recipesJson);
-                    if (!contentObject.has("recipes")) {
-                        logger.error("Response does not contain 'recipes' array. Response: {}", recipesJson);
-                        throw new AIServiceException("Invalid response format: missing 'recipes' array");
-                    }
-                    JSONArray recipesArray = contentObject.getJSONArray("recipes");
-
-                    List<Recipe> recipes = new ArrayList<>();
-                    // ... (rest of your existing parsing and saving logic is below) ...
-
-                    for (int i = 0; i < recipesArray.length(); i++) {
-                        JSONObject obj = recipesArray.getJSONObject(i);
-                        String recipeName = obj.optString("name", null);
-                        
-                        if (recipeName == null || recipeName.trim().isEmpty()) {
-                            logger.warn("Skipping recipe due to missing name");
-                            continue;
-                        }
-
-                        // First check for similar recipe by name (90% similarity threshold)
-                        Optional<Recipe> similarRecipeOpt = findSimilarRecipe(recipeName);
-                        Recipe recipe;
-                        
-                        if (similarRecipeOpt.isPresent()) {
-                            logger.info("Found similar recipe '{}' for '{}'. Using existing recipe from database.", 
-                                       similarRecipeOpt.get().getName(), recipeName);
-                            recipe = similarRecipeOpt.get();
-                        } else {
-                            // Check by ingredientKey as fallback
-                            String ingredientKey = generateIngredientKey(recipeName);
-
-                            if (ingredientKey == null || ingredientKey.isBlank()) {
-                                logger.warn("Skipping recipe due to missing ingredientKey");
-                                continue;
-                            }
-
-                            Optional<Recipe> existingRecipeOpt = recipeRepo.findByIngredientKey(ingredientKey);
-                            if (existingRecipeOpt.isPresent()) {
-                                logger.info("Recipe with ingredientKey '{}' already exists. Using existing recipe.", ingredientKey);
-                                recipe = existingRecipeOpt.get();
-                            } else {
-                                recipe = new Recipe();
-                                recipe.setName(recipeName);
-
-                                List<String> instructions = new ArrayList<>();
-                                if (obj.has("instructions") && !obj.isNull("instructions")) {
-                                    JSONArray instArray = obj.getJSONArray("instructions");
-                                    for (int k = 0; k < instArray.length(); k++) {
-                                        instructions.add(instArray.optString(k, ""));
-                                    }
-                                }
-                                recipe.setInstructions(instructions);
-                                recipe.setCuisine(obj.optString("cuisine"));
-                                recipe.setIngredientKey(ingredientKey);
-                                recipe.setDescription(obj.optString("description", ""));
-                                recipe.setPreparationTime(obj.optInt("preparationTime", 0));
-                                recipe.setCookingTime(obj.optInt("cookingTime", 0));
-                                recipe.setTotalTime(obj.optInt("totalTime", 0));
-                                recipe.setServings(obj.optInt("servings", 1));
-                                recipe.setCalories(obj.optDouble("calories", 0.0));
-                                recipe.setProtein(obj.optDouble("protein", 0.0));
-                                recipe.setCarbohydrates(obj.optDouble("carbohydrates", 0.0));
-                                recipe.setFat(obj.optDouble("fat", 0.0));
-                                recipe.setDifficulty(obj.optString("difficulty", ""));
-
-                                // Tags
-                                List<String> tags = new ArrayList<>();
-                                if (obj.has("tags") && !obj.isNull("tags")) {
-                                    JSONArray tagsArray = obj.getJSONArray("tags");
-                                    for (int t = 0; t < tagsArray.length(); t++) {
-                                        tags.add(tagsArray.optString(t, ""));
-                                    }
-                                }
-                                recipe.setTags(tags);
-
-                                // Ingredients
-                                if (obj.has("ingredients") && !obj.isNull("ingredients")) {
-                                    JSONArray ingredientsArray = obj.getJSONArray("ingredients");
-                                    List<RecipeIngredient> ingredientList = new ArrayList<>();
-                                    for (int j = 0; j < ingredientsArray.length(); j++) {
-                                        JSONObject ingObj = ingredientsArray.getJSONObject(j);
-                                        RecipeIngredient ingredient = new RecipeIngredient();
-                                        ingredient.setName(ingObj.optString("name"));
-                                        ingredient.setQuantity(ingObj.optString("quantity", "1"));
-                                        ingredient.setUnit(ingObj.optString("unit", ""));
-                                        ingredient.setRecipe(recipe);
-                                        ingredientList.add(ingredient);
-                                    }
-                                    recipe.setIngredients(ingredientList);
-                                }
-
-                                // Save new recipe to DB
-                                recipe = recipeRepo.createRecipe(recipe);
-                                logger.info("Created new recipe '{}' in database", recipeName);
-                            }
-                        }
-                        recipes.add(recipe);
-                    }
-
-                    return recipeMapper.toRecipeReadDtoList(recipes);
-
-                } catch (JSONException e) {
-                    logger.error("Failed to parse OpenAI API response: {}", e.getMessage(), e);
-                    throw new AIServiceException("Failed to parse OpenAI API response: " + e.getMessage());
-                }
-            }
-        } catch (IOException | JSONException e) {
-            logger.error("Error fetching recipes from OpenAI API", e);
-            throw new AIServiceException("Error fetching recipes from OpenAI API");
+    // Fetch recipes from OpenAI API using detected ingredients with quantities and units (async version)
+    public CompletableFuture<List<RecipeReadDto>> fetchRecipesFromOpenAIAsync(
+            List<DetectedIngredientDto> ingredients, UserPreference userPreference) {
+        if (openAIApiBaseUrl == null || !openAIApiBaseUrl.startsWith("https://")
+                || openAIApiKey == null || openAIApiKey.isEmpty()) {
+            logger.error("OPENAI_API_BASE_URL or OPENAI_API_KEY is not set properly. Check your env.properties file.");
+            return CompletableFuture.failedFuture(new AIServiceException("OpenAI API configuration error."));
         }
+        
+        // Build ingredients string with quantities and units
+        StringBuilder ingredientsStringBuilder = new StringBuilder();
+        for (DetectedIngredientDto ing : ingredients) {
+            if (ingredientsStringBuilder.length() > 0) {
+                ingredientsStringBuilder.append(", ");
+            }
+            String ingStr = ing.getName();
+            if (ing.getQuantity() != null && !ing.getQuantity().isEmpty() && !ing.getQuantity().equals("1")) {
+                ingStr = ing.getQuantity() + " " + ingStr;
+            }
+            if (ing.getUnit() != null && !ing.getUnit().isEmpty()) {
+                ingStr = ingStr + " (" + ing.getUnit() + ")";
+            }
+            ingredientsStringBuilder.append(ingStr);
+        }
+        String ingredientsString = ingredientsStringBuilder.toString();
+
+        // Use cached prompt template and format it
+        String promptTemplate = getRecipePrompt();
+        String prompt = promptLoader.formatPrompt(promptTemplate, Map.of(
+                "INGREDIENTS", ingredientsString,
+                "DIETARY_RESTRICTIONS", userPreference.getDietaryRestrictions() != null 
+                        ? String.join(", ", userPreference.getDietaryRestrictions()) : "",
+                "FAVORITE_CUISINES", userPreference.getFavoriteCuisines() != null 
+                        ? String.join(", ", userPreference.getFavoriteCuisines()) : "",
+                "DISLIKED_INGREDIENTS", userPreference.getDislikedIngredients() != null 
+                        ? String.join(", ", userPreference.getDislikedIngredients()) : ""
+        ));
+
+        // Construct the OpenAI Request Body
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("model", GPT_MODEL);
+        requestBody.put("response_format", new JSONObject().put("type", "json_object"));
+        requestBody.put("messages", new JSONArray()
+                .put(new JSONObject()
+                        .put("role", "user")
+                        .put("content", prompt)));
+
+        logger.info("Sending async request to OpenAI API using {}", GPT_MODEL);
+
+        // Use WebClient for async call
+        return openAIWebClient.post()
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody.toString())
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(responseBody -> {
+                    try {
+                        JSONObject json = new JSONObject(responseBody);
+                        if (!json.has("choices") || json.getJSONArray("choices").isEmpty()) {
+                            logger.error("No choices returned from OpenAI API");
+                            throw new AIServiceException("No choices returned from OpenAI API");
+                        }
+
+                        JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
+                        JSONObject message = choice.getJSONObject("message");
+                        String recipesJson = message.getString("content").trim();
+
+                        logger.debug("Raw OpenAI response content: {}", recipesJson);
+
+                        JSONObject contentObject = new JSONObject(recipesJson);
+                        if (!contentObject.has("recipes")) {
+                            logger.error("Response does not contain 'recipes' array. Response: {}", recipesJson);
+                            throw new AIServiceException("Invalid response format: missing 'recipes' array");
+                        }
+                        JSONArray recipesArray = contentObject.getJSONArray("recipes");
+
+                        return parseAndSaveRecipes(recipesArray);
+                    } catch (JSONException e) {
+                        logger.error("Failed to parse OpenAI API response: {}", e.getMessage(), e);
+                        throw new AIServiceException("Failed to parse OpenAI API response: " + e.getMessage());
+                    }
+                })
+                .doOnError(error -> {
+                    logger.error("Error fetching recipes from OpenAI API", error);
+                })
+                .onErrorResume(throwable -> {
+                    AIServiceException exception;
+                    if (throwable instanceof AIServiceException) {
+                        exception = (AIServiceException) throwable;
+                    } else {
+                        String errorMsg = throwable != null ? throwable.getMessage() : "Unknown error";
+                        exception = new AIServiceException("Error fetching recipes from OpenAI API: " + errorMsg);
+                    }
+                    return Mono.error(exception);
+                })
+                .toFuture();
+    }
+    
+    @Transactional
+    private List<RecipeReadDto> parseAndSaveRecipes(JSONArray recipesArray) {
+        List<Recipe> recipes = new ArrayList<>();
+        List<Recipe> newRecipesToSave = new ArrayList<>();
+        
+        // Pre-compute all ingredient keys to batch lookup
+        Map<String, String> recipeNameToIngredientKey = new HashMap<>();
+        for (int i = 0; i < recipesArray.length(); i++) {
+            JSONObject obj = recipesArray.getJSONObject(i);
+            String recipeName = obj.optString("name", null);
+            if (recipeName != null && !recipeName.trim().isEmpty()) {
+                String ingredientKey = generateIngredientKey(recipeName);
+                if (ingredientKey != null && !ingredientKey.isBlank()) {
+                    recipeNameToIngredientKey.put(recipeName, ingredientKey);
+                }
+            }
+        }
+        
+        // Batch lookup all ingredient keys (sequential for thread safety with DB)
+        Map<String, Optional<Recipe>> ingredientKeyToRecipe = new HashMap<>();
+        for (String ingredientKey : recipeNameToIngredientKey.values().stream().distinct().toList()) {
+            ingredientKeyToRecipe.put(ingredientKey, recipeRepo.findByIngredientKey(ingredientKey));
+        }
+
+        for (int i = 0; i < recipesArray.length(); i++) {
+            JSONObject obj = recipesArray.getJSONObject(i);
+            String recipeName = obj.optString("name", null);
+            
+            if (recipeName == null || recipeName.trim().isEmpty()) {
+                logger.warn("Skipping recipe due to missing name");
+                continue;
+            }
+
+            // First check for similar recipe by name (90% similarity threshold)
+            Optional<Recipe> similarRecipeOpt = findSimilarRecipe(recipeName);
+            Recipe recipe;
+            
+            if (similarRecipeOpt.isPresent()) {
+                // Re-fetch the recipe from database to ensure it's attached to current session
+                // This prevents lazy loading issues with collections
+                Recipe cachedRecipe = similarRecipeOpt.get();
+                Optional<Recipe> attachedRecipe = recipeRepo.getRecipeById(cachedRecipe.getId());
+                if (attachedRecipe.isPresent()) {
+                    recipe = attachedRecipe.get();
+                    logger.debug("Found similar recipe '{}' for '{}'. Using existing recipe from database.", 
+                               recipe.getName(), recipeName);
+                } else {
+                    // Fallback to cached recipe if re-fetch fails (shouldn't happen)
+                    recipe = cachedRecipe;
+                    logger.warn("Could not re-fetch recipe {} from database, using cached version", cachedRecipe.getId());
+                }
+            } else {
+                // Check by ingredientKey using pre-fetched results
+                String ingredientKey = recipeNameToIngredientKey.get(recipeName);
+
+                if (ingredientKey == null || ingredientKey.isBlank()) {
+                    logger.warn("Skipping recipe due to missing ingredientKey");
+                    continue;
+                }
+
+                Optional<Recipe> existingRecipeOpt = ingredientKeyToRecipe.get(ingredientKey);
+                if (existingRecipeOpt != null && existingRecipeOpt.isPresent()) {
+                    // Recipe from findByIngredientKey should already be attached to session
+                    // but we ensure collections are initialized later
+                    recipe = existingRecipeOpt.get();
+                    logger.debug("Recipe with ingredientKey '{}' already exists. Using existing recipe.", ingredientKey);
+                } else {
+                    recipe = buildRecipeFromJson(obj, recipeName, ingredientKey);
+                    newRecipesToSave.add(recipe);
+                }
+            }
+            recipes.add(recipe);
+        }
+        
+        // Batch save all new recipes at once (more efficient)
+        if (!newRecipesToSave.isEmpty()) {
+            logger.info("Batch saving {} new recipes to database", newRecipesToSave.size());
+            for (Recipe newRecipe : newRecipesToSave) {
+                Recipe savedRecipe = recipeRepo.createRecipe(newRecipe);
+                // Update the recipes list with saved entity
+                for (int i = 0; i < recipes.size(); i++) {
+                    if (recipes.get(i) == newRecipe) {
+                        recipes.set(i, savedRecipe);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Initialize lazy-loaded collections before mapping to DTOs
+        // This prevents "could not initialize proxy - no Session" errors
+        for (Recipe recipe : recipes) {
+            if (recipe != null) {
+                // Force initialization of lazy collections
+                if (recipe.getTags() != null) {
+                    recipe.getTags().size(); // Access collection to initialize
+                }
+                if (recipe.getIngredients() != null) {
+                    recipe.getIngredients().size(); // Access collection to initialize
+                }
+            }
+        }
+
+        return recipeMapper.toRecipeReadDtoList(recipes);
+    }
+    
+    private Recipe buildRecipeFromJson(JSONObject obj, String recipeName, String ingredientKey) {
+        Recipe recipe = new Recipe();
+        recipe.setName(recipeName);
+
+        List<String> instructions = new ArrayList<>();
+        if (obj.has("instructions") && !obj.isNull("instructions")) {
+            JSONArray instArray = obj.getJSONArray("instructions");
+            for (int k = 0; k < instArray.length(); k++) {
+                instructions.add(instArray.optString(k, ""));
+            }
+        }
+        recipe.setInstructions(instructions);
+        recipe.setCuisine(obj.optString("cuisine"));
+        recipe.setIngredientKey(ingredientKey);
+        recipe.setDescription(obj.optString("description", ""));
+        recipe.setPreparationTime(obj.optInt("preparationTime", 0));
+        recipe.setCookingTime(obj.optInt("cookingTime", 0));
+        recipe.setTotalTime(obj.optInt("totalTime", 0));
+        recipe.setServings(obj.optInt("servings", 1));
+        recipe.setCalories(obj.optDouble("calories", 0.0));
+        recipe.setProtein(obj.optDouble("protein", 0.0));
+        recipe.setCarbohydrates(obj.optDouble("carbohydrates", 0.0));
+        recipe.setFat(obj.optDouble("fat", 0.0));
+        recipe.setDifficulty(obj.optString("difficulty", ""));
+
+        // Tags
+        List<String> tags = new ArrayList<>();
+        if (obj.has("tags") && !obj.isNull("tags")) {
+            JSONArray tagsArray = obj.getJSONArray("tags");
+            for (int t = 0; t < tagsArray.length(); t++) {
+                tags.add(tagsArray.optString(t, ""));
+            }
+        }
+        recipe.setTags(tags);
+
+        // Ingredients
+        if (obj.has("ingredients") && !obj.isNull("ingredients")) {
+            JSONArray ingredientsArray = obj.getJSONArray("ingredients");
+            List<RecipeIngredient> ingredientList = new ArrayList<>();
+            for (int j = 0; j < ingredientsArray.length(); j++) {
+                JSONObject ingObj = ingredientsArray.getJSONObject(j);
+                RecipeIngredient ingredient = new RecipeIngredient();
+                ingredient.setName(ingObj.optString("name"));
+                ingredient.setQuantity(ingObj.optString("quantity", "1"));
+                ingredient.setUnit(ingObj.optString("unit", ""));
+                ingredient.setRecipe(recipe);
+                ingredientList.add(ingredient);
+            }
+            recipe.setIngredients(ingredientList);
+        }
+        
+        return recipe;
     }
 
     @Transactional
@@ -443,6 +528,7 @@ public class AIRecipeService {
      * Finds a similar recipe in the database by name.
      * Returns the most similar recipe if similarity is >= 0.9 (90%), otherwise returns empty.
      * Uses cached recipe list for better performance.
+     * Optimized with early exits and length filtering.
      */
     private Optional<Recipe> findSimilarRecipe(String recipeName) {
         if (recipeName == null || recipeName.trim().isEmpty()) {
@@ -455,6 +541,7 @@ public class AIRecipeService {
         }
         
         String normalizedName = recipeName.toLowerCase().trim();
+        int normalizedLength = normalizedName.length();
         double maxSimilarity = 0.0;
         Recipe mostSimilarRecipe = null;
         
@@ -465,15 +552,25 @@ public class AIRecipeService {
             }
             
             String recipeNameLower = recipe.getName().toLowerCase().trim();
+            
+            // Fast exact match check
             if (normalizedName.equals(recipeNameLower)) {
-                logger.info("Found exact match for recipe '{}'", recipeName);
+                logger.debug("Found exact match for recipe '{}'", recipeName);
                 return Optional.of(recipe);
             }
             
             // Only calculate similarity if names are similar length (optimization)
-            int lengthDiff = Math.abs(normalizedName.length() - recipeNameLower.length());
-            if (lengthDiff > normalizedName.length() * 0.3) {
-                continue; // Skip if length difference is too large
+            int lengthDiff = Math.abs(normalizedLength - recipeNameLower.length());
+            if (lengthDiff > normalizedLength * 0.3) {
+                continue; // Skip if length difference is too large (>30%)
+            }
+            
+            // Quick prefix/suffix check before expensive similarity calculation
+            if (normalizedLength > 5 && recipeNameLower.length() > 5) {
+                if (!normalizedName.substring(0, Math.min(3, normalizedLength))
+                        .equals(recipeNameLower.substring(0, Math.min(3, recipeNameLower.length())))) {
+                    continue; // Skip if first 3 chars don't match
+                }
             }
             
             double similarity = calculateSimilarity(normalizedName, recipeNameLower);
@@ -490,7 +587,7 @@ public class AIRecipeService {
         
         // Return recipe if similarity is >= 90% (0.9)
         if (maxSimilarity >= 0.9 && mostSimilarRecipe != null) {
-            logger.info("Found similar recipe '{}' with {:.2f}% similarity to '{}'", 
+            logger.debug("Found similar recipe '{}' with {:.2f}% similarity to '{}'", 
                        mostSimilarRecipe.getName(), maxSimilarity * 100, recipeName);
             return Optional.of(mostSimilarRecipe);
         }
@@ -517,10 +614,20 @@ public class AIRecipeService {
     }
     
     /**
-     * Adds images to multiple recipes using batch mode for cost efficiency with Gemini 2.5 Flash Image
+     * Adds images to multiple recipes using batch mode for cost efficiency with Gemini 2.5 Flash Image.
+     * This method delegates to the async version for backward compatibility.
+     */
+    public CompletableFuture<Void> addImagesToRecipesBatch(List<RecipeReadDto> recipeDtos) {
+        // Delegate to async version for backward compatibility
+        return addImagesToRecipesBatchAsync(recipeDtos);
+    }
+
+    /**
+     * Adds images to multiple recipes asynchronously without blocking the response.
+     * This method runs in a separate thread pool and does not block the caller.
      */
     @Async("taskExecutor")
-    public CompletableFuture<Void> addImagesToRecipesBatch(List<RecipeReadDto> recipeDtos) {
+    public CompletableFuture<Void> addImagesToRecipesBatchAsync(List<RecipeReadDto> recipeDtos) {
         try {
             if (recipeDtos == null || recipeDtos.isEmpty()) {
                 logger.debug("No recipes to generate images for");
@@ -538,7 +645,7 @@ public class AIRecipeService {
                 return CompletableFuture.completedFuture(null);
             }
 
-            logger.info("Generating {} images in batch mode using Gemini 2.5 Flash Image", recipesNeedingImages.size());
+            logger.info("Generating {} images asynchronously in background using Gemini 2.5 Flash Image", recipesNeedingImages.size());
 
             // Prepare batch requests
             List<ImageGeneratorService.ImageGenerationRequest> batchRequests = new ArrayList<>();
@@ -552,7 +659,7 @@ public class AIRecipeService {
                         dto.getName(), ingredientNames, description));
             }
 
-            // Generate images in batch
+            // Generate images in batch (this takes ~10s but runs in background)
             Map<String, String> recipeNameToBase64 = imageGeneratorService.generateImagesBatch(batchRequests);
 
             // Upload images and update recipes
@@ -568,15 +675,13 @@ public class AIRecipeService {
                     String imageUrl = s3Service.uploadImage(imageBytes, dto.getName());
 
                     if (imageUrl != null && !imageUrl.isEmpty()) {
-                        dto.setImageUrl(imageUrl);
-
                         // Update entity in database
                         Optional<Recipe> recipeOpt = recipeRepo.getRecipeById(dto.getId());
                         if (recipeOpt.isPresent()) {
                             Recipe recipe = recipeOpt.get();
                             recipe.setImageUrl(imageUrl);
                             recipeRepo.saveRecipe(recipe);
-                            logger.info("Successfully updated recipe {} with image URL", dto.getId());
+                            logger.info("Successfully updated recipe {} with image URL in background", dto.getId());
                         }
                     }
                 } catch (Exception e) {
@@ -584,7 +689,7 @@ public class AIRecipeService {
                 }
             }
 
-            logger.info("Successfully processed batch image generation for {} recipes", recipesNeedingImages.size());
+            logger.info("Successfully processed batch image generation for {} recipes in background", recipesNeedingImages.size());
             return CompletableFuture.completedFuture(null);
         } catch (Exception e) {
             logger.error("Failed to add images to recipes in batch: {}", e.getMessage(), e);
@@ -603,6 +708,21 @@ public class AIRecipeService {
             return CompletableFuture.completedFuture(null);
         } catch (Exception e) {
             logger.error("Failed to add image to recipe {} asynchronously: {}", dto.getName(), e.getMessage(), e);
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+    
+    /**
+     * Saves generated recipes to user's history asynchronously (non-blocking)
+     */
+    @Async("taskExecutor")
+    public CompletableFuture<Void> saveGeneratedRecipesToUserAsync(UUID userId, List<UUID> recipeIds) {
+        try {
+            recipeService.addGeneratedRecipesToUser(userId, recipeIds);
+            logger.debug("Successfully saved {} generated recipes to user {} history", recipeIds.size(), userId);
+            return CompletableFuture.completedFuture(null);
+        } catch (Exception e) {
+            logger.error("Failed to save generated recipes to user {} history: {}", userId, e.getMessage(), e);
             return CompletableFuture.failedFuture(e);
         }
     }

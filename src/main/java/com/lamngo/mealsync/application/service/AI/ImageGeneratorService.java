@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 @Slf4j
@@ -74,7 +75,8 @@ public class ImageGeneratorService {
     }
 
     /**
-     * Generate multiple images in batch using Gemini 2.5 Flash Image API
+     * Generate multiple images in parallel using Gemini 2.5 Flash Image API
+     * Note: Gemini API doesn't support true batch processing, so we make parallel individual calls
      * @param prompts List of prompts to generate images for
      * @return Map of prompt to base64 image string
      */
@@ -84,77 +86,45 @@ public class ImageGeneratorService {
         }
 
         try {
+            // Use parallel streams to generate images concurrently
+            // This is more efficient than sequential calls while working within API limitations
             Map<String, String> results = new HashMap<>();
             
-            // Gemini API supports batch requests by sending multiple contents in one request
-            // Build the request with multiple contents
-            JSONObject requestBody = new JSONObject();
-            JSONArray contentsArray = new JSONArray();
-            
-            for (String prompt : prompts) {
-                JSONObject content = new JSONObject();
-                JSONArray parts = new JSONArray();
-                JSONObject textPart = new JSONObject();
-                textPart.put("text", prompt);
-                parts.put(textPart);
-                content.put("parts", parts);
-                contentsArray.put(content);
-            }
-            
-            requestBody.put("contents", contentsArray);
-            
-            // Request image output
-            JSONObject generationConfig = new JSONObject();
-            generationConfig.put("responseModalities", new JSONArray().put("IMAGE"));
-            requestBody.put("generationConfig", generationConfig);
-
-            String endpoint = String.format("/v1beta/models/%s:generateContent?key=%s", GEMINI_MODEL, apiKey);
-            
-            String response = webClient.post()
-                    .uri(endpoint)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(requestBody.toString())
-                    .retrieve()
-                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                            this::handleErrorResponse)
-                    .bodyToMono(String.class)
-                    .doOnError(error -> log.error("Gemini API batch error: ", error))
-                    .onErrorResume(error -> Mono.empty())
-                    .block();
-
-            if (response == null) {
-                throw new ImageGeneratorServiceException("Gemini API batch call failed");
-            }
-
-            // Parse response - Gemini returns candidates with inline data
-            JSONObject jsonResponse = new JSONObject(response);
-            
-            if (jsonResponse.has("candidates")) {
-                JSONArray candidates = jsonResponse.getJSONArray("candidates");
-                for (int i = 0; i < candidates.length() && i < prompts.size(); i++) {
-                    JSONObject candidate = candidates.getJSONObject(i);
-                    if (candidate.has("content") && candidate.getJSONObject("content").has("parts")) {
-                        JSONArray parts = candidate.getJSONObject("content").getJSONArray("parts");
-                        for (int j = 0; j < parts.length(); j++) {
-                            JSONObject part = parts.getJSONObject(j);
-                            if (part.has("inlineData")) {
-                                String base64Image = part.getJSONObject("inlineData").getString("data");
-                                results.put(prompts.get(i), base64Image);
-                                break;
-                            }
+            List<CompletableFuture<Map.Entry<String, String>>> futures = prompts.stream()
+                    .map(prompt -> CompletableFuture.supplyAsync(() -> {
+                        try {
+                            String base64Image = callGeminiAPISingle(prompt);
+                            return Map.entry(prompt, base64Image);
+                        } catch (Exception e) {
+                            log.error("Failed to generate image for prompt: {}", prompt, e);
+                            return null;
                         }
+                    }))
+                    .toList();
+
+            // Wait for all futures to complete and collect results
+            CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
+            
+            for (CompletableFuture<Map.Entry<String, String>> future : futures) {
+                try {
+                    Map.Entry<String, String> result = future.get();
+                    if (result != null) {
+                        results.put(result.getKey(), result.getValue());
                     }
+                } catch (Exception e) {
+                    log.error("Error getting image generation result: {}", e.getMessage(), e);
                 }
             }
 
             if (results.isEmpty()) {
-                throw new ImageGeneratorServiceException("No images found in Gemini API batch response");
+                throw new ImageGeneratorServiceException("No images were generated successfully");
             }
 
+            log.info("Successfully generated {} images in parallel", results.size());
             return results;
         } catch (Exception e) {
-            log.error("Batch image generation failed: {}", e.getMessage(), e);
-            throw new ImageGeneratorServiceException("Batch image generation failed", e);
+            log.error("Parallel image generation failed: {}", e.getMessage(), e);
+            throw new ImageGeneratorServiceException("Parallel image generation failed", e);
         }
     }
 

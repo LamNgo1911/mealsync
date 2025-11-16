@@ -26,9 +26,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.IntStream;
 
 @RestController
 @RequestMapping("/api/v1/recipes")
@@ -75,12 +79,11 @@ public class RecipeController {
         // Generate recipes from the detected ingredients
         List<RecipeReadDto> recipes = aiRecipeService.generateRecipes(ingredients, userPreference);
 
-        // Save generated recipes to user's history
+        // Save generated recipes to user's history asynchronously (non-blocking)
         List<UUID> recipeIds = recipes.stream()
                 .map(RecipeReadDto::getId)
                 .toList();
-        recipeService.addGeneratedRecipesToUser(user.getId(), recipeIds);
-        logger.info("Saved {} generated recipes to user {} history", recipes.size(), user.getId());
+        aiRecipeService.saveGeneratedRecipesToUserAsync(user.getId(), recipeIds);
 
         SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
         body.setData(recipes);
@@ -101,6 +104,95 @@ public class RecipeController {
         SuccessResponseEntity<List<DetectedIngredientDto>> body = new SuccessResponseEntity<>();
         body.setData(ingredients);
         return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Combined endpoint that scans an image for ingredients and generates recipes in a single request.
+     * This endpoint pipelines operations for better performance - recipe generation starts as soon as
+     * ingredients are detected, and images are generated asynchronously in the background.
+     * 
+     * @param image The uploaded image file containing ingredients
+     * @param userPreferenceJson Optional JSON string containing user preferences (dietary restrictions, favorite cuisines, disliked ingredients)
+     * @param user The authenticated user
+     * @return List of generated recipes (images will be generated asynchronously in background)
+     */
+    @PostMapping(value = "/scan-and-generate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> scanAndGenerateRecipes(
+            @RequestPart("image") MultipartFile image,
+            @RequestPart(value = "userPreference", required = false) String userPreferenceJson,
+            @AuthenticationPrincipal User user) {
+
+        if (image == null || image.isEmpty()) {
+            throw new BadRequestException("Image file cannot be empty");
+        }
+
+        logger.info("Scanning image and generating recipes for user {}", user.getId());
+
+        // Parse user preference
+        UserPreference userPreference = parseUserPreference(userPreferenceJson);
+
+        // PIPELINE: Start recipe generation as soon as ingredients are detected
+        CompletableFuture<List<DetectedIngredientDto>> ingredientsFuture = 
+            ingredientDetectionService.detectRawIngredientsAsync(image);
+
+        // Start recipe generation immediately when ingredients are ready (pipeline)
+        CompletableFuture<List<RecipeReadDto>> recipesFuture = ingredientsFuture
+            .thenCompose(ingredients -> {
+                logger.info("Ingredients detected, starting recipe generation");
+                return aiRecipeService.fetchRecipesFromOpenAIAsync(ingredients, userPreference);
+            });
+
+        // Block only to get recipes (images generated async in background)
+        List<RecipeReadDto> recipes = recipesFuture.join();
+
+        // Generate images completely asynchronously (fire and forget - saves ~10s)
+        aiRecipeService.addImagesToRecipesBatchAsync(recipes);
+
+        // Save history asynchronously
+        List<UUID> recipeIds = recipes.stream().map(RecipeReadDto::getId).toList();
+        aiRecipeService.saveGeneratedRecipesToUserAsync(user.getId(), recipeIds);
+
+        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
+        body.setData(recipes);
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Parses user preference from JSON string.
+     * Returns default UserPreference if parsing fails or JSON is null/empty.
+     */
+    private UserPreference parseUserPreference(String userPreferenceJson) {
+        UserPreference userPreference = new UserPreference();
+        if (userPreferenceJson != null && !userPreferenceJson.isEmpty()) {
+            try {
+                JSONObject prefJson = new JSONObject(userPreferenceJson);
+                if (prefJson.has("dietaryRestrictions")) {
+                    JSONArray arr = prefJson.getJSONArray("dietaryRestrictions");
+                    userPreference.setDietaryRestrictions(
+                        IntStream.range(0, arr.length())
+                            .mapToObj(arr::getString)
+                            .toList());
+                }
+                if (prefJson.has("favoriteCuisines")) {
+                    JSONArray arr = prefJson.getJSONArray("favoriteCuisines");
+                    userPreference.setFavoriteCuisines(
+                        IntStream.range(0, arr.length())
+                            .mapToObj(arr::getString)
+                            .toList());
+                }
+                if (prefJson.has("dislikedIngredients")) {
+                    JSONArray arr = prefJson.getJSONArray("dislikedIngredients");
+                    userPreference.setDislikedIngredients(
+                        IntStream.range(0, arr.length())
+                            .mapToObj(arr::getString)
+                            .toList());
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to parse user preference, using defaults: {}", e.getMessage());
+            }
+        }
+        return userPreference;
     }
 
     /**

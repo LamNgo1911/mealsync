@@ -2,24 +2,26 @@ package com.lamngo.mealsync.application.service.AI;
 
 import com.lamngo.mealsync.application.dto.recipe.DetectedIngredientDto;
 import com.lamngo.mealsync.presentation.error.AIServiceException;
-import okhttp3.*;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
+import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
-import okhttp3.ConnectionPool;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Service for detecting raw ingredients from images using OpenAI Vision API.
@@ -35,15 +37,11 @@ public class IngredientDetectionService {
     @Value("${OPENAI_API_KEY}")
     private String openAIApiKey;
 
-    // NOTE: Using gpt-4o-mini for cost efficiency. For better instruction-following and validation accuracy,
+    // NOTE: Using gpt-5-mini for cost efficiency and speed. For better instruction-following and validation accuracy,
     // consider upgrading to "gpt-4" or "gpt-4-turbo" if validation quality issues persist.
-    private static final String GPT_MODEL = "gpt-4o-mini";
-    private static final OkHttpClient client = new OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .connectionPool(new ConnectionPool(10, 5, TimeUnit.MINUTES)) // Optimize connection pooling
-            .retryOnConnectionFailure(true)
-            .build();
+    private static final String GPT_MODEL = "gpt-5-mini";
+    
+    private WebClient openAIWebClient;
     
     private final PromptLoader promptLoader;
     
@@ -54,6 +52,15 @@ public class IngredientDetectionService {
     
     public IngredientDetectionService(PromptLoader promptLoader) {
         this.promptLoader = promptLoader;
+    }
+    
+    @PostConstruct
+    public void init() {
+        // Initialize WebClient for async OpenAI API calls
+        this.openAIWebClient = WebClient.builder()
+                .baseUrl(openAIApiBaseUrl)
+                .defaultHeader("Authorization", "Bearer " + openAIApiKey)
+                .build();
     }
     
     /**
@@ -152,130 +159,136 @@ public class IngredientDetectionService {
                 throw new AIServiceException("OpenAI API configuration error");
             }
 
-            // Convert ingredients list to JSON for the prompt (optimized)
-            JSONArray ingredientsJsonArray = new JSONArray(ingredients.size());
-            for (DetectedIngredientDto ingredient : ingredients) {
-                JSONObject ingObj = new JSONObject();
-                String name = ingredient.getName();
-                String quantity = ingredient.getQuantity();
-                String unit = ingredient.getUnit();
-                ingObj.put("name", name != null ? name : "");
-                ingObj.put("quantity", quantity != null ? quantity : "");
-                ingObj.put("unit", unit != null ? unit : "");
-                ingredientsJsonArray.put(ingObj);
-            }
-            String ingredientsJsonString = ingredientsJsonArray.toString();
-
-            // Get cached validation prompt and combine with ingredients
-            String prompt = getValidationPrompt();
-            String fullPrompt = prompt + "\n\nPlease validate these ingredients: " + ingredientsJsonString;
+            // Use async OpenAI call but block to get results immediately
+            // This is still faster than blocking OkHttpClient because WebClient is more efficient
+            List<DetectedIngredientDto> validatedIngredients = validateIngredientsFromTextAsync(ingredients).join();
             
-            logger.debug("Sending validation request with {} ingredients: {}", ingredients.size(), ingredientsJsonString);
+            logger.info("Successfully validated {} ingredients", validatedIngredients.size());
+            return validatedIngredients;
+        } catch (AIServiceException e) {
+            logger.error("AI service error: {}", e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            logger.error("Unexpected error validating ingredients: {}", e.getMessage(), e);
+            throw new AIServiceException("Failed to validate ingredients: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Async version of validateAndParseIngredientsFromText using WebClient
+     */
+    private CompletableFuture<List<DetectedIngredientDto>> validateIngredientsFromTextAsync(List<DetectedIngredientDto> ingredients) {
+        if (openAIApiBaseUrl == null || !openAIApiBaseUrl.startsWith("https://")
+                || openAIApiKey == null || openAIApiKey.isEmpty()) {
+            logger.error("OPENAI_API_BASE_URL or OPENAI_API_KEY is not set properly");
+            return CompletableFuture.failedFuture(new AIServiceException("OpenAI API configuration error"));
+        }
 
-            // Construct the OpenAI Request Body (text-only, no image)
-            JSONObject requestBody = new JSONObject();
-            requestBody.put("model", GPT_MODEL);
-            requestBody.put("temperature", 0); // Set to 0 for maximum consistency and deterministic responses
-            requestBody.put("response_format", new JSONObject().put("type", "json_object"));
+        // Convert ingredients list to JSON for the prompt (optimized)
+        JSONArray ingredientsJsonArray = new JSONArray(ingredients.size());
+        for (DetectedIngredientDto ingredient : ingredients) {
+            JSONObject ingObj = new JSONObject();
+            String name = ingredient.getName();
+            String quantity = ingredient.getQuantity();
+            String unit = ingredient.getUnit();
+            ingObj.put("name", name != null ? name : "");
+            ingObj.put("quantity", quantity != null ? quantity : "");
+            ingObj.put("unit", unit != null ? unit : "");
+            ingredientsJsonArray.put(ingObj);
+        }
+        String ingredientsJsonString = ingredientsJsonArray.toString();
 
-            // Build simple text message
-            requestBody.put("messages", new JSONArray()
-                    .put(new JSONObject()
-                            .put("role", "user")
-                            .put("content", fullPrompt)));
+        // Get cached validation prompt and combine with ingredients
+        String prompt = getValidationPrompt();
+        String fullPrompt = prompt + "\n\nPlease validate these ingredients: " + ingredientsJsonString;
+        
+        logger.debug("Sending validation request with {} ingredients", ingredients.size());
 
-            RequestBody body = RequestBody.create(
-                    requestBody.toString(),
-                    MediaType.parse("application/json")
-            );
+        // Construct the OpenAI Request Body (text-only, no image)
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("model", GPT_MODEL);
+        requestBody.put("temperature", 0);
+        requestBody.put("response_format", new JSONObject().put("type", "json_object"));
+        requestBody.put("messages", new JSONArray()
+                .put(new JSONObject()
+                        .put("role", "user")
+                        .put("content", fullPrompt)));
 
-            String fullUrl = openAIApiBaseUrl; // OpenAI usually has one base URL
-            Request request = new Request.Builder()
-                    .url(fullUrl)
-                    .post(body)
-                    .header("Authorization", "Bearer " + openAIApiKey) // Use API Key in header
-                    .build();
+        return openAIWebClient.post()
+                .uri("")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody.toString())
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        response -> {
+                            logger.error("OpenAI API call failed: HTTP {}", response.statusCode());
+                            return Mono.error(new AIServiceException("OpenAI API call failed: HTTP " + response.statusCode()));
+                        })
+                .bodyToMono(String.class)
+                .map(responseBody -> {
+                    try {
+                        JSONObject json = new JSONObject(responseBody);
+                        if (!json.has("choices") || json.getJSONArray("choices").isEmpty()) {
+                            logger.error("No choices returned from OpenAI API");
+                            throw new AIServiceException("No choices returned from OpenAI API");
+                        }
 
-            logger.info("Sending request to OpenAI API using {}", GPT_MODEL);
+                        JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
+                        JSONObject message = choice.getJSONObject("message");
+                        String ingredientsJson = message.getString("content").trim();
 
-            try (Response response = client.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    String errorBody = response.body() != null ? response.body().string() : response.message();
-                    logger.error("OpenAI API call failed: HTTP {} - {}", response.code(), errorBody);
-                    throw new AIServiceException("OpenAI API call failed: HTTP " + response.code() + " - " + errorBody);
-                }
+                        JSONObject contentObject = new JSONObject(ingredientsJson);
+                        if (!contentObject.has("ingredients")) {
+                            logger.error("Response does not contain 'ingredients' array");
+                            throw new AIServiceException("Invalid response format: missing 'ingredients' array");
+                        }
 
-                String responseBody = response.body() != null ? response.body().string() : null;
-                if (responseBody == null) {
-                    logger.error("Empty response from OpenAI API");
-                    throw new AIServiceException("Empty response from OpenAI API");
-                }
+                        JSONArray ingredientsArray = contentObject.getJSONArray("ingredients");
+                        List<DetectedIngredientDto> validatedIngredients = new ArrayList<>(ingredientsArray.length());
+                        int skippedCount = 0;
 
-                try {
-                    JSONObject json = new JSONObject(responseBody);
-                    if (!json.has("choices") || json.getJSONArray("choices").isEmpty()) {
-                        logger.error("No choices returned from OpenAI API");
-                        throw new AIServiceException("No choices returned from OpenAI API");
-                    }
-
-                    JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
-                    JSONObject message = choice.getJSONObject("message");
-                    String ingredientsJson = message.getString("content").trim();
-
-                    logger.info("Raw OpenAI validation response: {}", ingredientsJson);
-                    logger.debug("Raw OpenAI ingredient detection response: {}", ingredientsJson);
-
-                    JSONObject contentObject = new JSONObject(ingredientsJson);
-                    if (!contentObject.has("ingredients")) {
-                        logger.error("Response does not contain 'ingredients' array. Response: {}", ingredientsJson);
-                        throw new AIServiceException("Invalid response format: missing 'ingredients' array");
-                    }
-
-                    JSONArray ingredientsArray = contentObject.getJSONArray("ingredients");
-                    // Pre-size ArrayList to avoid resizing
-                    List<DetectedIngredientDto> validatedIngredients = new ArrayList<>(ingredientsArray.length());
-                    int skippedCount = 0;
-
-                    for (int i = 0; i < ingredientsArray.length(); i++) {
-                        try {
-                            JSONObject ingObj = ingredientsArray.getJSONObject(i);
-                            logger.debug("Processing ingredient from AI response: {}", ingObj.toString());
-                            DetectedIngredientDto ingredient = sanitizeIngredient(ingObj);
-                            
-                            if (ingredient != null) {
-                                logger.debug("Accepted ingredient: {}", ingredient.getName());
-                                validatedIngredients.add(ingredient);
-                            } else {
-                                logger.warn("Skipped ingredient at index {}: {}", i, ingObj.toString());
+                        for (int i = 0; i < ingredientsArray.length(); i++) {
+                            try {
+                                JSONObject ingObj = ingredientsArray.getJSONObject(i);
+                                DetectedIngredientDto ingredient = sanitizeIngredient(ingObj);
+                                
+                                if (ingredient != null) {
+                                    validatedIngredients.add(ingredient);
+                                } else {
+                                    skippedCount++;
+                                }
+                            } catch (JSONException e) {
+                                logger.warn("Failed to parse ingredient at index {}: {}", i, e.getMessage());
                                 skippedCount++;
                             }
-                        } catch (JSONException e) {
-                            logger.warn("Failed to parse ingredient at index {}: {}", i, e.getMessage());
-                            skippedCount++;
                         }
+
+                        if (skippedCount > 0) {
+                            logger.debug("Skipped {} invalid ingredients during validation", skippedCount);
+                        }
+
+                        return validatedIngredients;
+                    } catch (JSONException e) {
+                        logger.error("Failed to parse OpenAI API response: {}", e.getMessage(), e);
+                        throw new AIServiceException("Failed to parse OpenAI API response: " + e.getMessage());
                     }
-
-                    if (skippedCount > 0) {
-                        logger.warn("Skipped {} invalid or unclear ingredients during detection", skippedCount);
+                })
+                .doOnError(error -> {
+                    if (!(error instanceof AIServiceException)) {
+                        logger.error("Error validating ingredients from OpenAI API", error);
                     }
-
-                    if (validatedIngredients.isEmpty()) {
-                        logger.warn("No valid ingredients detected after validation");
+                })
+                .onErrorResume(throwable -> {
+                    AIServiceException exception;
+                    if (throwable instanceof AIServiceException) {
+                        exception = (AIServiceException) throwable;
+                    } else {
+                        String errorMsg = throwable != null ? throwable.getMessage() : "Unknown error";
+                        exception = new AIServiceException("Error validating ingredients from OpenAI API: " + errorMsg);
                     }
-
-                    logger.info("Successfully validated {} ingredients (skipped {} invalid)", 
-                                validatedIngredients.size(), skippedCount);
-                    return validatedIngredients;
-
-                } catch (JSONException e) {
-                    logger.error("Failed to parse OpenAI API response: {}", e.getMessage(), e);
-                    throw new AIServiceException("Failed to parse OpenAI API response: " + e.getMessage());
-                }
-            }
-        } catch (IOException | JSONException e) {
-            logger.error("Error detecting ingredients from OpenAI API", e);
-            throw new AIServiceException("Error detecting ingredients from OpenAI API: " + e.getMessage());
-        }
+                    return Mono.error(exception);
+                })
+                .toFuture();
     }
 
     /**
@@ -300,6 +313,32 @@ public class IngredientDetectionService {
                 throw new AIServiceException("OpenAI API configuration error");
             }
 
+            // Use async OpenAI call but block to get results immediately
+            // This is still faster than blocking OkHttpClient because WebClient is more efficient
+            List<DetectedIngredientDto> ingredients = detectRawIngredientsAsync(imageFile).join();
+            
+            logger.info("Successfully detected {} ingredients from image", ingredients.size());
+            return ingredients;
+        } catch (AIServiceException e) {
+            logger.error("AI service error: {}", e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            logger.error("Unexpected error detecting ingredients: {}", e.getMessage(), e);
+            throw new AIServiceException("Failed to detect ingredients: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Async version of detectRawIngredients using WebClient
+     */
+    public CompletableFuture<List<DetectedIngredientDto>> detectRawIngredientsAsync(MultipartFile imageFile) {
+        if (openAIApiBaseUrl == null || !openAIApiBaseUrl.startsWith("https://")
+                || openAIApiKey == null || openAIApiKey.isEmpty()) {
+            logger.error("OPENAI_API_BASE_URL or OPENAI_API_KEY is not set properly");
+            return CompletableFuture.failedFuture(new AIServiceException("OpenAI API configuration error"));
+        }
+
+        try {
             // Prepare Base64 Image Data
             byte[] imageBytes = imageFile.getBytes();
             String base64Image = Base64.getEncoder().encodeToString(imageBytes);
@@ -312,7 +351,7 @@ public class IngredientDetectionService {
             // Construct the OpenAI Multimodal Request Body
             JSONObject requestBody = new JSONObject();
             requestBody.put("model", GPT_MODEL);
-            requestBody.put("temperature", 0); // Set to 0 for maximum consistency and deterministic responses
+            requestBody.put("temperature", 0);
             requestBody.put("response_format", new JSONObject().put("type", "json_object"));
 
             // Build the contents array with image and text
@@ -325,92 +364,86 @@ public class IngredientDetectionService {
             requestBody.put("messages", new JSONArray()
                     .put(new JSONObject().put("role", "user").put("content", contentParts)));
 
-            RequestBody body = RequestBody.create(
-                    requestBody.toString(),
-                    MediaType.parse("application/json")
-            );
+            logger.debug("Sending ingredient detection request to OpenAI API using {}", GPT_MODEL);
 
-            Request request = new Request.Builder()
-                    .url(openAIApiBaseUrl)
-                    .post(body)
-                    .header("Authorization", "Bearer " + openAIApiKey)
-                    .build();
-
-            logger.info("Sending ingredient detection request to OpenAI API using {}", GPT_MODEL);
-
-            try (Response response = client.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    String errorBody = response.body() != null ? response.body().string() : response.message();
-                    logger.error("OpenAI API call failed: HTTP {} - {}", response.code(), errorBody);
-                    throw new AIServiceException("OpenAI API call failed: HTTP " + response.code() + " - " + errorBody);
-                }
-
-                String responseBody = response.body() != null ? response.body().string() : null;
-                if (responseBody == null) {
-                    logger.error("Empty response from OpenAI API");
-                    throw new AIServiceException("Empty response from OpenAI API");
-                }
-
-                try {
-                    JSONObject json = new JSONObject(responseBody);
-                    if (!json.has("choices") || json.getJSONArray("choices").isEmpty()) {
-                        logger.error("No choices returned from OpenAI API");
-                        throw new AIServiceException("No choices returned from OpenAI API");
-                    }
-
-                    JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
-                    JSONObject message = choice.getJSONObject("message");
-                    String ingredientsJson = message.getString("content").trim();
-
-                    logger.debug("Raw OpenAI ingredient detection response: {}", ingredientsJson);
-
-                    JSONObject contentObject = new JSONObject(ingredientsJson);
-                    if (!contentObject.has("ingredients")) {
-                        logger.error("Response does not contain 'ingredients' array. Response: {}", ingredientsJson);
-                        throw new AIServiceException("Invalid response format: missing 'ingredients' array");
-                    }
-
-                    JSONArray ingredientsArray = contentObject.getJSONArray("ingredients");
-                    // Pre-size ArrayList to avoid resizing
-                    List<DetectedIngredientDto> ingredients = new ArrayList<>(ingredientsArray.length());
-                    int skippedCount = 0;
-
-                    for (int i = 0; i < ingredientsArray.length(); i++) {
+            return openAIWebClient.post()
+                    .uri("")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(requestBody.toString())
+                    .retrieve()
+                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                            response -> {
+                                logger.error("OpenAI API call failed: HTTP {}", response.statusCode());
+                                return Mono.error(new AIServiceException("OpenAI API call failed: HTTP " + response.statusCode()));
+                            })
+                    .bodyToMono(String.class)
+                    .map(responseBody -> {
                         try {
-                            JSONObject ingObj = ingredientsArray.getJSONObject(i);
-                            DetectedIngredientDto ingredient = sanitizeIngredient(ingObj);
-                            
-                            if (ingredient != null) {
-                                ingredients.add(ingredient);
-                            } else {
-                                skippedCount++;
+                            JSONObject json = new JSONObject(responseBody);
+                            if (!json.has("choices") || json.getJSONArray("choices").isEmpty()) {
+                                logger.error("No choices returned from OpenAI API");
+                                throw new AIServiceException("No choices returned from OpenAI API");
                             }
+
+                            JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
+                            JSONObject message = choice.getJSONObject("message");
+                            String ingredientsJson = message.getString("content").trim();
+
+                            JSONObject contentObject = new JSONObject(ingredientsJson);
+                            if (!contentObject.has("ingredients")) {
+                                logger.error("Response does not contain 'ingredients' array");
+                                throw new AIServiceException("Invalid response format: missing 'ingredients' array");
+                            }
+
+                            JSONArray ingredientsArray = contentObject.getJSONArray("ingredients");
+                            List<DetectedIngredientDto> ingredients = new ArrayList<>(ingredientsArray.length());
+                            int skippedCount = 0;
+
+                            for (int i = 0; i < ingredientsArray.length(); i++) {
+                                try {
+                                    JSONObject ingObj = ingredientsArray.getJSONObject(i);
+                                    DetectedIngredientDto ingredient = sanitizeIngredient(ingObj);
+                                    
+                                    if (ingredient != null) {
+                                        ingredients.add(ingredient);
+                                    } else {
+                                        skippedCount++;
+                                    }
+                                } catch (JSONException e) {
+                                    logger.warn("Failed to parse ingredient at index {}: {}", i, e.getMessage());
+                                    skippedCount++;
+                                }
+                            }
+
+                            if (skippedCount > 0) {
+                                logger.debug("Skipped {} invalid ingredients during detection", skippedCount);
+                            }
+
+                            return ingredients;
                         } catch (JSONException e) {
-                            logger.warn("Failed to parse ingredient at index {}: {}", i, e.getMessage());
-                            skippedCount++;
+                            logger.error("Failed to parse OpenAI API response: {}", e.getMessage(), e);
+                            throw new AIServiceException("Failed to parse OpenAI API response: " + e.getMessage());
                         }
-                    }
-
-                    if (skippedCount > 0) {
-                        logger.warn("Skipped {} invalid or unclear ingredients during detection", skippedCount);
-                    }
-
-                    if (ingredients.isEmpty()) {
-                        logger.warn("No valid ingredients detected after validation");
-                    }
-
-                    logger.info("Successfully detected {} valid ingredients from image (skipped {} invalid)", 
-                                ingredients.size(), skippedCount);
-                    return ingredients;
-
-                } catch (JSONException e) {
-                    logger.error("Failed to parse OpenAI API response: {}", e.getMessage(), e);
-                    throw new AIServiceException("Failed to parse OpenAI API response: " + e.getMessage());
-                }
-            }
-        } catch (IOException | JSONException e) {
-            logger.error("Error detecting ingredients from OpenAI API", e);
-            throw new AIServiceException("Error detecting ingredients from OpenAI API: " + e.getMessage());
+                    })
+                    .doOnError(error -> {
+                        if (!(error instanceof AIServiceException)) {
+                            logger.error("Error detecting ingredients from OpenAI API", error);
+                        }
+                    })
+                    .onErrorResume(throwable -> {
+                        AIServiceException exception;
+                        if (throwable instanceof AIServiceException) {
+                            exception = (AIServiceException) throwable;
+                        } else {
+                            String errorMsg = throwable != null ? throwable.getMessage() : "Unknown error";
+                            exception = new AIServiceException("Error detecting ingredients from OpenAI API: " + errorMsg);
+                        }
+                        return Mono.error(exception);
+                    })
+                    .toFuture();
+        } catch (IOException e) {
+            logger.error("Error reading image file: {}", e.getMessage(), e);
+            return CompletableFuture.failedFuture(new AIServiceException("Error reading image file: " + e.getMessage()));
         }
     }
 }

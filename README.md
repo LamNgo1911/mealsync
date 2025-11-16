@@ -19,12 +19,13 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
   - Secure password hashing
 
 - **🍳 Recipe Management**
-  - AI-powered ingredient detection from images (OpenAI GPT-4o-mini Vision)
-  - Smart recipe generation from ingredient lists
+  - AI-powered ingredient detection from images (OpenAI GPT-5-mini Vision)
+  - Smart recipe generation from ingredient lists (generates 3 diverse recipes)
   - Personalized recommendations based on user preferences
   - Advanced search and filtering (cuisine, tags, ingredients, difficulty)
-  - Automatic recipe image generation with Stability AI
+  - Automatic recipe image generation with Google Gemini 2.5 Flash Image
   - Save and manage favorite recipes
+  - Optimized performance: ~11-16s response time for scan-and-generate workflow
 
 - **🤖 AI Services**
   - **Ingredient Detection**:
@@ -40,13 +41,16 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
   - Nginx reverse proxy
   - Rate limiting
   - Caching
+  - Async image generation (non-blocking)
+  - Pipelined operations for faster response times
+  - Optimized AI prompts for reduced latency
 
 ## 🤖 AI Workflow
 
 MealSync uses a two-step AI process for recipe generation:
 
 1. **Ingredient Detection/Validation** (Optional)
-   - **Option A - Image Upload**: Upload a photo of your ingredients and OpenAI GPT-4o-mini Vision API analyzes the image
+   - **Option A - Image Upload**: Upload a photo of your ingredients and OpenAI GPT-5-mini Vision API analyzes the image
    - **Option B - Manual Validation**: Provide ingredients with name, quantity, and unit, and AI validates them (only metric/international units accepted)
    - Returns a list of validated ingredients with metric units
 
@@ -56,12 +60,18 @@ MealSync uses a two-step AI process for recipe generation:
      - Dietary restrictions (vegetarian, vegan, gluten-free, etc.)
      - Favorite cuisines (Italian, Asian, Mexican, etc.)
      - Disliked ingredients
-   - OpenAI generates 2 creative recipes with:
+   - OpenAI GPT-5-mini generates 3 diverse creative recipes with:
      - Step-by-step instructions
      - Nutritional information
      - Cooking times and difficulty levels
-   - Stability AI generates attractive recipe images
+     - All units in International (metric) format
+   - Google Gemini 2.5 Flash Image generates attractive recipe images asynchronously
    - Recipes are saved to the database for future reference
+
+3. **Optimized Workflow** (New)
+   - **Combined Endpoint**: `/scan-and-generate` - Single endpoint that pipelines ingredient detection → recipe generation
+   - Images generated asynchronously in background (non-blocking)
+   - Response time: ~11-16s for complete workflow
 
 ## 🚀 Getting Started
 
@@ -612,6 +622,26 @@ All endpoints return a standardized response:
   - **Auth**: Required
   - **Description**: Validate ingredients provided by the user. Validates ingredient names (must be real, specific ingredients), quantities (numeric, fractions, or descriptive), and units. **Only metric/international units are accepted** (grams, kilograms, milliliters, liters). American/Imperial units (cups, tablespoons, pounds, ounces, etc.) are rejected. Returns only valid ingredients that pass all validation checks.
 
+- **Scan Image and Generate Recipes** (Optimized - Recommended)
+  ```
+  POST /scan-and-generate
+  ```
+  - **Content-Type**: `multipart/form-data`
+  - **Form Fields**:
+    - `image` (required): Image file (JPG, PNG)
+    - `userPreference` (optional): JSON string with user preferences
+  - **Request Body** (userPreference as JSON string):
+    ```json
+    {
+      "dietaryRestrictions": ["vegetarian", "gluten-free"],
+      "favoriteCuisines": ["Italian", "Asian"],
+      "dislikedIngredients": ["mushrooms", "olives"]
+    }
+    ```
+  - **Response**: Same as `/generate-recipes` endpoint
+  - **Auth**: Required
+  - **Description**: Combined endpoint that scans image for ingredients and generates 3 recipes in a single optimized request. Images are generated asynchronously in the background. **Response time: ~11-16s**
+
 - **Generate Recipes from Ingredients**
   ```
   POST /generate-recipes
@@ -673,7 +703,7 @@ All endpoints return a standardized response:
     }
     ```
   - **Auth**: Required
-  - **Description**: Generate 2 creative recipes based on provided ingredients and user preferences
+  - **Description**: Generate 3 creative recipes based on provided ingredients and user preferences. All units are in International (metric) format. Images are generated asynchronously in the background.
 
 - **List Recipes**
   ```
@@ -860,9 +890,8 @@ All endpoints return a standardized response:
 - **Backend**: Spring Boot 3.4, Java 21
 - **Database**: PostgreSQL 14
 - **AI/ML**:
-  - OpenAI GPT-4o-mini (Vision & Text) - Ingredient detection & recipe generation
-  - Google Gemini - Additional AI capabilities
-  - Stability AI - Recipe image generation
+  - OpenAI GPT-5-mini (Vision & Text) - Ingredient detection & recipe generation
+  - Google Gemini 2.5 Flash Image - Recipe image generation (async, non-blocking)
 - **Cloud & Infrastructure**:
   - AWS (EC2, S3)
   - Docker & Docker Compose
@@ -897,12 +926,9 @@ AWS_REGION=us-east-1
 OPENAI_API_KEY=your-openai-api-key
 OPENAI_API_BASE_URL=https://api.openai.com/v1/chat/completions
 
-# Google AI Services
-GEMINI_API_KEY=your-gemini-key
-GOOGLE_VISION_CREDENTIALS_PATH=/path/to/credentials.json
-
-# Stability AI (for image generation)
-STABILITY_API_KEY=your-stability-key
+# Google Gemini (for recipe image generation)
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com
 
 # AWS SES Email Configuration (for email verification and password reset)
 AWS_SES_FROM_EMAIL=noreply@yourdomain.com
