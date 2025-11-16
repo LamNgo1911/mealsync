@@ -24,8 +24,8 @@ class ImageGeneratorServiceTest {
         service = new ImageGeneratorService(promptLoader);
         webClient = mock(WebClient.class);
         ReflectionTestUtils.setField(service, "webClient", webClient);
-        ReflectionTestUtils.setField(service, "stabilityApiKey", "dummy");
-        ReflectionTestUtils.setField(service, "stabilityApiUrl", "http://dummy.url");
+        ReflectionTestUtils.setField(service, "geminiApiKey", "dummy");
+        ReflectionTestUtils.setField(service, "geminiApiBaseUrl", "http://dummy.url");
         
         // Mock prompt loader to return a simple prompt
         when(promptLoader.loadAndFormatPrompt(anyString(), any(Map.class)))
@@ -33,45 +33,49 @@ class ImageGeneratorServiceTest {
     }
 
     @Test
-    void callStabilityAiAPI_returnsBase64Image() {
+    void callGeminiAPI_returnsBase64Image() {
         // Arrange
         String prompt = "cat";
-        String fakeResponse = "{\"artifacts\":[{\"base64\":\"ZmFrZS1pbWFnZQ==\"}]}";
+        String fakeResponse = "{\"candidates\":[{\"content\":{\"parts\":[{\"inlineData\":{\"data\":\"ZmFrZS1pbWFnZQ==\"}}]}}]}";
         WebClient.RequestBodyUriSpec postSpec = mock(WebClient.RequestBodyUriSpec.class);
         WebClient.RequestBodySpec bodySpec = mock(WebClient.RequestBodySpec.class);
         WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
 
         when(webClient.post()).thenReturn(postSpec);
-        doReturn(bodySpec).when(postSpec).bodyValue(any(Map.class));
+        doReturn(bodySpec).when(postSpec).uri(anyString());
+        doReturn(bodySpec).when(bodySpec).contentType(any(org.springframework.http.MediaType.class));
+        doReturn(bodySpec).when(bodySpec).bodyValue(anyString());
         when(bodySpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just(fakeResponse));
         // Act
-        String result = ReflectionTestUtils.invokeMethod(service, "callStabilityAiAPI", prompt);
+        String result = ReflectionTestUtils.invokeMethod(service, "callGeminiAPI", prompt);
         // Assert
         assertEquals("ZmFrZS1pbWFnZQ==", result);
     }
 
     @Test
-    void callStabilityAiAPI_handlesError() {
+    void callGeminiAPI_handlesError() {
         String prompt = "dog";
         WebClient.RequestBodyUriSpec postSpec = mock(WebClient.RequestBodyUriSpec.class);
         WebClient.RequestBodySpec bodySpec = mock(WebClient.RequestBodySpec.class);
         WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
 
         when(webClient.post()).thenReturn(postSpec);
-        doReturn(bodySpec).when(postSpec).bodyValue(any(Map.class));
+        doReturn(bodySpec).when(postSpec).uri(anyString());
+        doReturn(bodySpec).when(bodySpec).contentType(any(org.springframework.http.MediaType.class));
+        doReturn(bodySpec).when(bodySpec).bodyValue(anyString());
         when(bodySpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.empty());
 
         assertThrows(ImageGeneratorServiceException.class, () ->
-            ReflectionTestUtils.invokeMethod(service, "callStabilityAiAPI", prompt)
+            ReflectionTestUtils.invokeMethod(service, "callGeminiAPI", prompt)
         );
     }
 
     @Test
     void generateImage_returnsBase64() {
         ImageGeneratorService spyService = spy(service);
-        doReturn("ZmFrZS1pbWFnZQ==").when(spyService).callStabilityAiAPI(anyString());
+        doReturn("ZmFrZS1pbWFnZQ==").when(spyService).callGeminiAPI(anyString());
         String result = spyService.generateImage("prompt", List.of("egg"), "desc");
         assertEquals("ZmFrZS1pbWFnZQ==", result);
     }
@@ -79,7 +83,7 @@ class ImageGeneratorServiceTest {
     @Test
     void generateImage_handlesException() {
         ImageGeneratorService spyService = spy(service);
-        doThrow(new ImageGeneratorServiceException("fail")).when(spyService).callStabilityAiAPI(anyString());
+        doThrow(new ImageGeneratorServiceException("fail")).when(spyService).callGeminiAPI(anyString());
         assertThrows(ImageGeneratorServiceException.class, () -> spyService.generateImage("prompt", List.of("egg"), "desc"));
     }
 }

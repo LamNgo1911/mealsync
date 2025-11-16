@@ -94,11 +94,8 @@ public class AIRecipeService {
             List<RecipeReadDto> recipeDtos = fetchRecipesFromOpenAI(ingredients, userPreference);
             logger.info("Successfully fetched {} recipes from OpenAI", recipeDtos.size());
 
-            // Generate images asynchronously - don't block the response
-            // Images will be added in the background
-            for (RecipeReadDto dto : recipeDtos) {
-                addImageToRecipeAsync(dto);
-            }
+            // Generate images in batch mode to save costs with Gemini 2.5 Flash Image
+            addImagesToRecipesBatch(recipeDtos);
 
             return recipeDtos;
         } catch (AIServiceException e) {
@@ -519,6 +516,82 @@ public class AIRecipeService {
         return cachedAllRecipes;
     }
     
+    /**
+     * Adds images to multiple recipes using batch mode for cost efficiency with Gemini 2.5 Flash Image
+     */
+    @Async("taskExecutor")
+    public CompletableFuture<Void> addImagesToRecipesBatch(List<RecipeReadDto> recipeDtos) {
+        try {
+            if (recipeDtos == null || recipeDtos.isEmpty()) {
+                logger.debug("No recipes to generate images for");
+                return CompletableFuture.completedFuture(null);
+            }
+
+            // Filter recipes that need images
+            List<RecipeReadDto> recipesNeedingImages = recipeDtos.stream()
+                    .filter(dto -> dto != null && dto.getId() != null 
+                            && (dto.getImageUrl() == null || dto.getImageUrl().isEmpty()))
+                    .toList();
+
+            if (recipesNeedingImages.isEmpty()) {
+                logger.debug("All recipes already have images");
+                return CompletableFuture.completedFuture(null);
+            }
+
+            logger.info("Generating {} images in batch mode using Gemini 2.5 Flash Image", recipesNeedingImages.size());
+
+            // Prepare batch requests
+            List<ImageGeneratorService.ImageGenerationRequest> batchRequests = new ArrayList<>();
+            for (RecipeReadDto dto : recipesNeedingImages) {
+                List<String> ingredientNames = dto.getIngredients() != null ?
+                        dto.getIngredients().stream().map(i -> i.getName()).toList() :
+                        List.of();
+                String description = dto.getDescription() != null ? dto.getDescription() : "";
+                
+                batchRequests.add(new ImageGeneratorService.ImageGenerationRequest(
+                        dto.getName(), ingredientNames, description));
+            }
+
+            // Generate images in batch
+            Map<String, String> recipeNameToBase64 = imageGeneratorService.generateImagesBatch(batchRequests);
+
+            // Upload images and update recipes
+            for (RecipeReadDto dto : recipesNeedingImages) {
+                String base64 = recipeNameToBase64.get(dto.getName());
+                if (base64 == null || base64.isEmpty()) {
+                    logger.warn("No image generated for recipe: {}", dto.getName());
+                    continue;
+                }
+
+                try {
+                    byte[] imageBytes = Base64.getDecoder().decode(base64);
+                    String imageUrl = s3Service.uploadImage(imageBytes, dto.getName());
+
+                    if (imageUrl != null && !imageUrl.isEmpty()) {
+                        dto.setImageUrl(imageUrl);
+
+                        // Update entity in database
+                        Optional<Recipe> recipeOpt = recipeRepo.getRecipeById(dto.getId());
+                        if (recipeOpt.isPresent()) {
+                            Recipe recipe = recipeOpt.get();
+                            recipe.setImageUrl(imageUrl);
+                            recipeRepo.saveRecipe(recipe);
+                            logger.info("Successfully updated recipe {} with image URL", dto.getId());
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to upload image for recipe {}: {}", dto.getName(), e.getMessage(), e);
+                }
+            }
+
+            logger.info("Successfully processed batch image generation for {} recipes", recipesNeedingImages.size());
+            return CompletableFuture.completedFuture(null);
+        } catch (Exception e) {
+            logger.error("Failed to add images to recipes in batch: {}", e.getMessage(), e);
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     /**
      * Adds image to recipe asynchronously without blocking the response.
      */

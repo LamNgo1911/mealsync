@@ -23,8 +23,8 @@ import com.lamngo.mealsync.application.service.AWS.S3Service;
 	"AWS_SECRET_ACCESS_KEY=test-secret",
 	"AWS_REGION=us-east-1",
 	"AWS_S3_BUCKET_NAME=test-bucket",
-	"STABILITY_API_KEY=test-key",
-	"STABILITY_API_URL=http://localhost",
+	"GEMINI_API_KEY=test-key",
+	"GEMINI_API_BASE_URL=http://localhost",
 	"GOOGLE_CLIENT_ID=test-client-id"
 })
 class MealSyncApplicationTests {

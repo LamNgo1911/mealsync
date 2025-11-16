@@ -173,13 +173,9 @@ AWS_SECRET_ACCESS_KEY=your_aws_secret_key
 AWS_REGION=us-east-1
 AWS_S3_BUCKET_NAME=mealsync-images
 
-# Gemini AI
+# Gemini 2.5 Flash Image (Nano Banana) - Image generation
 GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com
 GEMINI_API_KEY=your_gemini_api_key
-
-# Stability AI
-STABILITY_API_KEY=your_stability_api_key
-STABILITY_API_URL=https://api.stability.ai
 
 # Google OAuth
 GOOGLE_CLIENT_ID=your_google_client_id
