@@ -37,9 +37,9 @@ public class IngredientDetectionService {
     @Value("${OPENAI_API_KEY}")
     private String openAIApiKey;
 
-    // NOTE: Using gpt-5-mini for cost efficiency and speed. For better instruction-following and validation accuracy,
-    // consider upgrading to "gpt-4" or "gpt-4-turbo" if validation quality issues persist.
-    private static final String GPT_MODEL = "gpt-5-mini";
+    // NOTE: Using gpt-4o-mini for cost efficiency and speed. For better instruction-following and validation accuracy,
+    // consider upgrading to "gpt-4o" or "gpt-4-turbo" if validation quality issues persist.
+    private static final String GPT_MODEL = "gpt-4o-mini";
     
     private WebClient openAIWebClient;
     
@@ -221,8 +221,23 @@ public class IngredientDetectionService {
                 .retrieve()
                 .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
                         response -> {
-                            logger.error("OpenAI API call failed: HTTP {}", response.statusCode());
-                            return Mono.error(new AIServiceException("OpenAI API call failed: HTTP " + response.statusCode()));
+                            return response.bodyToMono(String.class)
+                                    .flatMap(errorBody -> {
+                                        logger.error("OpenAI API call failed: HTTP {} - Response: {}", response.statusCode(), errorBody);
+                                        String errorMessage = "OpenAI API call failed: HTTP " + response.statusCode();
+                                        try {
+                                            JSONObject errorJson = new JSONObject(errorBody);
+                                            if (errorJson.has("error") && errorJson.getJSONObject("error").has("message")) {
+                                                errorMessage += " - " + errorJson.getJSONObject("error").getString("message");
+                                            }
+                                        } catch (Exception e) {
+                                            // If parsing fails, use the raw error body
+                                            if (errorBody != null && !errorBody.isEmpty()) {
+                                                errorMessage += " - " + errorBody;
+                                            }
+                                        }
+                                        return Mono.error(new AIServiceException(errorMessage));
+                                    });
                         })
                 .bodyToMono(String.class)
                 .map(responseBody -> {
@@ -373,8 +388,23 @@ public class IngredientDetectionService {
                     .retrieve()
                     .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
                             response -> {
-                                logger.error("OpenAI API call failed: HTTP {}", response.statusCode());
-                                return Mono.error(new AIServiceException("OpenAI API call failed: HTTP " + response.statusCode()));
+                                return response.bodyToMono(String.class)
+                                        .flatMap(errorBody -> {
+                                            logger.error("OpenAI API call failed: HTTP {} - Response: {}", response.statusCode(), errorBody);
+                                            String errorMessage = "OpenAI API call failed: HTTP " + response.statusCode();
+                                            try {
+                                                JSONObject errorJson = new JSONObject(errorBody);
+                                                if (errorJson.has("error") && errorJson.getJSONObject("error").has("message")) {
+                                                    errorMessage += " - " + errorJson.getJSONObject("error").getString("message");
+                                                }
+                                            } catch (Exception e) {
+                                                // If parsing fails, use the raw error body
+                                                if (errorBody != null && !errorBody.isEmpty()) {
+                                                    errorMessage += " - " + errorBody;
+                                                }
+                                            }
+                                            return Mono.error(new AIServiceException(errorMessage));
+                                        });
                             })
                     .bodyToMono(String.class)
                     .map(responseBody -> {

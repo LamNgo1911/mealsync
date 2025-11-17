@@ -25,29 +25,45 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.multipart.MultipartFile;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 
 @RestController
 @RequestMapping("/api/v1/recipes")
 public class RecipeController {
     private Logger logger = LoggerFactory.getLogger(RecipeController.class);
-    private final AIRecipeService aiRecipeService;
     private final RecipeService recipeService;
+    private final com.lamngo.mealsync.application.service.recipe.RecipeGenerationOrchestrator recipeGenerationOrchestrator;
+    private final com.lamngo.mealsync.application.service.recipe.RecipeImageStreamingService recipeImageStreamingService;
     private final IngredientDetectionService ingredientDetectionService;
 
-    public RecipeController(RecipeService recipeService, AIRecipeService aiRecipeService, IngredientDetectionService ingredientDetectionService) {
-        this.aiRecipeService = aiRecipeService;
+    public RecipeController(
+            RecipeService recipeService, 
+            com.lamngo.mealsync.application.service.recipe.RecipeGenerationOrchestrator recipeGenerationOrchestrator,
+            com.lamngo.mealsync.application.service.recipe.RecipeImageStreamingService recipeImageStreamingService,
+            IngredientDetectionService ingredientDetectionService) {
         this.recipeService = recipeService;
+        this.recipeGenerationOrchestrator = recipeGenerationOrchestrator;
+        this.recipeImageStreamingService = recipeImageStreamingService;
         this.ingredientDetectionService = ingredientDetectionService;
     }
 
+    /**
+     * Generates recipes from a list of detected ingredients.
+     * Optimized to use async WebClient for non-blocking I/O.
+     * Images are generated asynchronously in the background (non-blocking).
+     * 
+     * @param request Request containing ingredients and optional user preferences
+     * @param user The authenticated user
+     * @return List of generated recipes (images generated async in background)
+     */
     @PostMapping(value = "/generate-recipes")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> generateRecipes(
@@ -76,20 +92,27 @@ public class RecipeController {
         logger.info("Generating recipes from {} ingredients for user {}", ingredients.size(), user.getId());
         logger.info("User preference: {}", userPreference);
 
-        // Generate recipes from the detected ingredients
-        List<RecipeReadDto> recipes = aiRecipeService.generateRecipes(ingredients, userPreference);
+        // Use orchestrator to handle the complete workflow
+        List<RecipeReadDto> recipes = recipeGenerationOrchestrator.generateRecipesFromIngredients(ingredients, userPreference);
 
         // Save generated recipes to user's history asynchronously (non-blocking)
         List<UUID> recipeIds = recipes.stream()
                 .map(RecipeReadDto::getId)
                 .toList();
-        aiRecipeService.saveGeneratedRecipesToUserAsync(user.getId(), recipeIds);
+        recipeGenerationOrchestrator.saveGeneratedRecipesToUserAsync(user.getId(), recipeIds);
 
         SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
         body.setData(recipes);
         return ResponseEntity.ok(body);
     }
 
+    /**
+     * Detects ingredients from an uploaded image.
+     * Optimized to use async WebClient for non-blocking I/O.
+     * 
+     * @param image The uploaded image file containing ingredients
+     * @return List of detected ingredients with quantities and units
+     */
     @PostMapping(value = "/detect-ingredients", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> detectIngredients(
@@ -100,7 +123,10 @@ public class RecipeController {
         }
 
         logger.info("Detecting raw ingredients from uploaded image: {}", image.getOriginalFilename());
-        List<DetectedIngredientDto> ingredients = ingredientDetectionService.detectRawIngredients(image);
+        
+        // Use async version directly for better performance (non-blocking I/O)
+        List<DetectedIngredientDto> ingredients = ingredientDetectionService.detectRawIngredientsAsync(image).join();
+        
         SuccessResponseEntity<List<DetectedIngredientDto>> body = new SuccessResponseEntity<>();
         body.setData(ingredients);
         return ResponseEntity.ok(body);
@@ -132,30 +158,45 @@ public class RecipeController {
         // Parse user preference
         UserPreference userPreference = parseUserPreference(userPreferenceJson);
 
-        // PIPELINE: Start recipe generation as soon as ingredients are detected
-        CompletableFuture<List<DetectedIngredientDto>> ingredientsFuture = 
-            ingredientDetectionService.detectRawIngredientsAsync(image);
-
-        // Start recipe generation immediately when ingredients are ready (pipeline)
-        CompletableFuture<List<RecipeReadDto>> recipesFuture = ingredientsFuture
-            .thenCompose(ingredients -> {
-                logger.info("Ingredients detected, starting recipe generation");
-                return aiRecipeService.fetchRecipesFromOpenAIAsync(ingredients, userPreference);
-            });
-
-        // Block only to get recipes (images generated async in background)
-        List<RecipeReadDto> recipes = recipesFuture.join();
-
-        // Generate images completely asynchronously (fire and forget - saves ~10s)
-        aiRecipeService.addImagesToRecipesBatchAsync(recipes);
+        // Use orchestrator to handle the complete workflow
+        List<RecipeReadDto> recipes = recipeGenerationOrchestrator.scanAndGenerateRecipes(image, userPreference);
 
         // Save history asynchronously
         List<UUID> recipeIds = recipes.stream().map(RecipeReadDto::getId).toList();
-        aiRecipeService.saveGeneratedRecipesToUserAsync(user.getId(), recipeIds);
+        recipeGenerationOrchestrator.saveGeneratedRecipesToUserAsync(user.getId(), recipeIds);
 
         SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
         body.setData(recipes);
         return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Server-Sent Events (SSE) endpoint for streaming image generation updates.
+     * Clients can subscribe to this endpoint to receive real-time updates as images are generated.
+     * 
+     * @param recipeIds Comma-separated list of recipe IDs to stream images for
+     * @return SseEmitter for streaming image updates
+     */
+    @GetMapping(value = "/image-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PreAuthorize("isAuthenticated()")
+    public SseEmitter streamImageGeneration(@RequestParam("recipeIds") String recipeIds) {
+        if (recipeIds == null || recipeIds.isEmpty()) {
+            throw new BadRequestException("recipeIds parameter is required");
+        }
+
+        // Parse recipe IDs
+        List<UUID> recipeIdList;
+        try {
+            recipeIdList = java.util.Arrays.stream(recipeIds.split(","))
+                    .map(String::trim)
+                    .map(UUID::fromString)
+                    .toList();
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("Invalid recipe IDs format: " + e.getMessage());
+        }
+
+        // Delegate to streaming service
+        return recipeImageStreamingService.createImageStream(recipeIdList);
     }
 
     /**

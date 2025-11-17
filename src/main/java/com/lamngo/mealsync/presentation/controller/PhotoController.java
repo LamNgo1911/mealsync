@@ -1,7 +1,7 @@
 package com.lamngo.mealsync.presentation.controller;
 
 import com.lamngo.mealsync.application.dto.recipe.PhotoRecipeRequest;
-import com.lamngo.mealsync.application.service.AI.ImageGeneratorService;
+import com.lamngo.mealsync.application.service.AI.GeminiImageApiClient;
 import com.lamngo.mealsync.application.service.AWS.S3Service;
 import com.lamngo.mealsync.presentation.shared.SuccessResponseEntity;
 import org.springframework.http.ResponseEntity;
@@ -17,11 +17,11 @@ import java.util.Base64;
 @RequestMapping("/api/v1/photos")
 public class PhotoController {
 
-    private final ImageGeneratorService imageGeneratorService;
+    private final GeminiImageApiClient geminiImageApiClient;
     private final S3Service s3UploadService;
 
-    public PhotoController(ImageGeneratorService imageGeneratorService, S3Service s3UploadService) {
-        this.imageGeneratorService = imageGeneratorService;
+    public PhotoController(GeminiImageApiClient geminiImageApiClient, S3Service s3UploadService) {
+        this.geminiImageApiClient = geminiImageApiClient;
         this.s3UploadService = s3UploadService;
     }
 
@@ -29,7 +29,7 @@ public class PhotoController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SuccessResponseEntity<String>>generateAndUploadImage(@RequestBody PhotoRecipeRequest request) {
 
-        String apiResponse = imageGeneratorService.generateImage(request.getRecipeName(), request.getIngredients(), request.getDescription());
+        String apiResponse = geminiImageApiClient.generateImage(request.getRecipeName(), request.getIngredients(), request.getDescription());
         byte[] imageBytes = decodeBase64ToBytes(apiResponse);
 
         String imageUrl = s3UploadService.uploadImage(imageBytes, request.getRecipeName());

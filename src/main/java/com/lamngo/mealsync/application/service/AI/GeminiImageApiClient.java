@@ -3,32 +3,32 @@ package com.lamngo.mealsync.application.service.AI;
 import com.lamngo.mealsync.presentation.error.ImageGeneratorServiceException;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.*;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.ClientResponse;
-import org.springframework.web.reactive.function.client.ExchangeStrategies;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Low-level API client for Gemini Image Generation API.
+ * Handles direct communication with Gemini API and returns base64-encoded images.
+ */
 @Service
 @Slf4j
-public class ImageGeneratorService {
+public class GeminiImageApiClient {
 
-    private static final int MAX_IN_MEMORY_SIZE = 16 * 1024 * 1024; // 16MB
     private static final String ERROR_MSG_TEMPLATE = "Gemini 2.5 Flash Image API returned error %s. Endpoint: %s. " +
             "Please verify the API key and model name are correct.";
     private static final String GEMINI_MODEL = "gemini-2.5-flash-image";
 
-    private WebClient webClient;
+    private OkHttpClient httpClient;
     private String baseUrl;
     private String apiKey;
 
@@ -40,7 +40,7 @@ public class ImageGeneratorService {
     
     private final PromptLoader promptLoader;
     
-    public ImageGeneratorService(PromptLoader promptLoader) {
+    public GeminiImageApiClient(PromptLoader promptLoader) {
         this.promptLoader = promptLoader;
     }
 
@@ -49,14 +49,9 @@ public class ImageGeneratorService {
         this.baseUrl = geminiApiBaseUrl;
         this.apiKey = geminiApiKey;
         
-        ExchangeStrategies strategies = ExchangeStrategies.builder()
-                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(MAX_IN_MEMORY_SIZE))
-                .build();
-        
-        this.webClient = WebClient.builder()
-                .exchangeStrategies(strategies)
-                .baseUrl(baseUrl)
-                .defaultHeader("Content-Type", "application/json")
+        // Use OkHttp with async API for non-blocking I/O
+        // This is more efficient than blocking calls, especially for parallel requests
+        this.httpClient = new OkHttpClient.Builder()
                 .build();
     }
 
@@ -73,10 +68,11 @@ public class ImageGeneratorService {
             throw new ImageGeneratorServiceException("Image generation failed", e);
         }
     }
-
+    
     /**
      * Generate multiple images in parallel using Gemini 2.5 Flash Image API
      * Note: Gemini API doesn't support true batch processing, so we make parallel individual calls
+     * Uses OkHttp async API for non-blocking I/O, which is more efficient than blocking calls
      * @param prompts List of prompts to generate images for
      * @return Map of prompt to base64 image string
      */
@@ -86,20 +82,22 @@ public class ImageGeneratorService {
         }
 
         try {
-            // Use parallel streams to generate images concurrently
-            // This is more efficient than sequential calls while working within API limitations
+            // Use OkHttp async API for non-blocking I/O
+            // This is more efficient than blocking calls with CompletableFuture.supplyAsync()
             Map<String, String> results = new HashMap<>();
             
             List<CompletableFuture<Map.Entry<String, String>>> futures = prompts.stream()
-                    .map(prompt -> CompletableFuture.supplyAsync(() -> {
-                        try {
-                            String base64Image = callGeminiAPISingle(prompt);
-                            return Map.entry(prompt, base64Image);
-                        } catch (Exception e) {
-                            log.error("Failed to generate image for prompt: {}", prompt, e);
-                            return null;
-                        }
-                    }))
+                    .map(prompt -> callGeminiAPISingleAsync(prompt)
+                            .thenApply(base64Image -> {
+                                if (base64Image != null) {
+                                    return Map.entry(prompt, base64Image);
+                                }
+                                return null;
+                            })
+                            .exceptionally(e -> {
+                                log.error("Failed to generate image for prompt: {}", prompt, e);
+                                return null;
+                            }))
                     .toList();
 
             // Wait for all futures to complete and collect results
@@ -118,9 +116,9 @@ public class ImageGeneratorService {
 
             if (results.isEmpty()) {
                 throw new ImageGeneratorServiceException("No images were generated successfully");
-            }
+        }
 
-            log.info("Successfully generated {} images in parallel", results.size());
+            log.info("Successfully generated {} images in parallel using async I/O", results.size());
             return results;
         } catch (Exception e) {
             log.error("Parallel image generation failed: {}", e.getMessage(), e);
@@ -128,7 +126,16 @@ public class ImageGeneratorService {
         }
     }
 
-    private String callGeminiAPISingle(String prompt) {
+    /**
+     * Generate a single image asynchronously using OkHttp async API
+     * This is more efficient than blocking calls, especially for parallel requests
+     * 
+     * @param prompt The prompt for image generation
+     * @return CompletableFuture that completes with base64-encoded image string
+     */
+    public CompletableFuture<String> callGeminiAPISingleAsync(String prompt) {
+        CompletableFuture<String> future = new CompletableFuture<>();
+        
         JSONObject requestBody = new JSONObject();
         JSONArray contentsArray = new JSONArray();
         JSONObject content = new JSONObject();
@@ -140,59 +147,106 @@ public class ImageGeneratorService {
         contentsArray.put(content);
         requestBody.put("contents", contentsArray);
         
-        // Request image output
+        // Request image output - IMPORTANT: Use both TEXT and IMAGE modalities
+        // According to Gemini API docs, this is required for proper image generation
         JSONObject generationConfig = new JSONObject();
-        generationConfig.put("responseModalities", new JSONArray().put("IMAGE"));
+        JSONArray responseModalities = new JSONArray();
+        responseModalities.put("TEXT");
+        responseModalities.put("IMAGE");
+        generationConfig.put("responseModalities", responseModalities);
         requestBody.put("generationConfig", generationConfig);
 
-        String endpoint = String.format("/v1beta/models/%s:generateContent?key=%s", GEMINI_MODEL, apiKey);
+        String endpoint = String.format("%s/v1beta/models/%s:generateContent?key=%s", baseUrl, GEMINI_MODEL, apiKey);
         
-        String response = webClient.post()
-                .uri(endpoint)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(requestBody.toString())
-                .retrieve()
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                        this::handleErrorResponse)
-                .bodyToMono(String.class)
-                .doOnError(error -> log.error("Gemini API error: ", error))
-                .onErrorResume(error -> Mono.empty())
-                .block();
-
-        if (response == null) {
-            throw new ImageGeneratorServiceException("Gemini API call failed");
-        }
-
-        // Parse JSON response and extract base64 string
-        JSONObject jsonResponse = new JSONObject(response);
+        RequestBody body = RequestBody.create(
+                requestBody.toString(),
+                MediaType.parse("application/json")
+        );
         
-        if (jsonResponse.has("candidates") && jsonResponse.getJSONArray("candidates").length() > 0) {
-            JSONObject candidate = jsonResponse.getJSONArray("candidates").getJSONObject(0);
-            if (candidate.has("content") && candidate.getJSONObject("content").has("parts")) {
-                JSONArray responseParts = candidate.getJSONObject("content").getJSONArray("parts");
-                for (int i = 0; i < responseParts.length(); i++) {
-                    JSONObject part = responseParts.getJSONObject(i);
-                    if (part.has("inlineData")) {
-                        return part.getJSONObject("inlineData").getString("data");
+        Request request = new Request.Builder()
+                .url(endpoint)
+                .post(body)
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                log.error("Gemini API call failed: {}", e.getMessage(), e);
+                future.completeExceptionally(new ImageGeneratorServiceException(
+                        "Gemini API call failed: " + e.getMessage(), e));
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                try (ResponseBody responseBodyObj = response.body()) {
+                    if (!response.isSuccessful()) {
+                        String errorBody = "No error body provided";
+                        if (responseBodyObj != null) {
+                            errorBody = responseBodyObj.string();
+                        }
+                        log.error("Gemini API error response ({}): {}", response.code(), errorBody);
+                        log.error("Requested endpoint: {}", endpoint);
+                        future.completeExceptionally(new ImageGeneratorServiceException(
+                                String.format(ERROR_MSG_TEMPLATE, response.code(), baseUrl)));
+                        return;
                     }
+
+                    if (responseBodyObj == null) {
+                        future.completeExceptionally(new ImageGeneratorServiceException(
+                                "Gemini API returned null response body"));
+                        return;
+                    }
+                    
+                    String responseBody = responseBodyObj.string();
+                    if (responseBody == null || responseBody.isEmpty()) {
+                        future.completeExceptionally(new ImageGeneratorServiceException(
+                                "Gemini API returned empty response"));
+                        return;
+                    }
+
+                    // Parse JSON response and extract base64 string
+                    JSONObject jsonResponse = new JSONObject(responseBody);
+                    
+                    if (jsonResponse.has("candidates") && jsonResponse.getJSONArray("candidates").length() > 0) {
+                        JSONObject candidate = jsonResponse.getJSONArray("candidates").getJSONObject(0);
+                        if (candidate.has("content") && candidate.getJSONObject("content").has("parts")) {
+                            JSONArray responseParts = candidate.getJSONObject("content").getJSONArray("parts");
+                            for (int i = 0; i < responseParts.length(); i++) {
+                                JSONObject part = responseParts.getJSONObject(i);
+                                if (part.has("inlineData")) {
+                                    future.complete(part.getJSONObject("inlineData").getString("data"));
+                                    return;
+    }
+                            }
+                        }
+                    }
+
+                    future.completeExceptionally(new ImageGeneratorServiceException(
+                            "No image found in Gemini API response"));
+                } catch (Exception e) {
+                    log.error("Error processing Gemini API response: {}", e.getMessage(), e);
+                    future.completeExceptionally(new ImageGeneratorServiceException(
+                            "Error processing Gemini API response: " + e.getMessage(), e));
                 }
             }
-        }
+        });
 
-        throw new ImageGeneratorServiceException("No image found in Gemini API response");
+        return future;
     }
 
-    private Mono<ImageGeneratorServiceException> handleErrorResponse(
-           ClientResponse clientResponse) {
-        return clientResponse.bodyToMono(String.class)
-                .defaultIfEmpty("No error body provided")
-                .doOnNext(errorBody -> {
-                    log.error("Gemini API error response ({}): {}", 
-                            clientResponse.statusCode(), errorBody);
-                    log.error("Requested endpoint: {}", baseUrl);
-                })
-                .then(Mono.error(new ImageGeneratorServiceException(
-                        String.format(ERROR_MSG_TEMPLATE, clientResponse.statusCode(), baseUrl))));
+    /**
+     * Generate a single image using blocking call (for backward compatibility)
+     * Note: For parallel requests, use callGeminiAPISingleAsync() instead
+     */
+    private String callGeminiAPISingle(String prompt) {
+        try {
+            return callGeminiAPISingleAsync(prompt).join();
+        } catch (Exception e) {
+            if (e.getCause() instanceof ImageGeneratorServiceException) {
+                throw (ImageGeneratorServiceException) e.getCause();
+            }
+            throw new ImageGeneratorServiceException("Image generation failed: " + e.getMessage(), e);
+        }
     }
     
     public String generateImage(String recipeName, List<String> ingredients, String description) {

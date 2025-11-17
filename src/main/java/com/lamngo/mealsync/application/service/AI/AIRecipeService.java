@@ -3,13 +3,11 @@ package com.lamngo.mealsync.application.service.AI;
 import com.lamngo.mealsync.application.dto.recipe.DetectedIngredientDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.mapper.recipe.RecipeMapper;
-import com.lamngo.mealsync.application.service.AWS.S3Service;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import com.lamngo.mealsync.domain.model.recipe.RecipeIngredient;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.domain.repository.recipe.IRecipeRepo;
 import com.lamngo.mealsync.presentation.error.AIServiceException; // New exception name
-import com.lamngo.mealsync.presentation.error.GeminiServiceException;
 import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import org.json.JSONArray;
@@ -21,11 +19,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,16 +46,14 @@ public class AIRecipeService {
     @Value("${OPENAI_API_KEY}")
     private String openAIApiKey;
 
-    private static final String GPT_MODEL = "gpt-5-mini"; // Define the model
+    private static final String GPT_MODEL = "gpt-4o-mini"; // Define the model
     
     private WebClient openAIWebClient;
     
     private final RecipeMapper recipeMapper;
     private final IRecipeRepo recipeRepo;
-    private final ImageGeneratorService imageGeneratorService;
-    private final S3Service s3Service;
     private final PromptLoader promptLoader;
-    private final com.lamngo.mealsync.application.service.recipe.RecipeService recipeService;
+    private final TransactionTemplate transactionTemplate;
     
     // Cache for all recipes to avoid repeated database queries
     private volatile List<Recipe> cachedAllRecipes = null;
@@ -64,21 +63,18 @@ public class AIRecipeService {
     // Cache for recipe generation prompt to avoid file I/O
     private volatile String cachedRecipePrompt = null;
 
-    // Remove IRecipeIngredient if it's unused in the constructor
     public AIRecipeService(
             RecipeMapper recipeMapper,
             IRecipeRepo recipeRepo,
-            // IRecipeIngredient recipeIngredientRepo, // Removed if not needed
-            ImageGeneratorService imageGeneratorService,
-            S3Service s3Service,
             PromptLoader promptLoader,
-            com.lamngo.mealsync.application.service.recipe.RecipeService recipeService) {
+            PlatformTransactionManager transactionManager) {
         this.recipeMapper = recipeMapper;
         this.recipeRepo = recipeRepo;
-        this.imageGeneratorService = imageGeneratorService;
-        this.s3Service = s3Service;
         this.promptLoader = promptLoader;
-        this.recipeService = recipeService;
+        // Create TransactionTemplate for programmatic transaction management
+        // This is needed because @Transactional doesn't work in reactive chains
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
     }
     
     @PostConstruct
@@ -193,6 +189,26 @@ public class AIRecipeService {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestBody.toString())
                 .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        response -> {
+                            return response.bodyToMono(String.class)
+                                    .flatMap(errorBody -> {
+                                        logger.error("OpenAI API call failed: HTTP {} - Response: {}", response.statusCode(), errorBody);
+                                        String errorMessage = "OpenAI API call failed: HTTP " + response.statusCode();
+                                        try {
+                                            JSONObject errorJson = new JSONObject(errorBody);
+                                            if (errorJson.has("error") && errorJson.getJSONObject("error").has("message")) {
+                                                errorMessage += " - " + errorJson.getJSONObject("error").getString("message");
+                                            }
+                                        } catch (Exception e) {
+                                            // If parsing fails, use the raw error body
+                                            if (errorBody != null && !errorBody.isEmpty()) {
+                                                errorMessage += " - " + errorBody;
+                                            }
+                                        }
+                                        return Mono.error(new AIServiceException(errorMessage));
+                                    });
+                        })
                 .bodyToMono(String.class)
                 .map(responseBody -> {
                     try {
@@ -215,7 +231,9 @@ public class AIRecipeService {
                         }
                         JSONArray recipesArray = contentObject.getJSONArray("recipes");
 
-                        return parseAndSaveRecipes(recipesArray);
+                        // Use TransactionTemplate to ensure database operations run in a transaction
+                        // This is necessary because @Transactional doesn't work in reactive chains
+                        return transactionTemplate.execute(status -> parseAndSaveRecipes(recipesArray));
                     } catch (JSONException e) {
                         logger.error("Failed to parse OpenAI API response: {}", e.getMessage(), e);
                         throw new AIServiceException("Failed to parse OpenAI API response: " + e.getMessage());
@@ -237,6 +255,11 @@ public class AIRecipeService {
                 .toFuture();
     }
     
+    /**
+     * Parses and saves recipes from JSON array.
+     * Note: This method should be called within a transaction context (via TransactionTemplate).
+     * The @Transactional annotation is kept for safety but may not work in reactive chains.
+     */
     @Transactional
     private List<RecipeReadDto> parseAndSaveRecipes(JSONArray recipesArray) {
         List<Recipe> recipes = new ArrayList<>();
@@ -397,72 +420,14 @@ public class AIRecipeService {
         return recipe;
     }
 
-    @Transactional
+    /**
+     * @deprecated Image generation has been moved to RecipeImageService.
+     * Use RecipeImageService.generateImagesForRecipes() instead.
+     */
+    @Deprecated
     public void addImageToRecipe(RecipeReadDto dto) {
-        if (dto == null || dto.getId() == null) {
-            logger.warn("Cannot add image to null recipe or recipe with null ID");
-            return;
-        }
-
-        // Skip if recipe already has an image
-        if (dto.getImageUrl() != null && !dto.getImageUrl().isEmpty()) {
-            logger.debug("Recipe {} already has an image URL, skipping image generation", dto.getName());
-            return;
-        }
-
-        logger.info("Generating image for recipe: {}", dto.getName());
-        try {
-            String prompt = dto.getName();
-            List<String> ingredientNames = dto.getIngredients() != null ?
-                    dto.getIngredients().stream().map(i -> i.getName()).toList() :
-                    List.of();
-            String description = dto.getDescription() != null ? dto.getDescription() : "";
-
-            // Generate and upload image
-            logger.debug("Calling image generator service for recipe: {}", dto.getName());
-            String base64 = imageGeneratorService.generateImage(prompt, ingredientNames, description);
-            if (base64 == null || base64.isEmpty()) {
-                logger.error("Image generator returned empty base64 for recipe: {}", dto.getName());
-                throw new GeminiServiceException("Image generator returned empty base64 for recipe: " + dto.getName());
-            }
-
-            logger.debug("Decoding base64 image for recipe: {}", dto.getName());
-            byte[] imageBytes = Base64.getDecoder().decode(base64);
-
-            logger.debug("Uploading image to S3 for recipe: {}", dto.getName());
-            String imageUrl = s3Service.uploadImage(imageBytes, dto.getName());
-
-            if (imageUrl == null || imageUrl.isEmpty()) {
-                logger.error("S3 service returned empty imageUrl for recipe: {}", dto.getName());
-                throw new GeminiServiceException("S3 service returned empty imageUrl for recipe: " + dto.getName());
-            }
-
-            // Update DTO
-            dto.setImageUrl(imageUrl);
-            logger.info("Successfully uploaded image for recipe {} to: {}", dto.getName(), imageUrl);
-
-            // Update entity in database
-            Optional<Recipe> recipeOpt = recipeRepo.getRecipeById(dto.getId());
-            if (recipeOpt.isPresent()) {
-                Recipe recipe = recipeOpt.get();
-                recipe.setImageUrl(imageUrl);
-                // Save the updated recipe back to the database
-                recipe = recipeRepo.saveRecipe(recipe);
-                logger.info("Successfully updated recipe {} in database with image URL", dto.getId());
-            } else {
-                logger.error("Recipe not found in database: {}", dto.getId());
-                throw new GeminiServiceException("Recipe not found in database: " + dto.getId());
-            }
-        } catch (GeminiServiceException e) {
-            logger.error("GeminiServiceException while adding image to recipe {}: {}", dto.getName(), e.getMessage());
-            throw e;
-        } catch (IllegalArgumentException e) {
-            logger.error("Invalid base64 data for recipe {}: {}", dto.getName(), e.getMessage(), e);
-            throw new GeminiServiceException("Invalid image data for recipe: " + dto.getName(), e);
-        } catch (Exception e) {
-            logger.error("Unexpected error generating/uploading image for recipe {}: {}", dto.getName(), e.getMessage(), e);
-            throw new GeminiServiceException("Failed to generate/upload image for recipe: " + dto.getName(), e);
-        }
+        logger.warn("addImageToRecipe is deprecated. Use RecipeImageService instead.");
+        // This method is kept for backward compatibility but should not be used
     }
 
     public String generateIngredientKey(String recipeName) {
@@ -614,116 +579,52 @@ public class AIRecipeService {
     }
     
     /**
-     * Adds images to multiple recipes using batch mode for cost efficiency with Gemini 2.5 Flash Image.
-     * This method delegates to the async version for backward compatibility.
+     * @deprecated Image generation has been moved to RecipeImageService.
+     * Use RecipeImageService.generateImagesForRecipes() instead.
      */
+    @Deprecated
     public CompletableFuture<Void> addImagesToRecipesBatch(List<RecipeReadDto> recipeDtos) {
-        // Delegate to async version for backward compatibility
-        return addImagesToRecipesBatchAsync(recipeDtos);
-    }
-
-    /**
-     * Adds images to multiple recipes asynchronously without blocking the response.
-     * This method runs in a separate thread pool and does not block the caller.
-     */
-    @Async("taskExecutor")
-    public CompletableFuture<Void> addImagesToRecipesBatchAsync(List<RecipeReadDto> recipeDtos) {
-        try {
-            if (recipeDtos == null || recipeDtos.isEmpty()) {
-                logger.debug("No recipes to generate images for");
-                return CompletableFuture.completedFuture(null);
-            }
-
-            // Filter recipes that need images
-            List<RecipeReadDto> recipesNeedingImages = recipeDtos.stream()
-                    .filter(dto -> dto != null && dto.getId() != null 
-                            && (dto.getImageUrl() == null || dto.getImageUrl().isEmpty()))
-                    .toList();
-
-            if (recipesNeedingImages.isEmpty()) {
-                logger.debug("All recipes already have images");
-                return CompletableFuture.completedFuture(null);
-            }
-
-            logger.info("Generating {} images asynchronously in background using Gemini 2.5 Flash Image", recipesNeedingImages.size());
-
-            // Prepare batch requests
-            List<ImageGeneratorService.ImageGenerationRequest> batchRequests = new ArrayList<>();
-            for (RecipeReadDto dto : recipesNeedingImages) {
-                List<String> ingredientNames = dto.getIngredients() != null ?
-                        dto.getIngredients().stream().map(i -> i.getName()).toList() :
-                        List.of();
-                String description = dto.getDescription() != null ? dto.getDescription() : "";
-                
-                batchRequests.add(new ImageGeneratorService.ImageGenerationRequest(
-                        dto.getName(), ingredientNames, description));
-            }
-
-            // Generate images in batch (this takes ~10s but runs in background)
-            Map<String, String> recipeNameToBase64 = imageGeneratorService.generateImagesBatch(batchRequests);
-
-            // Upload images and update recipes
-            for (RecipeReadDto dto : recipesNeedingImages) {
-                String base64 = recipeNameToBase64.get(dto.getName());
-                if (base64 == null || base64.isEmpty()) {
-                    logger.warn("No image generated for recipe: {}", dto.getName());
-                    continue;
-                }
-
-                try {
-                    byte[] imageBytes = Base64.getDecoder().decode(base64);
-                    String imageUrl = s3Service.uploadImage(imageBytes, dto.getName());
-
-                    if (imageUrl != null && !imageUrl.isEmpty()) {
-                        // Update entity in database
-                        Optional<Recipe> recipeOpt = recipeRepo.getRecipeById(dto.getId());
-                        if (recipeOpt.isPresent()) {
-                            Recipe recipe = recipeOpt.get();
-                            recipe.setImageUrl(imageUrl);
-                            recipeRepo.saveRecipe(recipe);
-                            logger.info("Successfully updated recipe {} with image URL in background", dto.getId());
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.error("Failed to upload image for recipe {}: {}", dto.getName(), e.getMessage(), e);
-                }
-            }
-
-            logger.info("Successfully processed batch image generation for {} recipes in background", recipesNeedingImages.size());
-            return CompletableFuture.completedFuture(null);
-        } catch (Exception e) {
-            logger.error("Failed to add images to recipes in batch: {}", e.getMessage(), e);
-            return CompletableFuture.failedFuture(e);
-        }
-    }
-
-    /**
-     * Adds image to recipe asynchronously without blocking the response.
-     */
-    @Async("taskExecutor")
-    public CompletableFuture<Void> addImageToRecipeAsync(RecipeReadDto dto) {
-        try {
-            addImageToRecipe(dto);
-            logger.debug("Successfully added image to recipe asynchronously: {}", dto.getName());
-            return CompletableFuture.completedFuture(null);
-        } catch (Exception e) {
-            logger.error("Failed to add image to recipe {} asynchronously: {}", dto.getName(), e.getMessage(), e);
-            return CompletableFuture.failedFuture(e);
-        }
+        logger.warn("addImagesToRecipesBatch is deprecated. Use RecipeImageService instead.");
+        return CompletableFuture.completedFuture(null);
     }
     
     /**
-     * Saves generated recipes to user's history asynchronously (non-blocking)
+     * @deprecated Image generation has been moved to RecipeImageService.
+     * Use RecipeImageService.generateImagesForRecipes() instead.
      */
-    @Async("taskExecutor")
+    @Deprecated
+    public CompletableFuture<Void> addImagesToRecipesBatchAsync(List<RecipeReadDto> recipeDtos) {
+        logger.warn("addImagesToRecipesBatchAsync is deprecated. Use RecipeImageService instead.");
+        return CompletableFuture.completedFuture(null);
+    }
+    
+    /**
+     * @deprecated Image generation has been moved to ImageGenerationService.
+     * Use ImageGenerationService.generateImagesForRecipes() with Spring Events instead.
+     */
+    @Deprecated
+    public CompletableFuture<Void> addImagesToRecipesBatchAsync(
+            List<RecipeReadDto> recipeDtos, 
+            Object onImageReady) {
+        logger.warn("addImagesToRecipesBatchAsync with callback is deprecated. Use RecipeImageService with Spring Events instead.");
+        return CompletableFuture.completedFuture(null);
+    }
+    
+    /**
+     * @deprecated Image generation has been moved to RecipeImageService.
+     */
+    @Deprecated
+    public CompletableFuture<Void> addImageToRecipeAsync(RecipeReadDto dto) {
+        logger.warn("addImageToRecipeAsync is deprecated. Use RecipeImageService instead.");
+        return CompletableFuture.completedFuture(null);
+    }
+    
+    /**
+     * @deprecated User history saving has been moved to RecipeGenerationOrchestrator.
+     */
+    @Deprecated
     public CompletableFuture<Void> saveGeneratedRecipesToUserAsync(UUID userId, List<UUID> recipeIds) {
-        try {
-            recipeService.addGeneratedRecipesToUser(userId, recipeIds);
-            logger.debug("Successfully saved {} generated recipes to user {} history", recipeIds.size(), userId);
-            return CompletableFuture.completedFuture(null);
-        } catch (Exception e) {
-            logger.error("Failed to save generated recipes to user {} history: {}", userId, e.getMessage(), e);
-            return CompletableFuture.failedFuture(e);
-        }
+        logger.warn("saveGeneratedRecipesToUserAsync is deprecated. Use RecipeGenerationOrchestrator instead.");
+        return CompletableFuture.completedFuture(null);
     }
 }

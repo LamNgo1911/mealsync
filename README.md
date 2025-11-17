@@ -24,6 +24,7 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
   - Personalized recommendations based on user preferences
   - Advanced search and filtering (cuisine, tags, ingredients, difficulty)
   - Automatic recipe image generation with Google Gemini 2.5 Flash Image
+  - Real-time image streaming via Server-Sent Events (SSE) - images appear automatically as they're generated
   - Save and manage favorite recipes
   - Optimized performance: ~11-16s response time for scan-and-generate workflow
 
@@ -42,6 +43,7 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
   - Rate limiting
   - Caching
   - Async image generation (non-blocking)
+  - Real-time image streaming via Server-Sent Events (SSE)
   - Pipelined operations for faster response times
   - Optimized AI prompts for reduced latency
 
@@ -71,6 +73,7 @@ MealSync uses a two-step AI process for recipe generation:
 3. **Optimized Workflow** (New)
    - **Combined Endpoint**: `/scan-and-generate` - Single endpoint that pipelines ingredient detection → recipe generation
    - Images generated asynchronously in background (non-blocking)
+   - **Real-time Streaming**: `/image-stream` - Subscribe to Server-Sent Events (SSE) to receive image updates as they're generated (no refresh needed!)
    - Response time: ~11-16s for complete workflow
 
 ## 🚀 Getting Started
@@ -641,6 +644,47 @@ All endpoints return a standardized response:
   - **Response**: Same as `/generate-recipes` endpoint
   - **Auth**: Required
   - **Description**: Combined endpoint that scans image for ingredients and generates 3 recipes in a single optimized request. Images are generated asynchronously in the background. **Response time: ~11-16s**
+
+- **Stream Image Generation Updates** (Server-Sent Events)
+  ```
+  GET /image-stream?recipeIds={uuid1},{uuid2},{uuid3}
+  ```
+  - **Content-Type**: `text/event-stream` (SSE)
+  - **Query Parameters**:
+    - `recipeIds` (required): Comma-separated list of recipe UUIDs to stream images for
+  - **Response**: Server-Sent Events stream with real-time image updates
+  - **Event Types**:
+    - `image-update`: Sent when an image is generated for a recipe
+    - `complete`: Sent when all images are generated
+    - `error`: Sent if an error occurs
+  - **Example Event**:
+    ```
+    event: image-update
+    data: {"recipeId":"123e4567-e89b-12d3-a456-426614174000","recipeName":"Chicken Stir Fry","imageUrl":"https://s3...","success":true}
+    ```
+  - **Auth**: Required
+  - **Description**: Subscribe to real-time image generation updates using Server-Sent Events (SSE). Images appear automatically as they're generated - no refresh needed! Use this endpoint after calling `/generate-recipes` or `/scan-and-generate` to receive progressive image updates.
+  - **Frontend Example**:
+    ```javascript
+    const eventSource = new EventSource('/api/v1/recipes/image-stream?recipeIds=id1,id2,id3');
+    
+    eventSource.addEventListener('image-update', (event) => {
+      const update = JSON.parse(event.data);
+      if (update.success) {
+        // Update UI with new image URL
+        updateRecipeImage(update.recipeId, update.imageUrl);
+      }
+    });
+    
+    eventSource.addEventListener('complete', () => {
+      eventSource.close();
+    });
+    
+    eventSource.addEventListener('error', (event) => {
+      console.error('SSE error:', event.data);
+      eventSource.close();
+    });
+    ```
 
 - **Generate Recipes from Ingredients**
   ```
