@@ -84,6 +84,21 @@ public class RecipeService implements IRecipeService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<RecipeReadDto> getRecipesByIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        // Fetch all recipes in a single transaction to minimize connection usage
+        return ids.stream()
+                .map(recipeRepo::getRecipeById)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .map(recipeMapper::toRecipeReadDto)
+                .toList();
+    }
+
+    @Override
     public PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset) {
         OffsetPage page = new OffsetPage(limit, offset);
         Page<Recipe> recipePage = recipeRepo.getAllRecipes(page);
@@ -240,9 +255,32 @@ public class RecipeService implements IRecipeService {
             return b.getSavedAt().compareTo(a.getSavedAt()); // DESC order
         });
         
-        // Map to DTOs
+        // Extract recipe IDs and fetch recipes directly from database to get latest imageUrl
+        // This ensures we get the most up-to-date Recipe entities, including async-updated image URLs
+        // The lazy-loaded Recipe from UserRecipe might be stale from Hibernate session cache
+        List<UUID> recipeIds = validUserRecipes.stream()
+                .map(ur -> ur.getRecipe().getId())
+                .distinct()
+                .collect(Collectors.toList());
+        
+        // Fetch recipes directly by IDs to get latest data (including updated imageUrl)
+        Map<UUID, RecipeReadDto> recipeMap = getRecipesByIds(recipeIds).stream()
+                .collect(Collectors.toMap(RecipeReadDto::getId, dto -> dto));
+        
+        // Map to DTOs using fresh recipes
         List<UserRecipeReadDto> allDtos = validUserRecipes.stream()
-                .map(userRecipeMapper::toUserRecipeReadDto)
+                .map(ur -> {
+                    // Map UserRecipe to DTO first
+                    UserRecipeReadDto dto = userRecipeMapper.toUserRecipeReadDto(ur);
+                    // Replace with fresh RecipeReadDto that has latest imageUrl
+                    if (dto != null && dto.getRecipe() != null) {
+                        RecipeReadDto freshRecipe = recipeMap.get(dto.getRecipe().getId());
+                        if (freshRecipe != null) {
+                            dto.setRecipe(freshRecipe);
+                        }
+                    }
+                    return dto;
+                })
                 .filter(dto -> dto != null && dto.getRecipe() != null && dto.getRecipe().getId() != null)
                 .collect(Collectors.toList());
         
@@ -381,9 +419,21 @@ public class RecipeService implements IRecipeService {
             return b.getSavedAt().compareTo(a.getSavedAt()); // DESC order
         });
         
-        // Map to RecipeReadDto first
+        // Extract recipe IDs and fetch recipes directly from database to get latest imageUrl
+        // This ensures we get the most up-to-date Recipe entities, including async-updated image URLs
+        // The lazy-loaded Recipe from UserRecipe might be stale from Hibernate session cache
+        List<UUID> recipeIds = validUserRecipes.stream()
+                .map(ur -> ur.getRecipe().getId())
+                .distinct()
+                .collect(Collectors.toList());
+        
+        // Fetch recipes directly by IDs to get latest data (including updated imageUrl)
+        Map<UUID, RecipeReadDto> recipeMap = getRecipesByIds(recipeIds).stream()
+                .collect(Collectors.toMap(RecipeReadDto::getId, dto -> dto));
+        
+        // Map to RecipeReadDto using the freshly fetched recipes, preserving order
         List<RecipeReadDto> allRecipeDtos = validUserRecipes.stream()
-                .map(ur -> recipeMapper.toRecipeReadDto(ur.getRecipe()))
+                .map(ur -> recipeMap.get(ur.getRecipe().getId()))
                 .filter(dto -> dto != null && dto.getId() != null)
                 .collect(Collectors.toList());
         

@@ -8,8 +8,6 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
-import org.springframework.http.MediaType;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -55,12 +53,12 @@ public class RecipeImageStreamingService {
         // Create SSE emitter with 5 minute timeout
         SseEmitter emitter = new SseEmitter(300000L);
 
-        // Fetch recipes by IDs
+        // Fetch recipes by IDs in a single transaction to minimize connection usage
+        // IMPORTANT: Complete the transaction BEFORE setting up async operations to prevent connection leaks
         List<RecipeReadDto> recipes;
         try {
-            recipes = recipeIds.stream()
-                    .map(id -> recipeService.getRecipeById(id))
-                    .toList();
+            recipes = recipeService.getRecipesByIds(recipeIds);
+            // Transaction completes here, connection is released
         } catch (Exception e) {
             logger.error("Failed to fetch recipes for streaming: {}", e.getMessage(), e);
             try {
@@ -79,19 +77,26 @@ public class RecipeImageStreamingService {
             activeEmitters.computeIfAbsent(recipeId, k -> ConcurrentHashMap.newKeySet()).add(emitter);
         }
 
-        // Start image generation (will publish events)
+        // Start image generation asynchronously (will publish events)
+        // This happens AFTER the transaction completes, so no connection is held
         CompletableFuture<Void> generationFuture = recipeImageService.generateImagesForRecipes(recipes);
         
         generationFuture.whenComplete((result, throwable) -> {
-            if (throwable != null) {
-                logger.error("Image generation failed: {}", throwable.getMessage(), throwable);
-                sendEventToEmitter(emitter, "error", 
-                        "{\"error\":\"Image generation failed: " + throwable.getMessage() + "\"}");
+            // Check if emitter is still valid before sending completion event
+            // Client may have already disconnected
+            try {
+                if (throwable != null) {
+                    logger.error("Image generation failed: {}", throwable.getMessage(), throwable);
+                    sendEventToEmitter(emitter, "error", 
+                            "{\"error\":\"Image generation failed: " + throwable.getMessage() + "\"}");
+                } else {
+                    logger.info("Image generation completed, closing SSE stream");
+                    sendEventToEmitter(emitter, "complete", "{\"message\":\"All images generated\"}");
+                }
+            } catch (Exception e) {
+                logger.debug("Failed to send completion event (client likely disconnected): {}", e.getMessage());
+            } finally {
                 completeEmitter(emitter, recipeIds, throwable);
-            } else {
-                logger.info("Image generation completed, closing SSE stream");
-                sendEventToEmitter(emitter, "complete", "{\"message\":\"All images generated\"}");
-                completeEmitter(emitter, recipeIds, null);
             }
         });
 
@@ -119,9 +124,10 @@ public class RecipeImageStreamingService {
     /**
      * Event listener for ImageGeneratedEvent.
      * Sends SSE updates to all registered emitters for the recipe.
+     * Note: Not marked as @Async because RecipeImageService.generateImagesForRecipes is already async,
+     * and we want to avoid SecurityContext propagation issues.
      */
     @EventListener
-    @Async
     public void handleImageGenerated(ImageGeneratedEvent event) {
         UUID recipeId = event.getRecipeId();
         Set<SseEmitter> emitters = activeEmitters.get(recipeId);
@@ -146,29 +152,28 @@ public class RecipeImageStreamingService {
             String eventDataStr = eventData.toString();
             
             // Send to all registered emitters for this recipe
-            List<SseEmitter> toRemove = new ArrayList<>();
-            for (SseEmitter emitter : emitters) {
+            // Use iterator to safely remove while iterating
+            Iterator<SseEmitter> iterator = emitters.iterator();
+            while (iterator.hasNext()) {
+                SseEmitter emitter = iterator.next();
                 try {
                     emitter.send(SseEmitter.event()
                             .name("image-update")
                             .data(eventDataStr));
                     logger.debug("Sent image update via SSE for recipe: {}", recipeId);
                 } catch (Exception e) {
-                    logger.warn("Failed to send SSE event to emitter for recipe {}: {}", 
+                    // Client disconnected or emitter is no longer usable
+                    // Remove immediately and log at debug level (this is normal)
+                    logger.debug("Failed to send SSE event to emitter for recipe {} (client likely disconnected): {}", 
                             recipeId, e.getMessage());
-                    toRemove.add(emitter);
+                    iterator.remove();
+                    try {
+                        emitter.completeWithError(new IOException("Emitter connection lost"));
+                    } catch (Exception ex) {
+                        // Ignore - emitter is already closed
+                    }
                 }
             }
-            
-            // Remove failed emitters
-            toRemove.forEach(emitter -> {
-                emitters.remove(emitter);
-                try {
-                    emitter.completeWithError(new IOException("Emitter connection lost"));
-                } catch (Exception e) {
-                    // Ignore
-                }
-            });
             
         } catch (Exception e) {
             logger.error("Failed to process image generated event for recipe {}: {}", 
@@ -177,24 +182,38 @@ public class RecipeImageStreamingService {
     }
     
     private void sendEventToEmitter(SseEmitter emitter, String eventName, String data) {
+        if (emitter == null) {
+            return;
+        }
         try {
             emitter.send(SseEmitter.event()
                     .name(eventName)
                     .data(data));
-        } catch (IOException e) {
-            logger.error("Failed to send {} event to emitter", eventName, e);
+        } catch (Exception e) {
+            // Client disconnected or emitter is no longer usable
+            // This is normal when clients close connections, so log at debug level
+            logger.debug("Failed to send {} event to emitter (client likely disconnected): {}", 
+                    eventName, e.getMessage());
         }
     }
     
     private void completeEmitter(SseEmitter emitter, List<UUID> recipeIds, Throwable error) {
+        if (emitter == null) {
+            unregisterEmitter(emitter, recipeIds);
+            return;
+        }
         try {
+            // Check if emitter is still valid before trying to complete it
+            // If client already disconnected, the emitter will throw an exception
             if (error != null) {
                 emitter.completeWithError(error);
             } else {
                 emitter.complete();
             }
         } catch (Exception e) {
-            logger.error("Failed to complete emitter", e);
+            // Client already disconnected or emitter is no longer usable
+            // This is normal, so log at debug level
+            logger.debug("Failed to complete emitter (client likely disconnected): {}", e.getMessage());
         } finally {
             unregisterEmitter(emitter, recipeIds);
         }

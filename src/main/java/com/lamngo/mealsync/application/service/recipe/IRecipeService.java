@@ -13,6 +13,7 @@ import java.util.UUID;
 public interface IRecipeService {
     RecipeReadDto createRecipe(RecipeCreateDto recipeCreateDto);
     RecipeReadDto getRecipeById(UUID id);
+    List<RecipeReadDto> getRecipesByIds(List<UUID> ids);
     PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset);
     PaginationResponse<RecipeReadDto> getAllRecipes(int limit, int offset, String name, List<String> cuisines, List<String> tags,
                                                      List<String> ingredients, String difficulty,

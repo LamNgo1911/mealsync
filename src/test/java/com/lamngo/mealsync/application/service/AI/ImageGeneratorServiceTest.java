@@ -14,14 +14,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ImageGeneratorServiceTest {
-    private ImageGeneratorService service;
+    private GeminiImageApiClient service;
     private WebClient webClient;
     private PromptLoader promptLoader;
 
     @BeforeEach
     void setUp() {
         promptLoader = mock(PromptLoader.class);
-        service = new ImageGeneratorService(promptLoader);
+        service = new GeminiImageApiClient(promptLoader);
         webClient = mock(WebClient.class);
         ReflectionTestUtils.setField(service, "webClient", webClient);
         ReflectionTestUtils.setField(service, "geminiApiKey", "dummy");
@@ -74,7 +74,7 @@ class ImageGeneratorServiceTest {
 
     @Test
     void generateImage_returnsBase64() {
-        ImageGeneratorService spyService = spy(service);
+        GeminiImageApiClient spyService = spy(service);
         doReturn("ZmFrZS1pbWFnZQ==").when(spyService).callGeminiAPI(anyString());
         String result = spyService.generateImage("prompt", List.of("egg"), "desc");
         assertEquals("ZmFrZS1pbWFnZQ==", result);
@@ -82,7 +82,7 @@ class ImageGeneratorServiceTest {
 
     @Test
     void generateImage_handlesException() {
-        ImageGeneratorService spyService = spy(service);
+        GeminiImageApiClient spyService = spy(service);
         doThrow(new ImageGeneratorServiceException("fail")).when(spyService).callGeminiAPI(anyString());
         assertThrows(ImageGeneratorServiceException.class, () -> spyService.generateImage("prompt", List.of("egg"), "desc"));
     }

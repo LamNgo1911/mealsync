@@ -207,6 +207,9 @@ public class GeminiImageApiClient {
                     // Parse JSON response and extract base64 string
                     JSONObject jsonResponse = new JSONObject(responseBody);
                     
+                    // Log the response structure for debugging
+                    log.debug("Gemini API response structure: {}", jsonResponse.toString());
+                    
                     if (jsonResponse.has("candidates") && jsonResponse.getJSONArray("candidates").length() > 0) {
                         JSONObject candidate = jsonResponse.getJSONArray("candidates").getJSONObject(0);
                         if (candidate.has("content") && candidate.getJSONObject("content").has("parts")) {
@@ -216,13 +219,45 @@ public class GeminiImageApiClient {
                                 if (part.has("inlineData")) {
                                     future.complete(part.getJSONObject("inlineData").getString("data"));
                                     return;
-    }
+                                }
                             }
                         }
                     }
 
-                    future.completeExceptionally(new ImageGeneratorServiceException(
-                            "No image found in Gemini API response"));
+                    // Check if API returned text instead of image (common when API can't generate image)
+                    boolean hasTextResponse = false;
+                    String textResponse = null;
+                    if (jsonResponse.has("candidates") && jsonResponse.getJSONArray("candidates").length() > 0) {
+                        JSONObject candidate = jsonResponse.getJSONArray("candidates").getJSONObject(0);
+                        if (candidate.has("content") && candidate.getJSONObject("content").has("parts")) {
+                            JSONArray responseParts = candidate.getJSONObject("content").getJSONArray("parts");
+                            for (int i = 0; i < responseParts.length(); i++) {
+                                JSONObject part = responseParts.getJSONObject(i);
+                                if (part.has("text")) {
+                                    hasTextResponse = true;
+                                    textResponse = part.getString("text");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Log full response for debugging when no image is found
+                    if (hasTextResponse) {
+                        log.warn("Gemini API returned text instead of image. Text response: {}", textResponse);
+                        log.warn("Full response: {}", responseBody);
+                    } else {
+                        log.error("No image found in Gemini API response. Full response: {}", responseBody);
+                        log.error("Response structure - has candidates: {}, candidates length: {}", 
+                                jsonResponse.has("candidates"),
+                                jsonResponse.has("candidates") ? jsonResponse.getJSONArray("candidates").length() : 0);
+                    }
+                    
+                    String errorMessage = hasTextResponse 
+                            ? "Gemini API returned text instead of image. The API may not support image generation for this prompt."
+                            : "No image found in Gemini API response. Check logs for full response details.";
+                    
+                    future.completeExceptionally(new ImageGeneratorServiceException(errorMessage));
                 } catch (Exception e) {
                     log.error("Error processing Gemini API response: {}", e.getMessage(), e);
                     future.completeExceptionally(new ImageGeneratorServiceException(
