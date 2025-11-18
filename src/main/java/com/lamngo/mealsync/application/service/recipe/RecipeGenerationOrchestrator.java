@@ -3,6 +3,7 @@ package com.lamngo.mealsync.application.service.recipe;
 import com.lamngo.mealsync.application.dto.recipe.DetectedIngredientDto;
 import com.lamngo.mealsync.application.dto.recipe.RecipeReadDto;
 import com.lamngo.mealsync.application.service.AI.AIRecipeService;
+import com.lamngo.mealsync.application.service.AI.IRecipeGenerationService;
 import com.lamngo.mealsync.application.service.AI.RecipeImageService;
 import com.lamngo.mealsync.application.service.AI.IngredientDetectionService;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
@@ -63,6 +64,7 @@ public class RecipeGenerationOrchestrator {
         CompletableFuture<List<RecipeReadDto>> recipesFuture = ingredientsFuture
                 .thenCompose(ingredients -> {
                     logger.info("Ingredients detected, starting recipe generation");
+                    // Note: fetchRecipesFromOpenAIAsync now uses the configured provider (OpenAI or Gemini)
                     return aiRecipeService.fetchRecipesFromOpenAIAsync(ingredients, userPreference);
                 });
 
@@ -92,6 +94,7 @@ public class RecipeGenerationOrchestrator {
         logger.info("Starting recipe generation from ingredients");
         
         // Generate recipes
+        // Note: fetchRecipesFromOpenAIAsync now uses the configured provider (OpenAI or Gemini)
         CompletableFuture<List<RecipeReadDto>> recipesFuture = 
                 aiRecipeService.fetchRecipesFromOpenAIAsync(ingredients, userPreference);
         

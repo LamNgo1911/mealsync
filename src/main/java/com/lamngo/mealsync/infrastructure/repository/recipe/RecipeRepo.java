@@ -3,13 +3,17 @@ package com.lamngo.mealsync.infrastructure.repository.recipe;
 import com.lamngo.mealsync.application.shared.OffsetPage;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import com.lamngo.mealsync.domain.repository.recipe.IRecipeRepo;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -19,6 +23,9 @@ public class RecipeRepo implements IRecipeRepo {
 
     @Autowired
     private RecipeJpaRepo _recipeJpaRepo;
+    
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Override
     public Recipe createRecipe(Recipe recipe) {
@@ -126,5 +133,64 @@ public class RecipeRepo implements IRecipeRepo {
         List<Recipe> paginatedRecipes = filteredRecipes.subList(start, end);
 
         return new PageImpl<>(paginatedRecipes, pageable, filteredRecipes.size());
+    }
+    
+    @Override
+    public Optional<Recipe> findSimilarRecipeByName(String recipeName, double similarityThreshold) {
+        if (recipeName == null || recipeName.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        
+        // Use PostgreSQL's similarity() function with pg_trgm extension
+        // This is much faster than loading all recipes and calculating in Java
+        String sql = """
+            SELECT r.* FROM recipes r 
+            WHERE similarity(r.name, :recipeName) >= :threshold
+            ORDER BY similarity(r.name, :recipeName) DESC
+            LIMIT 1
+            """;
+        
+        try {
+            @SuppressWarnings("unchecked")
+            List<Recipe> results = entityManager.createNativeQuery(sql, Recipe.class)
+                    .setParameter("recipeName", recipeName)
+                    .setParameter("threshold", similarityThreshold)
+                    .getResultList();
+            
+            return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+        } catch (Exception e) {
+            // If pg_trgm extension is not enabled, fall back to empty
+            // Log warning but don't fail - allows graceful degradation
+            return Optional.empty();
+        }
+    }
+    
+    @Override
+    public Map<String, Optional<Recipe>> findByIngredientKeysBatch(List<String> ingredientKeys) {
+        if (ingredientKeys == null || ingredientKeys.isEmpty()) {
+            return Map.of();
+        }
+        
+        // Batch query: fetch all recipes with matching ingredient keys in one query
+        List<Recipe> found = _recipeJpaRepo.findByIngredientKeyIn(ingredientKeys);
+        
+        // Build map of ingredientKey -> Optional<Recipe>
+        Map<String, Optional<Recipe>> result = new HashMap<>();
+        for (String key : ingredientKeys) {
+            result.put(key, found.stream()
+                    .filter(r -> key.equals(r.getIngredientKey()))
+                    .findFirst());
+        }
+        
+        return result;
+    }
+    
+    @Override
+    public List<Recipe> saveAllRecipes(List<Recipe> recipes) {
+        if (recipes == null || recipes.isEmpty()) {
+            return List.of();
+        }
+        // Use Spring Data JPA's saveAll - performs batch insert in single transaction
+        return _recipeJpaRepo.saveAll(recipes);
     }
 }

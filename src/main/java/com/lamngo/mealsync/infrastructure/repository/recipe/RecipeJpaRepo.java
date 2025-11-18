@@ -24,4 +24,10 @@ public interface RecipeJpaRepo extends JpaRepository<Recipe, UUID> {
 
     @Query("SELECT r FROM Recipe r WHERE LOWER(r.cuisine) IN :cuisines")
     List<Recipe> findByCuisineInIgnoreCase(List<String> cuisines, Pageable pageable);
+    
+    /**
+     * Batch lookup recipes by ingredient keys.
+     * More efficient than individual queries.
+     */
+    List<Recipe> findByIngredientKeyIn(List<String> ingredientKeys);
 }
