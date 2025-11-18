@@ -28,6 +28,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -77,7 +78,9 @@ public class RecipeService implements IRecipeService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public RecipeReadDto getRecipeById(UUID id) {
+        
         Optional<Recipe> recipeOpt = recipeRepo.getRecipeById(id);
         return recipeOpt.map(recipeMapper::toRecipeReadDto)
                 .orElseThrow(() -> new ResourceNotFoundException("Recipe not found with id: " + id));
@@ -89,11 +92,10 @@ public class RecipeService implements IRecipeService {
         if (ids == null || ids.isEmpty()) {
             return List.of();
         }
-        // Fetch all recipes in a single transaction to minimize connection usage
-        return ids.stream()
-                .map(recipeRepo::getRecipeById)
-                .filter(Optional::isPresent)
-                .map(Optional::get)
+        
+        // Fetch all recipes in a SINGLE batch query (not N individual queries)
+        // This significantly improves performance when fetching multiple recipes
+        return recipeRepo.getRecipesByIds(ids).stream()
                 .map(recipeMapper::toRecipeReadDto)
                 .toList();
     }

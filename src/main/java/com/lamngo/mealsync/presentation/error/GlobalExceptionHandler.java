@@ -2,8 +2,13 @@ package com.lamngo.mealsync.presentation.error;
 
 import com.lamngo.mealsync.presentation.shared.ErrorEntity;
 import com.lamngo.mealsync.presentation.shared.ErrorResponseEntity;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -14,6 +19,30 @@ import java.util.List;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(AuthorizationDeniedException.class)
+    public ResponseEntity<ErrorResponseEntity> handleAuthorizationDeniedException(
+            AuthorizationDeniedException ex, HttpServletRequest request, HttpServletResponse response) {
+        // Check if response is already committed (common in async/SSE scenarios)
+        if (response.isCommitted()) {
+            logger.warn("AuthorizationDeniedException occurred but response is already committed. " +
+                    "This is likely due to async operation or SSE stream. Request: {}", request.getRequestURI());
+            // Return null to indicate we can't send a response
+            return null;
+        }
+
+        ErrorEntity errorEntity = ErrorEntity.builder()
+                .field("Authorization")
+                .message("Access Denied: " + ex.getMessage())
+                .build();
+
+        ErrorResponseEntity errorResponseEntity = ErrorResponseEntity.builder()
+                .errors(List.of(errorEntity))
+                .build();
+
+        return new ResponseEntity<>(errorResponseEntity, HttpStatus.FORBIDDEN);
+    }
 
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)

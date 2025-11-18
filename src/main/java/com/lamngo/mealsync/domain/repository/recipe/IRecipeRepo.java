@@ -33,4 +33,12 @@ public interface IRecipeRepo {
      * @return List of all recipes
      */
     List<Recipe> findAllRecipes();
+    
+    /**
+     * Fetches multiple recipes by their IDs in a single batch query.
+     * This is more efficient than calling getRecipeById() multiple times.
+     * @param ids List of recipe IDs to fetch
+     * @return List of recipes matching the provided IDs
+     */
+    List<Recipe> getRecipesByIds(List<UUID> ids);
 }

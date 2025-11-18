@@ -74,6 +74,16 @@ public class RecipeRepo implements IRecipeRepo {
     }
 
     @Override
+    public List<Recipe> getRecipesByIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        // Use Spring Data JPA's built-in batch query - fetches all in ONE query
+        // This is much more efficient than calling getRecipeById() multiple times
+        return _recipeJpaRepo.findAllById(ids);
+    }
+
+    @Override
     public Page<Recipe> getAllRecipesFiltered(OffsetPage pageable, String name, List<String> cuisines, List<String> tags,
                                                List<String> ingredients, String difficulty,
                                                Integer maxTotalTime, Integer minServings) {
