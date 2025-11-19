@@ -25,7 +25,8 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Service for detecting raw ingredients from images using OpenAI Vision API.
- * This service is separate from recipe generation to maintain single responsibility.
+ * This service is separate from recipe generation to maintain single
+ * responsibility.
  */
 @Service
 public class IngredientDetectionService {
@@ -37,23 +38,26 @@ public class IngredientDetectionService {
     @Value("${OPENAI_API_KEY}")
     private String openAIApiKey;
 
-    // NOTE: Using gpt-4o-mini for cost efficiency and speed. For better instruction-following and validation accuracy,
-    // consider upgrading to "gpt-4o" or "gpt-4-turbo" if validation quality issues persist.
+    // NOTE: Using gpt-4o-mini for cost efficiency and speed. For better
+    // instruction-following and validation accuracy,
+    // consider upgrading to "gpt-4o" or "gpt-4-turbo" if validation quality issues
+    // persist.
     private static final String GPT_MODEL = "gpt-4o-mini";
-    
+
     private WebClient openAIWebClient;
-    
+
     private final PromptLoader promptLoader;
-    
+
     // Cache prompts to avoid repeated file I/O
-    // Note: Cache is cleared on application restart, so prompt changes require a restart
+    // Note: Cache is cleared on application restart, so prompt changes require a
+    // restart
     private volatile String cachedValidationPrompt = null;
     private volatile String cachedImageDetectionPrompt = null;
-    
+
     public IngredientDetectionService(PromptLoader promptLoader) {
         this.promptLoader = promptLoader;
     }
-    
+
     @PostConstruct
     public void init() {
         // Initialize WebClient for async OpenAI API calls
@@ -62,7 +66,7 @@ public class IngredientDetectionService {
                 .defaultHeader("Authorization", "Bearer " + openAIApiKey)
                 .build();
     }
-    
+
     /**
      * Gets the validation prompt, loading from cache if available.
      * Cache is cleared on application restart.
@@ -78,7 +82,7 @@ public class IngredientDetectionService {
         }
         return cachedValidationPrompt;
     }
-    
+
     /**
      * Gets the image detection prompt, loading from cache if available.
      * Cache is cleared on application restart.
@@ -95,17 +99,18 @@ public class IngredientDetectionService {
         return cachedImageDetectionPrompt;
     }
 
-
     /**
-     * Sanitizes a validated ingredient from AI response (basic null checks and trimming).
-     * Validation is already done by the AI prompt, so this only handles basic sanitization.
+     * Sanitizes a validated ingredient from AI response (basic null checks and
+     * trimming).
+     * Validation is already done by the AI prompt, so this only handles basic
+     * sanitization.
      */
     private DetectedIngredientDto sanitizeIngredient(JSONObject ingObj) {
         if (ingObj == null) {
             logger.warn("Ingredient object is null");
             return null;
         }
-        
+
         String name = ingObj.optString("name", "").trim();
         String quantity = ingObj.optString("quantity", "").trim();
         String unit = ingObj.optString("unit", "").trim();
@@ -116,19 +121,21 @@ public class IngredientDetectionService {
             return null;
         }
 
-        // Rely on AI prompt validation - the prompt is explicit and temperature=0 ensures consistency
-        // Programmatic validation removed to avoid false positives (e.g., "chicken wings")
-        
+        // Rely on AI prompt validation - the prompt is explicit and temperature=0
+        // ensures consistency
+        // Programmatic validation removed to avoid false positives (e.g., "chicken
+        // wings")
+
         // If quantity is missing, set default (though prompt should handle this)
         if (quantity == null || quantity.isEmpty()) {
             quantity = "1";
         }
-        
+
         // Unit can be empty, that's fine
         if (unit == null) {
             unit = "";
         }
-        
+
         DetectedIngredientDto dto = new DetectedIngredientDto();
         dto.setName(name);
         dto.setQuantity(quantity);
@@ -141,7 +148,8 @@ public class IngredientDetectionService {
      * This method validates ingredient names, quantities, and units,
      * and returns only valid ingredients.
      *
-     * @param ingredients The list of ingredients to validate (with name, quantity, and unit)
+     * @param ingredients The list of ingredients to validate (with name, quantity,
+     *                    and unit)
      * @return List of validated ingredients with name, quantity, and unit
      * @throws AIServiceException if the validation fails
      */
@@ -160,9 +168,10 @@ public class IngredientDetectionService {
             }
 
             // Use async OpenAI call but block to get results immediately
-            // This is still faster than blocking OkHttpClient because WebClient is more efficient
+            // This is still faster than blocking OkHttpClient because WebClient is more
+            // efficient
             List<DetectedIngredientDto> validatedIngredients = validateIngredientsFromTextAsync(ingredients).join();
-            
+
             logger.info("Successfully validated {} ingredients", validatedIngredients.size());
             return validatedIngredients;
         } catch (AIServiceException e) {
@@ -173,11 +182,12 @@ public class IngredientDetectionService {
             throw new AIServiceException("Failed to validate ingredients: " + e.getMessage());
         }
     }
-    
+
     /**
      * Async version of validateAndParseIngredientsFromText using WebClient
      */
-    private CompletableFuture<List<DetectedIngredientDto>> validateIngredientsFromTextAsync(List<DetectedIngredientDto> ingredients) {
+    private CompletableFuture<List<DetectedIngredientDto>> validateIngredientsFromTextAsync(
+            List<DetectedIngredientDto> ingredients) {
         if (openAIApiBaseUrl == null || !openAIApiBaseUrl.startsWith("https://")
                 || openAIApiKey == null || openAIApiKey.isEmpty()) {
             logger.error("OPENAI_API_BASE_URL or OPENAI_API_KEY is not set properly");
@@ -201,7 +211,7 @@ public class IngredientDetectionService {
         // Get cached validation prompt and combine with ingredients
         String prompt = getValidationPrompt();
         String fullPrompt = prompt + "\n\nPlease validate these ingredients: " + ingredientsJsonString;
-        
+
         logger.debug("Sending validation request with {} ingredients", ingredients.size());
 
         // Construct the OpenAI Request Body (text-only, no image)
@@ -223,12 +233,15 @@ public class IngredientDetectionService {
                         response -> {
                             return response.bodyToMono(String.class)
                                     .flatMap(errorBody -> {
-                                        logger.error("OpenAI API call failed: HTTP {} - Response: {}", response.statusCode(), errorBody);
+                                        logger.error("OpenAI API call failed: HTTP {} - Response: {}",
+                                                response.statusCode(), errorBody);
                                         String errorMessage = "OpenAI API call failed: HTTP " + response.statusCode();
                                         try {
                                             JSONObject errorJson = new JSONObject(errorBody);
-                                            if (errorJson.has("error") && errorJson.getJSONObject("error").has("message")) {
-                                                errorMessage += " - " + errorJson.getJSONObject("error").getString("message");
+                                            if (errorJson.has("error")
+                                                    && errorJson.getJSONObject("error").has("message")) {
+                                                errorMessage += " - "
+                                                        + errorJson.getJSONObject("error").getString("message");
                                             }
                                         } catch (Exception e) {
                                             // If parsing fails, use the raw error body
@@ -266,7 +279,7 @@ public class IngredientDetectionService {
                             try {
                                 JSONObject ingObj = ingredientsArray.getJSONObject(i);
                                 DetectedIngredientDto ingredient = sanitizeIngredient(ingObj);
-                                
+
                                 if (ingredient != null) {
                                     validatedIngredients.add(ingredient);
                                 } else {
@@ -329,9 +342,10 @@ public class IngredientDetectionService {
             }
 
             // Use async OpenAI call but block to get results immediately
-            // This is still faster than blocking OkHttpClient because WebClient is more efficient
+            // This is still faster than blocking OkHttpClient because WebClient is more
+            // efficient
             List<DetectedIngredientDto> ingredients = detectRawIngredientsAsync(imageFile).join();
-            
+
             logger.info("Successfully detected {} ingredients from image", ingredients.size());
             return ingredients;
         } catch (AIServiceException e) {
@@ -342,7 +356,7 @@ public class IngredientDetectionService {
             throw new AIServiceException("Failed to detect ingredients: " + e.getMessage());
         }
     }
-    
+
     /**
      * Async version of detectRawIngredients using WebClient
      */
@@ -356,6 +370,17 @@ public class IngredientDetectionService {
         try {
             // Prepare Base64 Image Data
             byte[] imageBytes = imageFile.getBytes();
+
+            // Resize image if too large (max 1024x1024) to reduce latency
+            // This is a critical optimization for Vision API speed
+            try {
+                imageBytes = resizeImageIfNeeded(imageBytes, 1024);
+                logger.debug("Image resized/optimized. Size: {} bytes", imageBytes.length);
+            } catch (Exception e) {
+                logger.warn("Failed to resize image, using original: {}", e.getMessage());
+                // Fallback to original bytes
+            }
+
             String base64Image = Base64.getEncoder().encodeToString(imageBytes);
             String mimeType = Optional.ofNullable(imageFile.getContentType())
                     .orElse(MimeTypeUtils.IMAGE_JPEG_VALUE);
@@ -390,12 +415,16 @@ public class IngredientDetectionService {
                             response -> {
                                 return response.bodyToMono(String.class)
                                         .flatMap(errorBody -> {
-                                            logger.error("OpenAI API call failed: HTTP {} - Response: {}", response.statusCode(), errorBody);
-                                            String errorMessage = "OpenAI API call failed: HTTP " + response.statusCode();
+                                            logger.error("OpenAI API call failed: HTTP {} - Response: {}",
+                                                    response.statusCode(), errorBody);
+                                            String errorMessage = "OpenAI API call failed: HTTP "
+                                                    + response.statusCode();
                                             try {
                                                 JSONObject errorJson = new JSONObject(errorBody);
-                                                if (errorJson.has("error") && errorJson.getJSONObject("error").has("message")) {
-                                                    errorMessage += " - " + errorJson.getJSONObject("error").getString("message");
+                                                if (errorJson.has("error")
+                                                        && errorJson.getJSONObject("error").has("message")) {
+                                                    errorMessage += " - "
+                                                            + errorJson.getJSONObject("error").getString("message");
                                                 }
                                             } catch (Exception e) {
                                                 // If parsing fails, use the raw error body
@@ -433,7 +462,7 @@ public class IngredientDetectionService {
                                 try {
                                     JSONObject ingObj = ingredientsArray.getJSONObject(i);
                                     DetectedIngredientDto ingredient = sanitizeIngredient(ingObj);
-                                    
+
                                     if (ingredient != null) {
                                         ingredients.add(ingredient);
                                     } else {
@@ -466,14 +495,65 @@ public class IngredientDetectionService {
                             exception = (AIServiceException) throwable;
                         } else {
                             String errorMsg = throwable != null ? throwable.getMessage() : "Unknown error";
-                            exception = new AIServiceException("Error detecting ingredients from OpenAI API: " + errorMsg);
+                            exception = new AIServiceException(
+                                    "Error detecting ingredients from OpenAI API: " + errorMsg);
                         }
                         return Mono.error(exception);
                     })
                     .toFuture();
         } catch (IOException e) {
             logger.error("Error reading image file: {}", e.getMessage(), e);
-            return CompletableFuture.failedFuture(new AIServiceException("Error reading image file: " + e.getMessage()));
+            return CompletableFuture
+                    .failedFuture(new AIServiceException("Error reading image file: " + e.getMessage()));
         }
+    }
+
+    /**
+     * Resizes an image byte array if it exceeds the specified maximum dimension.
+     * Maintains aspect ratio.
+     */
+    private byte[] resizeImageIfNeeded(byte[] originalImageBytes, int maxDimension) throws IOException {
+        java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(originalImageBytes);
+        java.awt.image.BufferedImage originalImage = javax.imageio.ImageIO.read(bais);
+
+        if (originalImage == null) {
+            return originalImageBytes; // Not an image or unsupported format
+        }
+
+        int originalWidth = originalImage.getWidth();
+        int originalHeight = originalImage.getHeight();
+
+        // If image is already smaller than max dimension, return original
+        if (originalWidth <= maxDimension && originalHeight <= maxDimension) {
+            return originalImageBytes;
+        }
+
+        // Calculate new dimensions maintaining aspect ratio
+        int newWidth;
+        int newHeight;
+
+        if (originalWidth > originalHeight) {
+            newWidth = maxDimension;
+            newHeight = (int) (originalHeight * ((double) maxDimension / originalWidth));
+        } else {
+            newHeight = maxDimension;
+            newWidth = (int) (originalWidth * ((double) maxDimension / originalHeight));
+        }
+
+        // Create resized image
+        java.awt.image.BufferedImage resizedImage = new java.awt.image.BufferedImage(
+                newWidth, newHeight, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = resizedImage.createGraphics();
+
+        // Use high quality rendering hints
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(originalImage, 0, 0, newWidth, newHeight, null);
+        g.dispose();
+
+        // Write to byte array
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(resizedImage, "jpg", baos); // Convert to JPG for consistency/compression
+        return baos.toByteArray();
     }
 }

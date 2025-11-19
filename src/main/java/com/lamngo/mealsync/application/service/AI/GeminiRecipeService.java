@@ -23,9 +23,12 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -46,14 +49,14 @@ public class GeminiRecipeService implements IRecipeGenerationService {
     private String geminiApiBaseUrl;
 
     private static final String GEMINI_MODEL = "gemini-2.5-flash";
-    
+
     private WebClient geminiWebClient;
-    
+
     private final RecipeMapper recipeMapper;
     private final IRecipeRepo recipeRepo;
     private final PromptLoader promptLoader;
     private final TransactionTemplate transactionTemplate;
-    
+
     // Cache for recipe generation prompt to avoid file I/O
     private volatile String cachedRecipePrompt = null;
 
@@ -70,17 +73,18 @@ public class GeminiRecipeService implements IRecipeGenerationService {
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
     }
-    
+
     @PostConstruct
     public void init() {
-        // Initialize WebClient for async Gemini API calls with optimized connection settings
+        // Initialize WebClient for async Gemini API calls with optimized connection
+        // settings
         this.geminiWebClient = WebClient.builder()
                 .baseUrl(geminiApiBaseUrl)
                 .defaultHeader("Content-Type", "application/json")
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024)) // 10MB buffer
                 .build();
     }
-    
+
     /**
      * Gets the cached recipe generation prompt, loading from cache if available.
      */
@@ -98,8 +102,111 @@ public class GeminiRecipeService implements IRecipeGenerationService {
 
     @Override
     public CompletableFuture<List<RecipeReadDto>> generateRecipesAsync(
-            List<DetectedIngredientDto> ingredients, 
+            List<DetectedIngredientDto> ingredients,
             UserPreference userPreference) {
+        // Parallelize generation with 3 distinct styles to ensure diversity and speed
+        // Each request generates 1 recipe, running concurrently
+
+        CompletableFuture<List<RecipeReadDto>> future1 = generateSingleRecipeInternal(
+                ingredients, userPreference,
+                "Style: The 'Speed' Option. Focus strictly on speed (under 20 mins). Use shortcuts, one-pot methods, or minimal prep. The goal is getting food on the table fast.")
+                .exceptionally(ex -> {
+                    logger.error("Failed to get recipe variation 1", ex);
+                    return null;
+                });
+
+        CompletableFuture<List<RecipeReadDto>> future2 = generateSingleRecipeInternal(
+                ingredients, userPreference,
+                "Style: The 'Chef's Special'. Focus on culinary technique, presentation, and unique flavor pairings. Ignore time constraints. Make it impressive.")
+                .exceptionally(ex -> {
+                    logger.error("Failed to get recipe variation 2", ex);
+                    return null;
+                });
+
+        CompletableFuture<List<RecipeReadDto>> future3 = generateSingleRecipeInternal(
+                ingredients, userPreference,
+                "Style: The 'Nourish' Option. Focus on maximizing micronutrients and whole foods. Use gentle cooking methods (steaming, poaching, raw) or nutrient-dense combinations.")
+                .exceptionally(ex -> {
+                    logger.error("Failed to get recipe variation 3", ex);
+                    return null;
+                });
+
+        return CompletableFuture.allOf(future1, future2, future3)
+                .thenApply(v -> {
+                    List<RecipeReadDto> allRecipes = new ArrayList<>();
+                    try {
+                        List<RecipeReadDto> r1 = future1.join();
+                        if (r1 != null) {
+                            logger.info("Variation 1 (Quick) returned {} recipes", r1.size());
+                            allRecipes.addAll(r1);
+                        }
+                    } catch (Exception e) {
+                        logger.error("Failed to get recipe variation 1", e);
+                    }
+
+                    try {
+                        List<RecipeReadDto> r2 = future2.join();
+                        if (r2 != null) {
+                            logger.info("Variation 2 (Creative) returned {} recipes", r2.size());
+                            allRecipes.addAll(r2);
+                        }
+                    } catch (Exception e) {
+                        logger.error("Failed to get recipe variation 2", e);
+                    }
+
+                    try {
+                        List<RecipeReadDto> r3 = future3.join();
+                        if (r3 != null) {
+                            logger.info("Variation 3 (Healthy) returned {} recipes", r3.size());
+                            allRecipes.addAll(r3);
+                        }
+                    } catch (Exception e) {
+                        logger.error("Failed to get recipe variation 3", e);
+                    }
+
+                    logger.info("Total recipes before deduplication: {}", allRecipes.size());
+
+                    // Deduplicate by name, but if duplicate exists, append style to make it unique
+                    Map<String, RecipeReadDto> uniqueRecipes = new LinkedHashMap<>(); // Use LinkedHashMap to preserve
+                                                                                      // order
+
+                    // Process Quick recipes
+                    if (future1.join() != null) {
+                        for (RecipeReadDto r : future1.join()) {
+                            if (uniqueRecipes.containsKey(r.getName())) {
+                                r.setName(r.getName() + " (Quick & Easy)");
+                            }
+                            uniqueRecipes.put(r.getName(), r);
+                        }
+                    }
+
+                    if (future2.join() != null) {
+                        for (RecipeReadDto r : future2.join()) {
+                            if (uniqueRecipes.containsKey(r.getName())) {
+                                r.setName(r.getName() + " (Creative Twist)");
+                            }
+                            uniqueRecipes.put(r.getName(), r);
+                        }
+                    }
+
+                    if (future3.join() != null) {
+                        for (RecipeReadDto r : future3.join()) {
+                            if (uniqueRecipes.containsKey(r.getName())) {
+                                r.setName(r.getName() + " (Healthy Option)");
+                            }
+                            uniqueRecipes.put(r.getName(), r);
+                        }
+                    }
+
+                    logger.info("Total recipes after smart deduplication: {}", uniqueRecipes.size());
+                    return new ArrayList<>(uniqueRecipes.values());
+                });
+    }
+
+    private CompletableFuture<List<RecipeReadDto>> generateSingleRecipeInternal(
+            List<DetectedIngredientDto> ingredients,
+            UserPreference userPreference,
+            String styleInstruction) {
         if (ingredients == null || ingredients.isEmpty()) {
             logger.warn("Ingredients list is empty or null");
             return CompletableFuture.failedFuture(new AIServiceException("Ingredients list is empty or null"));
@@ -113,7 +220,7 @@ public class GeminiRecipeService implements IRecipeGenerationService {
             logger.error("GEMINI_API_BASE_URL or GEMINI_API_KEY is not set properly. Check your env.properties file.");
             return CompletableFuture.failedFuture(new AIServiceException("Gemini API configuration error."));
         }
-        
+
         // Build ingredients string with quantities and units
         StringBuilder ingredientsStringBuilder = new StringBuilder();
         for (DetectedIngredientDto ing : ingredients) {
@@ -135,13 +242,16 @@ public class GeminiRecipeService implements IRecipeGenerationService {
         String promptTemplate = getRecipePrompt();
         String prompt = promptLoader.formatPrompt(promptTemplate, Map.of(
                 "INGREDIENTS", ingredientsString,
-                "DIETARY_RESTRICTIONS", userPreference.getDietaryRestrictions() != null 
-                        ? String.join(", ", userPreference.getDietaryRestrictions()) : "",
-                "FAVORITE_CUISINES", userPreference.getFavoriteCuisines() != null 
-                        ? String.join(", ", userPreference.getFavoriteCuisines()) : "",
-                "DISLIKED_INGREDIENTS", userPreference.getDislikedIngredients() != null 
-                        ? String.join(", ", userPreference.getDislikedIngredients()) : ""
-        ));
+                "DIETARY_RESTRICTIONS", userPreference.getDietaryRestrictions() != null
+                        ? String.join(", ", userPreference.getDietaryRestrictions())
+                        : "",
+                "FAVORITE_CUISINES", userPreference.getFavoriteCuisines() != null
+                        ? String.join(", ", userPreference.getFavoriteCuisines())
+                        : "",
+                "DISLIKED_INGREDIENTS", userPreference.getDislikedIngredients() != null
+                        ? String.join(", ", userPreference.getDislikedIngredients())
+                        : "",
+                "STYLE", styleInstruction));
 
         // Construct the Gemini Request Body
         JSONObject requestBody = new JSONObject();
@@ -154,46 +264,57 @@ public class GeminiRecipeService implements IRecipeGenerationService {
         content.put("parts", parts);
         contentsArray.put(content);
         requestBody.put("contents", contentsArray);
-        
+
         // Generation config for faster, more deterministic responses
         JSONObject generationConfig = new JSONObject();
-        generationConfig.put("temperature", 0.3); // Lower temperature = faster, more deterministic responses
-        generationConfig.put("maxOutputTokens", 2000); // Limit response size to reduce generation time
+        generationConfig.put("temperature", 0.4); // Slightly higher for creativity with styles
         generationConfig.put("responseMimeType", "application/json"); // Request JSON response
         requestBody.put("generationConfig", generationConfig);
 
         String endpoint = String.format("/v1beta/models/%s:generateContent?key=%s", GEMINI_MODEL, geminiApiKey);
 
-        logger.info("Sending async request to Gemini API using {} (temperature=0.3, maxOutputTokens=2000)", GEMINI_MODEL);
+        String payload = requestBody.toString();
+        long requestStartNs = System.nanoTime();
 
         // Use WebClient for async call
         return geminiWebClient.post()
                 .uri(endpoint)
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(requestBody.toString())
-                .retrieve()
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                        response -> {
-                            return response.bodyToMono(String.class)
-                                    .flatMap(errorBody -> {
-                                        logger.error("Gemini API call failed: HTTP {} - Response: {}", response.statusCode(), errorBody);
-                                        String errorMessage = "Gemini API call failed: HTTP " + response.statusCode();
-                                        try {
-                                            JSONObject errorJson = new JSONObject(errorBody);
-                                            if (errorJson.has("error") && errorJson.getJSONObject("error").has("message")) {
-                                                errorMessage += " - " + errorJson.getJSONObject("error").getString("message");
-                                            }
-                                        } catch (Exception e) {
-                                            // If parsing fails, use the raw error body
-                                            if (errorBody != null && !errorBody.isEmpty()) {
-                                                errorMessage += " - " + errorBody;
-                                            }
-                                        }
-                                        return Mono.error(new AIServiceException(errorMessage));
-                                    });
-                        })
-                .bodyToMono(String.class)
+                .bodyValue(payload)
+                .exchangeToMono(response -> {
+                    long headersNs = System.nanoTime();
+                    long ttfbMs = Duration.ofNanos(headersNs - requestStartNs).toMillis();
+                    logger.debug("Gemini responded with status {} after {} ms", response.statusCode(), ttfbMs);
+
+                    Mono<String> bodyMono = response.bodyToMono(String.class);
+
+                    if (response.statusCode().is4xxClientError() || response.statusCode().is5xxServerError()) {
+                        return bodyMono.flatMap(errorBody -> {
+                            int statusCode = response.statusCode().value();
+                            String errorMessage = "Gemini API call failed: HTTP " + response.statusCode();
+                            try {
+                                JSONObject errorJson = new JSONObject(errorBody);
+                                if (errorJson.has("error") && errorJson.getJSONObject("error").has("message")) {
+                                    errorMessage += " - " + errorJson.getJSONObject("error").getString("message");
+                                }
+                            } catch (Exception e) {
+                                if (errorBody != null && !errorBody.isEmpty()) {
+                                    errorMessage += " - " + errorBody;
+                                }
+                            }
+                            logger.error("{} (payload {} chars)", errorMessage,
+                                    errorBody != null ? errorBody.length() : 0);
+                            return Mono.error(new GeminiApiException(statusCode, errorMessage));
+                        });
+                    }
+                    return bodyMono;
+                })
+                .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                        .maxBackoff(Duration.ofSeconds(8))
+                        .filter(this::isRetryableGeminiError)
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
                 .map(responseBody -> {
+                    long parseStartNs = System.nanoTime();
                     try {
                         JSONObject json = new JSONObject(responseBody);
                         if (!json.has("candidates") || json.getJSONArray("candidates").isEmpty()) {
@@ -202,71 +323,76 @@ public class GeminiRecipeService implements IRecipeGenerationService {
                         }
 
                         JSONObject candidate = json.getJSONArray("candidates").getJSONObject(0);
-                        if (!candidate.has("content") || !candidate.getJSONObject("content").has("parts")) {
+
+                        JSONArray responseParts = resolveResponseParts(candidate);
+                        if (responseParts == null || responseParts.isEmpty()) {
                             logger.error("Invalid response structure from Gemini API");
                             throw new AIServiceException("Invalid response structure from Gemini API");
                         }
 
-                        JSONObject responseContent = candidate.getJSONObject("content");
-                        JSONArray responseParts = responseContent.getJSONArray("parts");
-                        if (responseParts.isEmpty() || !responseParts.getJSONObject(0).has("text")) {
-                            logger.error("No text content in Gemini API response");
-                            throw new AIServiceException("No text content in Gemini API response");
+                        String recipesJson = extractRecipesJson(responseParts);
+                        if (recipesJson == null || recipesJson.isBlank()) {
+                            logger.error("Unable to extract recipes JSON from Gemini API response");
+                            throw new AIServiceException("No recipe content found in Gemini API response");
                         }
 
-                        String recipesJson = responseParts.getJSONObject(0).getString("text").trim();
-
-                        logger.debug("Raw Gemini response content: {}", recipesJson);
-
-                        // Remove markdown code blocks if present (Gemini sometimes wraps JSON in ```json ... ```)
-                        if (recipesJson.startsWith("```")) {
-                            int startIdx = recipesJson.indexOf("{");
-                            int endIdx = recipesJson.lastIndexOf("}");
-                            if (startIdx > 0 && endIdx > startIdx) {
-                                recipesJson = recipesJson.substring(startIdx, endIdx + 1);
-                            }
-                        }
-
+                        // Remove markdown code blocks if present
                         JSONObject contentObject = new JSONObject(recipesJson);
                         if (!contentObject.has("recipes")) {
-                            logger.error("Response does not contain 'recipes' array. Response: {}", recipesJson);
+                            logger.error("Response does not contain 'recipes' array");
                             throw new AIServiceException("Invalid response format: missing 'recipes' array");
                         }
                         JSONArray recipesArray = contentObject.getJSONArray("recipes");
 
                         // Use TransactionTemplate to ensure database operations run in a transaction
-                        // This is necessary because @Transactional doesn't work in reactive chains
-                        return transactionTemplate.execute(status -> parseAndSaveRecipes(recipesArray));
+                        long persistStartNs = System.nanoTime();
+                        List<RecipeReadDto> dtos = transactionTemplate
+                                .execute(status -> parseAndSaveRecipes(recipesArray));
+                        long persistDurationMs = Duration.ofNanos(System.nanoTime() - persistStartNs).toMillis();
+                        long parseDurationMs = Duration.ofNanos(System.nanoTime() - parseStartNs).toMillis();
+                        logger.info("Gemini single recipe parsed in {} ms, DB persist {} ms", parseDurationMs,
+                                persistDurationMs);
+                        return dtos;
                     } catch (JSONException e) {
                         logger.error("Failed to parse Gemini API response: {}", e.getMessage(), e);
                         throw new AIServiceException("Failed to parse Gemini API response: " + e.getMessage());
                     }
                 })
                 .doOnError(error -> {
-                    logger.error("Error fetching recipes from Gemini API", error);
+                    logger.error("Error fetching recipe from Gemini API", error);
                 })
                 .onErrorResume(throwable -> {
+                    if (throwable instanceof GeminiOverloadedException) {
+                        return Mono.error(throwable);
+                    }
+                    if (throwable instanceof GeminiApiException geminiException) {
+                        if (isRetryableGeminiError(geminiException)) {
+                            return Mono.error(new GeminiOverloadedException(geminiException.getMessage()));
+                        }
+                        return Mono.error(new AIServiceException(geminiException.getMessage()));
+                    }
                     AIServiceException exception;
                     if (throwable instanceof AIServiceException) {
                         exception = (AIServiceException) throwable;
                     } else {
                         String errorMsg = throwable != null ? throwable.getMessage() : "Unknown error";
-                        exception = new AIServiceException("Error fetching recipes from Gemini API: " + errorMsg);
+                        exception = new AIServiceException("Error fetching recipe from Gemini API: " + errorMsg);
                     }
                     return Mono.error(exception);
                 })
                 .toFuture();
     }
-    
+
     /**
      * Parses and saves recipes from JSON array.
-     * Note: This method should be called within a transaction context (via TransactionTemplate).
+     * Note: This method should be called within a transaction context (via
+     * TransactionTemplate).
      */
     @Transactional
     private List<RecipeReadDto> parseAndSaveRecipes(JSONArray recipesArray) {
         List<Recipe> recipes = new ArrayList<>();
         List<Recipe> newRecipesToSave = new ArrayList<>();
-        
+
         // Pre-compute all ingredient keys to batch lookup
         Map<String, String> recipeNameToIngredientKey = new HashMap<>();
         for (int i = 0; i < recipesArray.length(); i++) {
@@ -279,17 +405,18 @@ public class GeminiRecipeService implements IRecipeGenerationService {
                 }
             }
         }
-        
+
         // Batch lookup all ingredient keys in a single query (much faster)
         List<String> distinctIngredientKeys = recipeNameToIngredientKey.values().stream()
                 .distinct()
                 .toList();
-        Map<String, Optional<Recipe>> ingredientKeyToRecipe = recipeRepo.findByIngredientKeysBatch(distinctIngredientKeys);
+        Map<String, Optional<Recipe>> ingredientKeyToRecipe = recipeRepo
+                .findByIngredientKeysBatch(distinctIngredientKeys);
 
         for (int i = 0; i < recipesArray.length(); i++) {
             JSONObject obj = recipesArray.getJSONObject(i);
             String recipeName = obj.optString("name", null);
-            
+
             if (recipeName == null || recipeName.trim().isEmpty()) {
                 logger.warn("Skipping recipe due to missing name");
                 continue;
@@ -304,22 +431,24 @@ public class GeminiRecipeService implements IRecipeGenerationService {
 
             Optional<Recipe> existingRecipeOpt = ingredientKeyToRecipe.get(ingredientKey);
             Recipe recipe;
-            
+
             if (existingRecipeOpt != null && existingRecipeOpt.isPresent()) {
                 // Found by ingredientKey - reuse it
                 recipe = existingRecipeOpt.get();
                 logger.debug("Recipe with ingredientKey '{}' already exists. Using existing recipe.", ingredientKey);
             } else {
-                // Step 2: Fast PostgreSQL fuzzy search (catches word-order/extra-word variations)
+                // Step 2: Fast PostgreSQL fuzzy search (catches word-order/extra-word
+                // variations)
                 // Only check similarity if ingredientKey doesn't match (rare case)
                 // Uses PostgreSQL pg_trgm extension - much faster than loading all recipes
                 Optional<Recipe> similarRecipe = recipeRepo.findSimilarRecipeByName(recipeName, 0.85);
-                
+
                 if (similarRecipe.isPresent()) {
                     // Found similar recipe - reuse it (AVOIDS DUPLICATE)
                     recipe = similarRecipe.get();
-                    logger.debug("Found similar recipe '{}' for '{}' using PostgreSQL fuzzy matching. Reusing to avoid duplicate.", 
-                               recipe.getName(), recipeName);
+                    logger.debug(
+                            "Found similar recipe '{}' for '{}' using PostgreSQL fuzzy matching. Reusing to avoid duplicate.",
+                            recipe.getName(), recipeName);
                 } else {
                     // Step 3: New recipe - create it
                     recipe = buildRecipeFromJson(obj, recipeName, ingredientKey);
@@ -328,12 +457,12 @@ public class GeminiRecipeService implements IRecipeGenerationService {
             }
             recipes.add(recipe);
         }
-        
+
         // Batch save all new recipes in a single transaction (much faster)
         if (!newRecipesToSave.isEmpty()) {
             logger.info("Batch saving {} new recipes to database", newRecipesToSave.size());
             List<Recipe> savedRecipes = recipeRepo.saveAllRecipes(newRecipesToSave);
-            
+
             // Update the recipes list with saved entities
             int savedIndex = 0;
             for (int i = 0; i < recipes.size(); i++) {
@@ -360,7 +489,148 @@ public class GeminiRecipeService implements IRecipeGenerationService {
 
         return recipeMapper.toRecipeReadDtoList(recipes);
     }
-    
+
+    /**
+     * Extracts the recipe JSON payload from Gemini response parts.
+     * Gemini may return plain text, Markdown, or functionCall args depending on the
+     * responseMimeType.
+     */
+    private String extractRecipesJson(JSONArray responseParts) {
+        for (int i = 0; i < responseParts.length(); i++) {
+            JSONObject part = responseParts.optJSONObject(i);
+            if (part == null) {
+                continue;
+            }
+
+            if (part.has("functionCall")) {
+                JSONObject functionCall = part.optJSONObject("functionCall");
+                if (functionCall != null && functionCall.has("args")) {
+                    JSONObject args = functionCall.optJSONObject("args");
+                    if (args != null) {
+                        return args.toString();
+                    }
+                }
+            }
+
+            if (part.has("inlineData")) {
+                JSONObject inlineData = part.optJSONObject("inlineData");
+                if (inlineData != null) {
+                    String mimeType = inlineData.optString("mimeType", "");
+                    String data = inlineData.optString("data", "");
+                    if (mimeType.contains("json") && data != null && !data.isEmpty()) {
+                        try {
+                            byte[] decoded = java.util.Base64.getDecoder().decode(data);
+                            return new String(decoded);
+                        } catch (IllegalArgumentException e) {
+                            logger.warn("Failed to decode inlineData Base64 content", e);
+                        }
+                    }
+                }
+            }
+
+            if (part.has("text")) {
+                String text = part.optString("text", "");
+                if (text == null || text.isBlank()) {
+                    continue;
+                }
+                String cleaned = stripMarkdownFences(text);
+                String jsonCandidate = extractJsonFromText(cleaned);
+                if (jsonCandidate != null && !jsonCandidate.isBlank()) {
+                    return jsonCandidate;
+                }
+            }
+        }
+        return null;
+    }
+
+    private JSONArray resolveResponseParts(JSONObject candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        Object contentObj = candidate.opt("content");
+        if (contentObj instanceof JSONObject contentJson) {
+            JSONArray parts = contentJson.optJSONArray("parts");
+            if (parts != null && parts.length() > 0) {
+                return parts;
+            }
+        }
+        if (contentObj instanceof JSONArray contentArray) {
+            for (int i = 0; i < contentArray.length(); i++) {
+                JSONObject contentJson = contentArray.optJSONObject(i);
+                if (contentJson == null) {
+                    continue;
+                }
+                JSONArray parts = contentJson.optJSONArray("parts");
+                if (parts != null && parts.length() > 0) {
+                    return parts;
+                }
+            }
+        }
+        // Some responses put parts directly on the candidate object
+        JSONArray directParts = candidate.optJSONArray("parts");
+        if (directParts != null && directParts.length() > 0) {
+            return directParts;
+        }
+        return null;
+    }
+
+    private String stripMarkdownFences(String text) {
+        String trimmed = text.trim();
+        if (trimmed.startsWith("```")) {
+            int firstBrace = trimmed.indexOf('{');
+            int lastBrace = trimmed.lastIndexOf('}');
+            if (firstBrace >= 0 && lastBrace > firstBrace) {
+                return trimmed.substring(firstBrace, lastBrace + 1);
+            }
+            return trimmed.replace("```json", "").replace("```", "").trim();
+        }
+        return trimmed;
+    }
+
+    private String extractJsonFromText(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        String trimmed = text.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            return trimmed;
+        }
+        int firstBrace = trimmed.indexOf('{');
+        int lastBrace = trimmed.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            return trimmed.substring(firstBrace, lastBrace + 1);
+        }
+        return null;
+    }
+
+    private boolean isRetryableGeminiError(Throwable throwable) {
+        if (throwable instanceof GeminiApiException geminiException) {
+            int statusCode = geminiException.getStatusCode();
+            return statusCode == 429 || statusCode == 500 || statusCode == 502
+                    || statusCode == 503 || statusCode == 504;
+        }
+        return false;
+    }
+
+    public static class GeminiOverloadedException extends AIServiceException {
+        public GeminiOverloadedException(String message) {
+            super(message);
+        }
+    }
+
+    private static class GeminiApiException extends AIServiceException {
+        private final int statusCode;
+
+        public GeminiApiException(int statusCode, String message) {
+            super(message);
+            this.statusCode = statusCode;
+        }
+
+        public int getStatusCode() {
+            return statusCode;
+        }
+    }
+
     private Recipe buildRecipeFromJson(JSONObject obj, String recipeName, String ingredientKey) {
         Recipe recipe = new Recipe();
         recipe.setName(recipeName);
@@ -411,13 +681,13 @@ public class GeminiRecipeService implements IRecipeGenerationService {
             }
             recipe.setIngredients(ingredientList);
         }
-        
+
         return recipe;
     }
 
     public String generateIngredientKey(String recipeName) {
-        if (recipeName == null) return null;
+        if (recipeName == null)
+            return null;
         return recipeName.trim().toLowerCase().replaceAll("[^a-z0-9\\s]", "").replaceAll("\\s+", "_");
     }
 }
-

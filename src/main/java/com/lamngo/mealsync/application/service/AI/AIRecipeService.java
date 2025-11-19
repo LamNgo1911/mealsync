@@ -7,8 +7,10 @@ import com.lamngo.mealsync.presentation.error.AIServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -25,6 +27,7 @@ public class AIRecipeService {
     private static final Logger logger = LoggerFactory.getLogger(AIRecipeService.class);
 
     private final IRecipeGenerationService recipeGenerationService;
+    private final IRecipeGenerationService openAIRecipeService; // Injected for fallback scenarios
 
 
     /**
@@ -37,10 +40,14 @@ public class AIRecipeService {
      * - RECIPE_GENERATION_PROVIDER=gemini (uses Gemini gemini-2.5-flash)
      */
     @Autowired
-    public AIRecipeService(IRecipeGenerationService recipeGenerationService) {
+    public AIRecipeService(
+            IRecipeGenerationService recipeGenerationService,
+            @Qualifier("openAIRecipeService") IRecipeGenerationService openAIRecipeService) {
         this.recipeGenerationService = recipeGenerationService;
-        logger.info("AIRecipeService initialized with provider: {}", 
+        this.openAIRecipeService = openAIRecipeService;
+        logger.info("AIRecipeService initialized with primary provider: {}", 
                 recipeGenerationService.getClass().getSimpleName());
+        logger.info("Fallback provider configured: {}", openAIRecipeService.getClass().getSimpleName());
     }
 
     /**
@@ -61,12 +68,16 @@ public class AIRecipeService {
             logger.debug("No user preference provided, using default");
         }
 
+        String primaryProvider = getProviderName(recipeGenerationService);
         logger.info("Generating recipes from {} ingredients using {}", 
-                ingredients.size(), recipeGenerationService.getClass().getSimpleName());
+                ingredients.size(), primaryProvider);
+        long primaryStartNs = System.nanoTime();
         try {
             // Use the configured recipe generation service
             List<RecipeReadDto> recipeDtos = recipeGenerationService.generateRecipesAsync(ingredients, userPreference)
                     .join();
+            long primaryDurationMs = Duration.ofNanos(System.nanoTime() - primaryStartNs).toMillis();
+            logger.info("Provider {} returned {} recipes in {} ms", primaryProvider, recipeDtos.size(), primaryDurationMs);
             
             logger.info("Successfully generated {} recipes", recipeDtos.size());
 
@@ -74,6 +85,15 @@ public class AIRecipeService {
             addImagesToRecipesBatchAsync(recipeDtos);  // Fire and forget
 
             return recipeDtos;
+        } catch (GeminiRecipeService.GeminiOverloadedException e) {
+            long elapsedMs = Duration.ofNanos(System.nanoTime() - primaryStartNs).toMillis();
+            logger.warn("Gemini provider overloaded after {} ms, falling back to OpenAI. Error: {}", elapsedMs, e.getMessage());
+            long fallbackStartNs = System.nanoTime();
+            List<RecipeReadDto> fallbackRecipes = openAIRecipeService.generateRecipesAsync(ingredients, userPreference).join();
+            long fallbackDurationMs = Duration.ofNanos(System.nanoTime() - fallbackStartNs).toMillis();
+            logger.info("Fallback provider {} returned {} recipes in {} ms", 
+                    getProviderName(openAIRecipeService), fallbackRecipes.size(), fallbackDurationMs);
+            return fallbackRecipes;
         } catch (AIServiceException e) {
             logger.error("AI service error: {}", e.getMessage(), e);
             throw e;
@@ -97,7 +117,19 @@ public class AIRecipeService {
             List<DetectedIngredientDto> ingredients, UserPreference userPreference) {
         // Note: Method name still says "OpenAI" for backward compatibility,
         // but it actually uses the configured provider (OpenAI or Gemini)
-        return recipeGenerationService.generateRecipesAsync(ingredients, userPreference);
+        long startNs = System.nanoTime();
+        CompletableFuture<List<RecipeReadDto>> future = recipeGenerationService.generateRecipesAsync(ingredients, userPreference);
+        future.whenComplete((result, throwable) -> {
+            long elapsedMs = Duration.ofNanos(System.nanoTime() - startNs).toMillis();
+            if (throwable == null && result != null) {
+                logger.info("Provider {} completed recipe generation in {} ms ({} recipes)",
+                        getProviderName(recipeGenerationService), elapsedMs, result.size());
+            } else if (throwable != null) {
+                logger.warn("Provider {} failed after {} ms: {}",
+                        getProviderName(recipeGenerationService), elapsedMs, throwable.getMessage());
+            }
+        });
+        return future;
     }
 
     /**
@@ -168,5 +200,9 @@ public class AIRecipeService {
     public CompletableFuture<Void> saveGeneratedRecipesToUserAsync(UUID userId, List<UUID> recipeIds) {
         logger.warn("saveGeneratedRecipesToUserAsync is deprecated. Use RecipeGenerationOrchestrator instead.");
         return CompletableFuture.completedFuture(null);
+    }
+
+    private String getProviderName(IRecipeGenerationService provider) {
+        return provider != null ? provider.getClass().getSimpleName() : "unknown";
     }
 }

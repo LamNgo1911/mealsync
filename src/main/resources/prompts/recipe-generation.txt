@@ -1,13 +1,15 @@
-Generate 3 diverse recipes using these ingredients: {INGREDIENTS}
+Generate 1 recipe using these ingredients: {INGREDIENTS}
 User preferences: dietary={DIETARY_RESTRICTIONS}, cuisines={FAVORITE_CUISINES}, disliked={DISLIKED_INGREDIENTS}
+Style/Focus: {STYLE}
+CRITICAL: The recipe name MUST reflect this style/focus.
+CRITICAL: Ensure the recipe is DISTINCTLY different from a standard version of this dish based on the requested style.
 
 Requirements:
-- Use ALL/MOST detected ingredients with their exact quantities (e.g., 200g beef = 200g, not whole steak)
+- Use ALL/MOST detected ingredients with their exact quantities
 - Add only minimal pantry items (oil, salt, pepper, spices)
-- Create well-known, practical dishes (under 60 min)
-- Ensure diversity: different styles/cuisines
-- Include detected ingredients in each recipe's ingredients list
-- CRITICAL: Use ONLY International (metric) units: grams, kilograms, milliliters, liters, pieces. NEVER use Imperial/US units (cups, tablespoons, pounds, ounces, etc.)
+- Create a well-known, practical dish (under 60 min)
+- Include detected ingredients in the ingredients list
+- CRITICAL: Use ONLY International (metric) units (g, kg, ml, l). NO Imperial units.
 
 Return JSON only:
 {

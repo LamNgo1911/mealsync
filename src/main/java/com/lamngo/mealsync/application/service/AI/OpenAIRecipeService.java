@@ -24,8 +24,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -46,14 +48,15 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
     private String openAIApiKey;
 
     private static final String GPT_MODEL = "gpt-4o-mini";
-    
+    private static final int OPENAI_MAX_COMPLETION_TOKENS = 1500;
+
     private WebClient openAIWebClient;
-    
+
     private final RecipeMapper recipeMapper;
     private final IRecipeRepo recipeRepo;
     private final PromptLoader promptLoader;
     private final TransactionTemplate transactionTemplate;
-    
+
     // Cache for recipe generation prompt to avoid file I/O
     private volatile String cachedRecipePrompt = null;
 
@@ -70,10 +73,11 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
     }
-    
+
     @PostConstruct
     public void init() {
-        // Initialize WebClient for async OpenAI API calls with optimized connection settings
+        // Initialize WebClient for async OpenAI API calls with optimized connection
+        // settings
         this.openAIWebClient = WebClient.builder()
                 .baseUrl(openAIApiBaseUrl)
                 .defaultHeader("Authorization", "Bearer " + openAIApiKey)
@@ -81,7 +85,7 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024)) // 10MB buffer
                 .build();
     }
-    
+
     /**
      * Gets the cached recipe generation prompt, loading from cache if available.
      */
@@ -99,8 +103,110 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
 
     @Override
     public CompletableFuture<List<RecipeReadDto>> generateRecipesAsync(
-            List<DetectedIngredientDto> ingredients, 
+            List<DetectedIngredientDto> ingredients,
             UserPreference userPreference) {
+        // Parallelize generation with 3 distinct styles to ensure diversity and speed
+        // Each request generates 1 recipe, running concurrently
+
+        CompletableFuture<List<RecipeReadDto>> future1 = generateSingleRecipeInternal(
+                ingredients, userPreference,
+                "Style: The 'Speed' Option. Focus strictly on speed (under 20 mins). Use shortcuts, one-pot methods, or minimal prep. The goal is getting food on the table fast.")
+                .exceptionally(ex -> {
+                    logger.error("Failed to get recipe variation 1", ex);
+                    return null;
+                });
+
+        CompletableFuture<List<RecipeReadDto>> future2 = generateSingleRecipeInternal(
+                ingredients, userPreference,
+                "Style: The 'Chef's Special'. Focus on culinary technique, presentation, and unique flavor pairings. Ignore time constraints. Make it impressive.")
+                .exceptionally(ex -> {
+                    logger.error("Failed to get recipe variation 2", ex);
+                    return null;
+                });
+
+        CompletableFuture<List<RecipeReadDto>> future3 = generateSingleRecipeInternal(
+                ingredients, userPreference,
+                "Style: The 'Nourish' Option. Focus on maximizing micronutrients and whole foods. Use gentle cooking methods (steaming, poaching, raw) or nutrient-dense combinations.")
+                .exceptionally(ex -> {
+                    logger.error("Failed to get recipe variation 3", ex);
+                    return null;
+                });
+
+        return CompletableFuture.allOf(future1, future2, future3)
+                .thenApply(v -> {
+                    List<RecipeReadDto> allRecipes = new ArrayList<>();
+                    try {
+                        List<RecipeReadDto> r1 = future1.join();
+                        if (r1 != null) {
+                            logger.info("Variation 1 (Quick) returned {} recipes", r1.size());
+                            allRecipes.addAll(r1);
+                        }
+                    } catch (Exception e) {
+                        logger.error("Failed to get recipe variation 1", e);
+                    }
+
+                    try {
+                        List<RecipeReadDto> r2 = future2.join();
+                        if (r2 != null) {
+                            logger.info("Variation 2 (Creative) returned {} recipes", r2.size());
+                            allRecipes.addAll(r2);
+                        }
+                    } catch (Exception e) {
+                        logger.error("Failed to get recipe variation 2", e);
+                    }
+
+                    try {
+                        List<RecipeReadDto> r3 = future3.join();
+                        if (r3 != null) {
+                            logger.info("Variation 3 (Healthy) returned {} recipes", r3.size());
+                            allRecipes.addAll(r3);
+                        }
+                    } catch (Exception e) {
+                        logger.error("Failed to get recipe variation 3", e);
+                    }
+
+                    logger.info("Total recipes before deduplication: {}", allRecipes.size());
+
+                    // Deduplicate by name, but if duplicate exists, append style to make it unique
+                    Map<String, RecipeReadDto> uniqueRecipes = new LinkedHashMap<>(); // Use LinkedHashMap to preserve
+                                                                                      // order
+
+                    if (future1.join() != null) {
+                        for (RecipeReadDto r : future1.join()) {
+                            if (uniqueRecipes.containsKey(r.getName())) {
+                                r.setName(r.getName() + " (Quick & Easy)");
+                            }
+                            uniqueRecipes.put(r.getName(), r);
+                        }
+                    }
+
+                    if (future2.join() != null) {
+                        for (RecipeReadDto r : future2.join()) {
+                            if (uniqueRecipes.containsKey(r.getName())) {
+                                r.setName(r.getName() + " (Creative Twist)");
+                            }
+                            uniqueRecipes.put(r.getName(), r);
+                        }
+                    }
+
+                    if (future3.join() != null) {
+                        for (RecipeReadDto r : future3.join()) {
+                            if (uniqueRecipes.containsKey(r.getName())) {
+                                r.setName(r.getName() + " (Healthy Option)");
+                            }
+                            uniqueRecipes.put(r.getName(), r);
+                        }
+                    }
+
+                    logger.info("Total recipes after smart deduplication: {}", uniqueRecipes.size());
+                    return new ArrayList<>(uniqueRecipes.values());
+                });
+    }
+
+    private CompletableFuture<List<RecipeReadDto>> generateSingleRecipeInternal(
+            List<DetectedIngredientDto> ingredients,
+            UserPreference userPreference,
+            String styleInstruction) {
         if (ingredients == null || ingredients.isEmpty()) {
             logger.warn("Ingredients list is empty or null");
             return CompletableFuture.failedFuture(new AIServiceException("Ingredients list is empty or null"));
@@ -115,7 +221,7 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
             logger.error("OPENAI_API_BASE_URL or OPENAI_API_KEY is not set properly. Check your env.properties file.");
             return CompletableFuture.failedFuture(new AIServiceException("OpenAI API configuration error."));
         }
-        
+
         // Build ingredients string with quantities and units
         StringBuilder ingredientsStringBuilder = new StringBuilder();
         for (DetectedIngredientDto ing : ingredients) {
@@ -137,54 +243,67 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
         String promptTemplate = getRecipePrompt();
         String prompt = promptLoader.formatPrompt(promptTemplate, Map.of(
                 "INGREDIENTS", ingredientsString,
-                "DIETARY_RESTRICTIONS", userPreference.getDietaryRestrictions() != null 
-                        ? String.join(", ", userPreference.getDietaryRestrictions()) : "",
-                "FAVORITE_CUISINES", userPreference.getFavoriteCuisines() != null 
-                        ? String.join(", ", userPreference.getFavoriteCuisines()) : "",
-                "DISLIKED_INGREDIENTS", userPreference.getDislikedIngredients() != null 
-                        ? String.join(", ", userPreference.getDislikedIngredients()) : ""
-        ));
+                "DIETARY_RESTRICTIONS", userPreference.getDietaryRestrictions() != null
+                        ? String.join(", ", userPreference.getDietaryRestrictions())
+                        : "",
+                "FAVORITE_CUISINES", userPreference.getFavoriteCuisines() != null
+                        ? String.join(", ", userPreference.getFavoriteCuisines())
+                        : "",
+                "DISLIKED_INGREDIENTS", userPreference.getDislikedIngredients() != null
+                        ? String.join(", ", userPreference.getDislikedIngredients())
+                        : "",
+                "STYLE", styleInstruction));
 
         // Construct the OpenAI Request Body with performance optimizations
         JSONObject requestBody = new JSONObject();
         requestBody.put("model", GPT_MODEL);
-        requestBody.put("temperature", 0.3); // Lower temperature = faster, more deterministic responses
-        requestBody.put("max_tokens", 2000); // Limit response size to reduce generation time (~1500 words, enough for 3 recipes)
+        requestBody.put("temperature", 0.4); // Slightly higher for creativity with styles
+        requestBody.put("max_completion_tokens", OPENAI_MAX_COMPLETION_TOKENS);
         requestBody.put("response_format", new JSONObject().put("type", "json_object"));
         requestBody.put("messages", new JSONArray()
                 .put(new JSONObject()
                         .put("role", "user")
                         .put("content", prompt)));
 
-        logger.info("Sending async request to OpenAI API using {} (temperature=0.3, max_tokens=2000)", GPT_MODEL);
+        String payload = requestBody.toString();
+        long requestStartNs = System.nanoTime();
+        logger.debug(
+                "Sending async request to OpenAI API using {} (temperature=0.4, ingredients={}, maxCompletionTokens={}, payload={} chars)",
+                GPT_MODEL, ingredients.size(), OPENAI_MAX_COMPLETION_TOKENS, payload.length());
 
-        // Use WebClient for async call
+        // Use WebClient for async call with detailed timing logs
         return openAIWebClient.post()
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(requestBody.toString())
-                .retrieve()
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                        response -> {
-                            return response.bodyToMono(String.class)
-                                    .flatMap(errorBody -> {
-                                        logger.error("OpenAI API call failed: HTTP {} - Response: {}", response.statusCode(), errorBody);
-                                        String errorMessage = "OpenAI API call failed: HTTP " + response.statusCode();
-                                        try {
-                                            JSONObject errorJson = new JSONObject(errorBody);
-                                            if (errorJson.has("error") && errorJson.getJSONObject("error").has("message")) {
-                                                errorMessage += " - " + errorJson.getJSONObject("error").getString("message");
-                                            }
-                                        } catch (Exception e) {
-                                            // If parsing fails, use the raw error body
-                                            if (errorBody != null && !errorBody.isEmpty()) {
-                                                errorMessage += " - " + errorBody;
-                                            }
-                                        }
-                                        return Mono.error(new AIServiceException(errorMessage));
-                                    });
-                        })
-                .bodyToMono(String.class)
+                .bodyValue(payload)
+                .exchangeToMono(response -> {
+                    long headersNs = System.nanoTime();
+                    long ttfbMs = Duration.ofNanos(headersNs - requestStartNs).toMillis();
+                    logger.debug("OpenAI responded with status {} after {} ms", response.statusCode(), ttfbMs);
+
+                    Mono<String> bodyMono = response.bodyToMono(String.class);
+
+                    if (response.statusCode().is4xxClientError() || response.statusCode().is5xxServerError()) {
+                        return bodyMono.flatMap(errorBody -> {
+                            String errorMessage = "OpenAI API call failed: HTTP " + response.statusCode();
+                            try {
+                                JSONObject errorJson = new JSONObject(errorBody);
+                                if (errorJson.has("error") && errorJson.getJSONObject("error").has("message")) {
+                                    errorMessage += " - " + errorJson.getJSONObject("error").getString("message");
+                                }
+                            } catch (Exception e) {
+                                if (errorBody != null && !errorBody.isEmpty()) {
+                                    errorMessage += " - " + errorBody;
+                                }
+                            }
+                            logger.error("{} (payload {} chars)", errorMessage,
+                                    errorBody != null ? errorBody.length() : 0);
+                            return Mono.error(new AIServiceException(errorMessage));
+                        });
+                    }
+                    return bodyMono;
+                })
                 .map(responseBody -> {
+                    long parseStartNs = System.nanoTime();
                     try {
                         JSONObject json = new JSONObject(responseBody);
                         if (!json.has("choices") || json.getJSONArray("choices").isEmpty()) {
@@ -206,15 +325,21 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
                         JSONArray recipesArray = contentObject.getJSONArray("recipes");
 
                         // Use TransactionTemplate to ensure database operations run in a transaction
-                        // This is necessary because @Transactional doesn't work in reactive chains
-                        return transactionTemplate.execute(status -> parseAndSaveRecipes(recipesArray));
+                        long persistStartNs = System.nanoTime();
+                        List<RecipeReadDto> dtos = transactionTemplate
+                                .execute(status -> parseAndSaveRecipes(recipesArray));
+                        long persistDurationMs = Duration.ofNanos(System.nanoTime() - persistStartNs).toMillis();
+                        long parseDurationMs = Duration.ofNanos(System.nanoTime() - parseStartNs).toMillis();
+                        logger.info("OpenAI single recipe parsed in {} ms, DB persist {} ms", parseDurationMs,
+                                persistDurationMs);
+                        return dtos;
                     } catch (JSONException e) {
                         logger.error("Failed to parse OpenAI API response: {}", e.getMessage(), e);
                         throw new AIServiceException("Failed to parse OpenAI API response: " + e.getMessage());
                     }
                 })
                 .doOnError(error -> {
-                    logger.error("Error fetching recipes from OpenAI API", error);
+                    logger.error("Error fetching recipe from OpenAI API", error);
                 })
                 .onErrorResume(throwable -> {
                     AIServiceException exception;
@@ -222,22 +347,23 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
                         exception = (AIServiceException) throwable;
                     } else {
                         String errorMsg = throwable != null ? throwable.getMessage() : "Unknown error";
-                        exception = new AIServiceException("Error fetching recipes from OpenAI API: " + errorMsg);
+                        exception = new AIServiceException("Error fetching recipe from OpenAI API: " + errorMsg);
                     }
                     return Mono.error(exception);
                 })
                 .toFuture();
     }
-    
+
     /**
      * Parses and saves recipes from JSON array.
-     * Note: This method should be called within a transaction context (via TransactionTemplate).
+     * Note: This method should be called within a transaction context (via
+     * TransactionTemplate).
      */
     @Transactional
     private List<RecipeReadDto> parseAndSaveRecipes(JSONArray recipesArray) {
         List<Recipe> recipes = new ArrayList<>();
         List<Recipe> newRecipesToSave = new ArrayList<>();
-        
+
         // Pre-compute all ingredient keys to batch lookup
         Map<String, String> recipeNameToIngredientKey = new HashMap<>();
         for (int i = 0; i < recipesArray.length(); i++) {
@@ -250,17 +376,18 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
                 }
             }
         }
-        
+
         // Batch lookup all ingredient keys in a single query (much faster)
         List<String> distinctIngredientKeys = recipeNameToIngredientKey.values().stream()
                 .distinct()
                 .toList();
-        Map<String, Optional<Recipe>> ingredientKeyToRecipe = recipeRepo.findByIngredientKeysBatch(distinctIngredientKeys);
+        Map<String, Optional<Recipe>> ingredientKeyToRecipe = recipeRepo
+                .findByIngredientKeysBatch(distinctIngredientKeys);
 
         for (int i = 0; i < recipesArray.length(); i++) {
             JSONObject obj = recipesArray.getJSONObject(i);
             String recipeName = obj.optString("name", null);
-            
+
             if (recipeName == null || recipeName.trim().isEmpty()) {
                 logger.warn("Skipping recipe due to missing name");
                 continue;
@@ -275,22 +402,24 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
 
             Optional<Recipe> existingRecipeOpt = ingredientKeyToRecipe.get(ingredientKey);
             Recipe recipe;
-            
+
             if (existingRecipeOpt != null && existingRecipeOpt.isPresent()) {
                 // Found by ingredientKey - reuse it
                 recipe = existingRecipeOpt.get();
                 logger.debug("Recipe with ingredientKey '{}' already exists. Using existing recipe.", ingredientKey);
             } else {
-                // Step 2: Fast PostgreSQL fuzzy search (catches word-order/extra-word variations)
+                // Step 2: Fast PostgreSQL fuzzy search (catches word-order/extra-word
+                // variations)
                 // Only check similarity if ingredientKey doesn't match (rare case)
                 // Uses PostgreSQL pg_trgm extension - much faster than loading all recipes
                 Optional<Recipe> similarRecipe = recipeRepo.findSimilarRecipeByName(recipeName, 0.85);
-                
+
                 if (similarRecipe.isPresent()) {
                     // Found similar recipe - reuse it (AVOIDS DUPLICATE)
                     recipe = similarRecipe.get();
-                    logger.debug("Found similar recipe '{}' for '{}' using PostgreSQL fuzzy matching. Reusing to avoid duplicate.", 
-                               recipe.getName(), recipeName);
+                    logger.debug(
+                            "Found similar recipe '{}' for '{}' using PostgreSQL fuzzy matching. Reusing to avoid duplicate.",
+                            recipe.getName(), recipeName);
                 } else {
                     // Step 3: New recipe - create it
                     recipe = buildRecipeFromJson(obj, recipeName, ingredientKey);
@@ -299,12 +428,12 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
             }
             recipes.add(recipe);
         }
-        
+
         // Batch save all new recipes in a single transaction (much faster)
         if (!newRecipesToSave.isEmpty()) {
             logger.info("Batch saving {} new recipes to database", newRecipesToSave.size());
             List<Recipe> savedRecipes = recipeRepo.saveAllRecipes(newRecipesToSave);
-            
+
             // Update the recipes list with saved entities
             int savedIndex = 0;
             for (int i = 0; i < recipes.size(); i++) {
@@ -331,7 +460,7 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
 
         return recipeMapper.toRecipeReadDtoList(recipes);
     }
-    
+
     private Recipe buildRecipeFromJson(JSONObject obj, String recipeName, String ingredientKey) {
         Recipe recipe = new Recipe();
         recipe.setName(recipeName);
@@ -382,13 +511,13 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
             }
             recipe.setIngredients(ingredientList);
         }
-        
+
         return recipe;
     }
 
     public String generateIngredientKey(String recipeName) {
-        if (recipeName == null) return null;
+        if (recipeName == null)
+            return null;
         return recipeName.trim().toLowerCase().replaceAll("[^a-z0-9\\s]", "").replaceAll("\\s+", "_");
     }
 }
-
