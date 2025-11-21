@@ -259,12 +259,12 @@ class AuthControllerIntegrationTest extends BaseIntegrationTest {
         // Create verification token
         EmailVerificationToken token = emailVerificationTokenService.createToken(user);
 
-        // When - verify email
+        // When - verify email (now returns HTML instead of JSON)
         mockMvc.perform(get("/api/v1/users/verify-email")
                         .param("token", token.getToken()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").value("Email verified successfully. You can now log in."));
+                .andExpect(content().contentType(MediaType.TEXT_HTML_VALUE))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Email Verified")));
 
         // Then - verify user email is now verified
         User verifiedUser = userRepo.findByEmail("verify@example.com").orElse(null);

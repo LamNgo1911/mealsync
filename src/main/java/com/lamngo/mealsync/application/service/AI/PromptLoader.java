@@ -43,7 +43,7 @@ public class PromptLoader {
      * Formats a prompt template by replacing placeholders with actual values.
      * Placeholders should be in the format {PLACEHOLDER_NAME}.
      *
-     * @param template The prompt template
+     * @param template  The prompt template
      * @param variables Map of placeholder names to their replacement values
      * @return The formatted prompt
      */
@@ -60,7 +60,7 @@ public class PromptLoader {
     /**
      * Convenience method to load and format a prompt in one call.
      *
-     * @param filename The name of the prompt file
+     * @param filename  The name of the prompt file
      * @param variables Map of placeholder names to their replacement values
      * @return The formatted prompt
      */
@@ -68,5 +68,22 @@ public class PromptLoader {
         String template = loadPrompt(filename);
         return formatPrompt(template, variables);
     }
-}
 
+    /**
+     * Loads the recipe generation prompt template for parallel mode.
+     *
+     * @return The recipe generation prompt template
+     */
+    public String loadRecipeGenerationPrompt() {
+        return loadPrompt("recipe-generation.txt");
+    }
+
+    /**
+     * Loads the recipe generation prompt template for batch mode.
+     *
+     * @return The batch recipe generation prompt template
+     */
+    public String loadRecipeGenerationBatchPrompt() {
+        return loadPrompt("recipe-generation-batch.txt");
+    }
+}

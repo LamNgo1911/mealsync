@@ -226,7 +226,6 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
                 <configuration>
-                    <useSystemClassLoader>false</useSystemClassLoader>
                     <forkCount>1C</forkCount>
                     <reuseForks>false</reuseForks>
                     <argLine>-Xmx1024m -XX:+UseG1GC -Djava.awt.headless=true -Dspring.test.context.cache.maxSize=4</argLine>
@@ -252,7 +251,6 @@
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>3.5.2</version>
                 <configuration>
-                    <useSystemClassLoader>false</useSystemClassLoader>
                     <forkCount>1C</forkCount>
                     <reuseForks>false</reuseForks>
                     <argLine>-Xmx1024m -XX:+UseG1GC -Djava.awt.headless=true -Dspring.test.context.cache.maxSize=4</argLine>

@@ -7,12 +7,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 /**
- * Automatically initializes PostgreSQL extensions and indexes on application startup.
+ * Automatically initializes PostgreSQL extensions and indexes on application
+ * startup.
  * This eliminates the need to manually run SQL scripts.
  * 
  * Runs automatically on startup and gracefully handles cases where:
@@ -23,17 +23,19 @@ import java.util.List;
 @Component
 public class DatabaseInitializationService implements ApplicationRunner {
     private static final Logger logger = LoggerFactory.getLogger(DatabaseInitializationService.class);
-    
+
     @PersistenceContext
     private EntityManager entityManager;
-    
+
     /**
      * Automatically sets up pg_trgm extension and index on application startup.
      * This runs after the application context is fully initialized.
      * Uses ApplicationRunner to ensure it runs after Spring Data JPA is ready.
+     * 
+     * Note: Not transactional because DDL statements are auto-commit and we want
+     * to handle exceptions gracefully without affecting transaction state.
      */
     @Override
-    @Transactional
     public void run(ApplicationArguments args) {
         try {
             // Check if we're using PostgreSQL (skip for H2 in tests)
@@ -41,12 +43,12 @@ public class DatabaseInitializationService implements ApplicationRunner {
                 logger.debug("Not using PostgreSQL, skipping extension setup");
                 return;
             }
-            
+
             logger.info("Initializing PostgreSQL extensions and indexes...");
-            
+
             // Check if pg_trgm extension exists
             boolean extensionExists = checkExtensionExists("pg_trgm");
-            
+
             if (!extensionExists) {
                 logger.info("Creating pg_trgm extension...");
                 try {
@@ -66,18 +68,18 @@ public class DatabaseInitializationService implements ApplicationRunner {
             } else {
                 logger.debug("✓ pg_trgm extension already exists");
             }
-            
+
             // Check if GIN index exists
             boolean indexExists = checkIndexExists("idx_recipes_name_trgm");
-            
+
             if (!indexExists) {
                 logger.info("Creating GIN index for recipe name similarity search...");
                 try {
                     // CREATE INDEX IF NOT EXISTS is idempotent
                     entityManager.createNativeQuery("""
-                        CREATE INDEX IF NOT EXISTS idx_recipes_name_trgm 
-                        ON recipes USING gin(name gin_trgm_ops)
-                        """)
+                            CREATE INDEX IF NOT EXISTS idx_recipes_name_trgm
+                            ON recipes USING gin(name gin_trgm_ops)
+                            """)
                             .executeUpdate();
                     logger.info("✓ GIN index created successfully");
                 } catch (Exception e) {
@@ -86,16 +88,16 @@ public class DatabaseInitializationService implements ApplicationRunner {
             } else {
                 logger.debug("✓ GIN index already exists");
             }
-            
+
             logger.info("✓ Database extensions and indexes initialized successfully");
-            
+
         } catch (Exception e) {
             // Don't fail application startup if extension setup fails
             logger.error("Error initializing database extensions: {}", e.getMessage(), e);
             logger.warn("Application will continue, but recipe similarity checking may be disabled");
         }
     }
-    
+
     /**
      * Checks if the database is PostgreSQL.
      */
@@ -114,7 +116,7 @@ public class DatabaseInitializationService implements ApplicationRunner {
         }
         return false;
     }
-    
+
     /**
      * Checks if a PostgreSQL extension exists.
      */
@@ -131,7 +133,7 @@ public class DatabaseInitializationService implements ApplicationRunner {
             return false;
         }
     }
-    
+
     /**
      * Checks if a PostgreSQL index exists.
      */
@@ -149,4 +151,3 @@ public class DatabaseInitializationService implements ApplicationRunner {
         }
     }
 }
-

@@ -367,6 +367,8 @@ class RecipeServiceTest {
 
         when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED)))
                 .thenReturn(userRecipes);
+        // Mock getRecipesByIds which is called internally
+        when(recipeRepo.getRecipesByIds(anyList())).thenReturn(List.of(recipe1, recipe2));
         when(recipeMapper.toRecipeReadDto(recipe1)).thenReturn(readDto1);
         when(recipeMapper.toRecipeReadDto(recipe2)).thenReturn(readDto2);
 
@@ -374,8 +376,8 @@ class RecipeServiceTest {
 
         // Should only return GENERATED type recipes, sorted by most recent first
         assertEquals(2, result.getData().size());
-        assertEquals(readDto1, result.getData().get(0)); // Most recent
-        assertEquals(readDto2, result.getData().get(1));
+        assertEquals(readDto1.getId(), result.getData().get(0).getId()); // Most recent
+        assertEquals(readDto2.getId(), result.getData().get(1).getId());
         assertEquals(0, result.getOffset());
         assertEquals(5, result.getLimit());
         assertEquals(2L, result.getTotalElements());
@@ -444,6 +446,9 @@ class RecipeServiceTest {
 
         when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED)))
                 .thenReturn(userRecipes);
+        // Mock getRecipesByIds which is called internally
+        List<Recipe> allRecipes = userRecipes.stream().map(UserRecipe::getRecipe).collect(java.util.stream.Collectors.toList());
+        when(recipeRepo.getRecipesByIds(anyList())).thenReturn(allRecipes);
 
         PaginationResponse<RecipeReadDto> result = recipeService.getRecentGeneratedRecipes(userId, limit, offset);
 
@@ -493,6 +498,8 @@ class RecipeServiceTest {
 
         when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.GENERATED)))
                 .thenReturn(userRecipes);
+        // Mock getRecipesByIds which is called internally
+        when(recipeRepo.getRecipesByIds(anyList())).thenReturn(List.of(recipe1, recipe2));
         when(recipeMapper.toRecipeReadDto(recipe1)).thenReturn(readDto1);
         when(recipeMapper.toRecipeReadDto(recipe2)).thenReturn(readDto2);
 
@@ -600,9 +607,19 @@ class RecipeServiceTest {
         List<UserRecipe> savedRecipes = new ArrayList<>(List.of(userRecipe1, userRecipe2));
         UserRecipeReadDto readDto1 = mock(UserRecipeReadDto.class);
         UserRecipeReadDto readDto2 = mock(UserRecipeReadDto.class);
+        RecipeReadDto recipeReadDto1 = mock(RecipeReadDto.class);
+        RecipeReadDto recipeReadDto2 = mock(RecipeReadDto.class);
+        when(recipeReadDto1.getId()).thenReturn(recipeId1);
+        when(recipeReadDto2.getId()).thenReturn(recipeId2);
+        when(readDto1.getRecipe()).thenReturn(recipeReadDto1);
+        when(readDto2.getRecipe()).thenReturn(recipeReadDto2);
 
         when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED)))
                 .thenReturn(savedRecipes);
+        // Mock getRecipesByIds which is called internally - it returns RecipeReadDto, not Recipe
+        when(recipeRepo.getRecipesByIds(anyList())).thenReturn(List.of(recipe1, recipe2));
+        when(recipeMapper.toRecipeReadDto(recipe1)).thenReturn(recipeReadDto1);
+        when(recipeMapper.toRecipeReadDto(recipe2)).thenReturn(recipeReadDto2);
         when(userRecipeMapper.toUserRecipeReadDto(userRecipe1)).thenReturn(readDto1);
         when(userRecipeMapper.toUserRecipeReadDto(userRecipe2)).thenReturn(readDto2);
 
@@ -635,8 +652,36 @@ class RecipeServiceTest {
 
         when(userRecipeRepo.getUserRecipesByUserIdAndType(eq(userId), eq(UserRecipeType.SAVED)))
                 .thenReturn(savedRecipes);
-        when(userRecipeMapper.toUserRecipeReadDto(any(UserRecipe.class)))
-                .thenReturn(mock(UserRecipeReadDto.class));
+        // Mock getRecipesByIds which is called internally - extract recipes from savedRecipes
+        List<Recipe> allRecipes = savedRecipes.stream()
+                .map(ur -> ur.getRecipe())
+                .filter(r -> r != null)
+                .collect(java.util.stream.Collectors.toList());
+        when(recipeRepo.getRecipesByIds(anyList())).thenReturn(allRecipes);
+        
+        // Create unique RecipeReadDto for each Recipe with matching IDs
+        java.util.Map<Recipe, RecipeReadDto> recipeToDtoMap = new java.util.HashMap<>();
+        for (Recipe recipe : allRecipes) {
+            RecipeReadDto recipeDto = mock(RecipeReadDto.class);
+            UUID recipeId = recipe.getId();
+            when(recipeDto.getId()).thenReturn(recipeId);
+            recipeToDtoMap.put(recipe, recipeDto);
+        }
+        
+        // Mock mapper to return DTOs with recipe IDs that match the Recipe IDs
+        when(userRecipeMapper.toUserRecipeReadDto(any(UserRecipe.class))).thenAnswer(invocation -> {
+            UserRecipe userRecipe = invocation.getArgument(0);
+            UserRecipeReadDto userRecipeDto = mock(UserRecipeReadDto.class);
+            Recipe recipe = userRecipe.getRecipe();
+            RecipeReadDto recipeDto = recipeToDtoMap.get(recipe);
+            when(userRecipeDto.getRecipe()).thenReturn(recipeDto);
+            return userRecipeDto;
+        });
+        // Mock recipe mapper for getRecipesByIds - return the matching RecipeReadDto
+        when(recipeMapper.toRecipeReadDto(any(Recipe.class))).thenAnswer(invocation -> {
+            Recipe recipe = invocation.getArgument(0);
+            return recipeToDtoMap.get(recipe);
+        });
 
         PaginationResponse<UserRecipeReadDto> result = recipeService.getSavedRecipesByUserId(userId, limit, offset);
 

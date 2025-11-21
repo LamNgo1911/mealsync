@@ -27,6 +27,9 @@ class PasswordResetTokenServiceTest {
     @Mock
     private IPasswordResetTokenRepo tokenRepo;
 
+    @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
     @InjectMocks
     private PasswordResetTokenService passwordResetTokenService;
 
@@ -46,7 +49,7 @@ class PasswordResetTokenServiceTest {
     @Test
     void createToken_shouldGenerateToken_whenUserProvided() {
         // Given
-        when(tokenRepo.findByUser(testUser)).thenReturn(Optional.empty());
+        doNothing().when(tokenRepo).deleteByUser(testUser);
         when(tokenRepo.save(any(PasswordResetToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
@@ -60,29 +63,29 @@ class PasswordResetTokenServiceTest {
         assertFalse(token.isUsed());
         assertNotNull(token.getExpiryDate());
         assertTrue(token.getExpiryDate().isAfter(Instant.now()));
+        verify(tokenRepo).deleteByUser(testUser);
         verify(tokenRepo).save(any(PasswordResetToken.class));
     }
 
     @Test
     void createToken_shouldDeleteExistingToken_whenUserHasToken() {
         // Given
-        PasswordResetToken existingToken = new PasswordResetToken();
-        existingToken.setToken("old-token");
-        when(tokenRepo.findByUser(testUser)).thenReturn(Optional.of(existingToken));
+        doNothing().when(tokenRepo).deleteByUser(testUser);
         when(tokenRepo.save(any(PasswordResetToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
         passwordResetTokenService.createToken(testUser);
 
         // Then
-        verify(tokenRepo).delete(existingToken);
+        // The implementation always calls deleteByUser() first, then saves new token
+        verify(tokenRepo).deleteByUser(testUser);
         verify(tokenRepo).save(any(PasswordResetToken.class));
     }
 
     @Test
     void createToken_shouldSetExpiryTo1Hour() {
         // Given
-        when(tokenRepo.findByUser(testUser)).thenReturn(Optional.empty());
+        doNothing().when(tokenRepo).deleteByUser(testUser);
         when(tokenRepo.save(any(PasswordResetToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
         Instant beforeCreation = Instant.now();
 
@@ -183,7 +186,7 @@ class PasswordResetTokenServiceTest {
     @Test
     void generateSecureToken_shouldGenerateUniqueTokens() {
         // Given
-        when(tokenRepo.findByUser(testUser)).thenReturn(Optional.empty());
+        doNothing().when(tokenRepo).deleteByUser(testUser);
         when(tokenRepo.save(any(PasswordResetToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // When

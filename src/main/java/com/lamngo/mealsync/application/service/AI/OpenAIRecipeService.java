@@ -21,8 +21,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -47,6 +50,9 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
     @Value("${OPENAI_API_KEY}")
     private String openAIApiKey;
 
+    @Value("${RECIPE_GENERATION_MODE:parallel}")
+    private String recipeGenerationMode;
+
     private static final String GPT_MODEL = "gpt-4o-mini";
     private static final int OPENAI_MAX_COMPLETION_TOKENS = 1500;
 
@@ -57,8 +63,9 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
     private final PromptLoader promptLoader;
     private final TransactionTemplate transactionTemplate;
 
-    // Cache for recipe generation prompt to avoid file I/O
+    // Cache for recipe generation prompts to avoid file I/O
     private volatile String cachedRecipePrompt = null;
+    private volatile String cachedRecipeBatchPrompt = null;
 
     public OpenAIRecipeService(
             RecipeMapper recipeMapper,
@@ -87,22 +94,53 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
     }
 
     /**
-     * Gets the cached recipe generation prompt, loading from cache if available.
+     * Gets the cached recipe generation prompt for parallel mode.
      */
     private String getRecipePrompt() {
         if (cachedRecipePrompt == null) {
             synchronized (this) {
                 if (cachedRecipePrompt == null) {
-                    cachedRecipePrompt = promptLoader.loadPrompt("recipe-generation.txt");
-                    logger.debug("Loaded and cached recipe generation prompt");
+                    cachedRecipePrompt = promptLoader.loadRecipeGenerationPrompt();
+                    logger.debug("Loaded and cached recipe generation prompt (parallel)");
                 }
             }
         }
         return cachedRecipePrompt;
     }
 
+    /**
+     * Gets the cached recipe generation prompt for batch mode.
+     */
+    private String getRecipeBatchPrompt() {
+        if (cachedRecipeBatchPrompt == null) {
+            synchronized (this) {
+                if (cachedRecipeBatchPrompt == null) {
+                    cachedRecipeBatchPrompt = promptLoader.loadRecipeGenerationBatchPrompt();
+                    logger.debug("Loaded and cached recipe generation prompt (batch)");
+                }
+            }
+        }
+        return cachedRecipeBatchPrompt;
+    }
+
     @Override
     public CompletableFuture<List<RecipeReadDto>> generateRecipesAsync(
+            List<DetectedIngredientDto> ingredients,
+            UserPreference userPreference) {
+        // Route to appropriate implementation based on mode
+        if ("batch".equalsIgnoreCase(recipeGenerationMode)) {
+            logger.info("Using BATCH mode for recipe generation");
+            return generateRecipesBatch(ingredients, userPreference);
+        } else {
+            logger.info("Using PARALLEL mode for recipe generation");
+            return generateRecipesParallel(ingredients, userPreference);
+        }
+    }
+
+    /**
+     * Generates recipes using parallel mode (3 separate API requests).
+     */
+    private CompletableFuture<List<RecipeReadDto>> generateRecipesParallel(
             List<DetectedIngredientDto> ingredients,
             UserPreference userPreference) {
         // Parallelize generation with 3 distinct styles to ensure diversity and speed
@@ -203,6 +241,180 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
                 });
     }
 
+    /**
+     * Generates recipes using batch mode (1 API request for all 3 recipes).
+     */
+    private CompletableFuture<List<RecipeReadDto>> generateRecipesBatch(
+            List<DetectedIngredientDto> ingredients,
+            UserPreference userPreference) {
+        if (ingredients == null || ingredients.isEmpty()) {
+            logger.warn("Ingredients list is empty or null");
+            return CompletableFuture.failedFuture(new AIServiceException("Ingredients list is empty or null"));
+        }
+        if (userPreference == null) {
+            userPreference = new UserPreference();
+            logger.debug("No user preference provided, using default");
+        }
+
+        if (openAIApiBaseUrl == null || !openAIApiBaseUrl.startsWith("https://")
+                || openAIApiKey == null || openAIApiKey.isEmpty()) {
+            logger.error("OPENAI_API_BASE_URL or OPENAI_API_KEY is not set properly. Check your env.properties file.");
+            return CompletableFuture.failedFuture(new AIServiceException("OpenAI API configuration error."));
+        }
+
+        // Build ingredients string with quantities and units
+        StringBuilder ingredientsStringBuilder = new StringBuilder();
+        for (DetectedIngredientDto ing : ingredients) {
+            if (ingredientsStringBuilder.length() > 0) {
+                ingredientsStringBuilder.append(", ");
+            }
+            String ingStr = ing.getName();
+            if (ing.getQuantity() != null && !ing.getQuantity().isEmpty() && !ing.getQuantity().equals("1")) {
+                ingStr = ing.getQuantity() + " " + ingStr;
+            }
+            if (ing.getUnit() != null && !ing.getUnit().isEmpty()) {
+                ingStr = ingStr + " (" + ing.getUnit() + ")";
+            }
+            ingredientsStringBuilder.append(ingStr);
+        }
+        String ingredientsString = ingredientsStringBuilder.toString();
+
+        // Use cached batch prompt template and format it
+        String promptTemplate = getRecipeBatchPrompt();
+        String prompt = promptLoader.formatPrompt(promptTemplate, Map.of(
+                "INGREDIENTS", ingredientsString,
+                "DIETARY_RESTRICTIONS", userPreference.getDietaryRestrictions() != null
+                        ? String.join(", ", userPreference.getDietaryRestrictions())
+                        : "",
+                "FAVORITE_CUISINES", userPreference.getFavoriteCuisines() != null
+                        ? String.join(", ", userPreference.getFavoriteCuisines())
+                        : "",
+                "DISLIKED_INGREDIENTS", userPreference.getDislikedIngredients() != null
+                        ? String.join(", ", userPreference.getDislikedIngredients())
+                        : ""));
+
+        // Construct the OpenAI Request Body
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("model", GPT_MODEL);
+        requestBody.put("temperature", 0.4);
+        requestBody.put("max_completion_tokens", OPENAI_MAX_COMPLETION_TOKENS);
+        requestBody.put("response_format", new JSONObject().put("type", "json_object"));
+        requestBody.put("messages", new JSONArray()
+                .put(new JSONObject()
+                        .put("role", "user")
+                        .put("content", prompt)));
+
+        String payload = requestBody.toString();
+        long requestStartNs = System.nanoTime();
+        logger.debug(
+                "Sending batch request to OpenAI API using {} (temperature=0.4, ingredients={}, maxCompletionTokens={}, payload={} chars)",
+                GPT_MODEL, ingredients.size(), OPENAI_MAX_COMPLETION_TOKENS, payload.length());
+
+        // Use WebClient for async call with detailed timing logs
+        return openAIWebClient.post()
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(payload)
+                .exchangeToMono(response -> {
+                    long headersNs = System.nanoTime();
+                    long ttfbMs = Duration.ofNanos(headersNs - requestStartNs).toMillis();
+                    logger.debug("OpenAI responded with status {} after {} ms", response.statusCode(), ttfbMs);
+
+                    Mono<String> bodyMono = response.bodyToMono(String.class);
+
+                    if (response.statusCode().is4xxClientError() || response.statusCode().is5xxServerError()) {
+                        return bodyMono.flatMap(errorBody -> {
+                            String errorMessage = "OpenAI API call failed: HTTP " + response.statusCode();
+                            try {
+                                JSONObject errorJson = new JSONObject(errorBody);
+                                if (errorJson.has("error") && errorJson.getJSONObject("error").has("message")) {
+                                    errorMessage += " - " + errorJson.getJSONObject("error").getString("message");
+                                }
+                            } catch (Exception e) {
+                                if (errorBody != null && !errorBody.isEmpty()) {
+                                    errorMessage += " - " + errorBody;
+                                }
+                            }
+                            logger.error("{} (payload {} chars)", errorMessage,
+                                    errorBody != null ? errorBody.length() : 0);
+                            
+                            // Throw WebClientResponseException for retryable errors (429, 5xx)
+                            // so retry logic can detect them
+                            if (response.statusCode() == HttpStatus.TOO_MANY_REQUESTS || 
+                                response.statusCode().is5xxServerError()) {
+                                return Mono.error(WebClientResponseException.create(
+                                        response.statusCode().value(),
+                                        errorMessage,
+                                        response.headers().asHttpHeaders(),
+                                        errorBody != null ? errorBody.getBytes() : null,
+                                        null));
+                            }
+                            // For other 4xx errors, throw AIServiceException (not retryable)
+                            return Mono.error(new AIServiceException(errorMessage));
+                        });
+                    }
+                    return bodyMono;
+                })
+                .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                        .maxBackoff(Duration.ofSeconds(8))
+                        .filter(this::isRetryableOpenAIError)
+                        .doBeforeRetry(retrySignal -> {
+                            logger.warn("OpenAI rate limited (429) or server error, retrying in {} ms. Attempt {}/3", 
+                                    retrySignal.totalRetriesInARow() * 1000L, 
+                                    retrySignal.totalRetriesInARow() + 1);
+                        })
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
+                .map(responseBody -> {
+                    long parseStartNs = System.nanoTime();
+                    try {
+                        JSONObject json = new JSONObject(responseBody);
+                        if (!json.has("choices") || json.getJSONArray("choices").isEmpty()) {
+                            logger.error("No choices returned from OpenAI API");
+                            throw new AIServiceException("No choices returned from OpenAI API");
+                        }
+
+                        JSONObject choice = json.getJSONArray("choices").getJSONObject(0);
+                        JSONObject message = choice.getJSONObject("message");
+                        String recipesJson = message.getString("content").trim();
+
+                        logger.debug("Raw OpenAI response content: {}", recipesJson);
+
+                        JSONObject contentObject = new JSONObject(recipesJson);
+                        if (!contentObject.has("recipes")) {
+                            logger.error("Response does not contain 'recipes' array. Response: {}", recipesJson);
+                            throw new AIServiceException("Invalid response format: missing 'recipes' array");
+                        }
+                        JSONArray recipesArray = contentObject.getJSONArray("recipes");
+
+                        // Use TransactionTemplate to ensure database operations run in a transaction
+                        long persistStartNs = System.nanoTime();
+                        List<RecipeReadDto> dtos = transactionTemplate
+                                .execute(status -> parseAndSaveRecipes(recipesArray));
+                        long persistDurationMs = Duration.ofNanos(System.nanoTime() - persistStartNs).toMillis();
+                        long parseDurationMs = Duration.ofNanos(System.nanoTime() - parseStartNs).toMillis();
+                        logger.info("OpenAI batch recipes parsed in {} ms, DB persist {} ms", parseDurationMs,
+                                persistDurationMs);
+                        return dtos;
+                    } catch (JSONException e) {
+                        logger.error("Failed to parse OpenAI API response: {}", e.getMessage(), e);
+                        throw new AIServiceException("Failed to parse OpenAI API response: " + e.getMessage());
+                    }
+                })
+                .doOnError(error -> {
+                    logger.error("Error fetching recipes from OpenAI API", error);
+                })
+                .onErrorResume(throwable -> {
+                    AIServiceException exception;
+                    if (throwable instanceof AIServiceException) {
+                        exception = (AIServiceException) throwable;
+                    } else {
+                        String errorMsg = throwable != null ? throwable.getMessage() : "Unknown error";
+                        exception = new AIServiceException("Error fetching recipes from OpenAI API: " + errorMsg);
+                    }
+                    return Mono.error(exception);
+                })
+                .toFuture();
+    }
+
     private CompletableFuture<List<RecipeReadDto>> generateSingleRecipeInternal(
             List<DetectedIngredientDto> ingredients,
             UserPreference userPreference,
@@ -297,11 +509,33 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
                             }
                             logger.error("{} (payload {} chars)", errorMessage,
                                     errorBody != null ? errorBody.length() : 0);
+                            
+                            // Throw WebClientResponseException for retryable errors (429, 5xx)
+                            // so retry logic can detect them
+                            if (response.statusCode() == HttpStatus.TOO_MANY_REQUESTS || 
+                                response.statusCode().is5xxServerError()) {
+                                return Mono.error(WebClientResponseException.create(
+                                        response.statusCode().value(),
+                                        errorMessage,
+                                        response.headers().asHttpHeaders(),
+                                        errorBody != null ? errorBody.getBytes() : null,
+                                        null));
+                            }
+                            // For other 4xx errors, throw AIServiceException (not retryable)
                             return Mono.error(new AIServiceException(errorMessage));
                         });
                     }
                     return bodyMono;
                 })
+                .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                        .maxBackoff(Duration.ofSeconds(8))
+                        .filter(this::isRetryableOpenAIError)
+                        .doBeforeRetry(retrySignal -> {
+                            logger.warn("OpenAI rate limited (429) or server error, retrying in {} ms. Attempt {}/3", 
+                                    retrySignal.totalRetriesInARow() * 1000L, 
+                                    retrySignal.totalRetriesInARow() + 1);
+                        })
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
                 .map(responseBody -> {
                     long parseStartNs = System.nanoTime();
                     try {
@@ -519,5 +753,21 @@ public class OpenAIRecipeService implements IRecipeGenerationService {
         if (recipeName == null)
             return null;
         return recipeName.trim().toLowerCase().replaceAll("[^a-z0-9\\s]", "").replaceAll("\\s+", "_");
+    }
+
+    /**
+     * Checks if an error is retryable (429 rate limit or 5xx server errors).
+     */
+    private boolean isRetryableOpenAIError(Throwable throwable) {
+        if (throwable instanceof WebClientResponseException e) {
+            int statusCode = e.getStatusCode().value();
+            return statusCode == 429 || (statusCode >= 500 && statusCode < 600);
+        }
+        // Also check for AIServiceException that might wrap a 429 error
+        if (throwable instanceof AIServiceException e) {
+            String message = e.getMessage();
+            return message != null && message.contains("429");
+        }
+        return false;
     }
 }

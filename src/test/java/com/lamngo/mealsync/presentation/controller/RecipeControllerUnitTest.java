@@ -31,6 +31,8 @@ import static org.mockito.Mockito.*;
 class RecipeControllerUnitTest {
     @Mock RecipeService recipeService;
     @Mock AIRecipeService aiRecipeService;
+    @Mock com.lamngo.mealsync.application.service.recipe.RecipeGenerationOrchestrator recipeGenerationOrchestrator;
+    @Mock com.lamngo.mealsync.application.service.recipe.RecipeImageStreamingService recipeImageStreamingService;
     @Mock IngredientDetectionService ingredientDetectionService;
     @InjectMocks RecipeController controller;
 
@@ -63,16 +65,16 @@ class RecipeControllerUnitTest {
         recipe.setId(UUID.randomUUID());
         List<RecipeReadDto> recipes = List.of(recipe);
 
-        when(aiRecipeService.generateRecipes(eq(request.getIngredients()), any(UserPreference.class))).thenReturn(recipes);
-        doNothing().when(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
+        when(recipeGenerationOrchestrator.generateRecipesFromIngredients(eq(request.getIngredients()), any(UserPreference.class))).thenReturn(recipes);
+        doNothing().when(recipeGenerationOrchestrator).saveGeneratedRecipesToUserAsync(eq(userId), anyList());
 
         ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.generateRecipes(request, user);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertEquals(recipes, resp.getBody().getData());
-        verify(aiRecipeService).generateRecipes(eq(request.getIngredients()), any(UserPreference.class));
-        verify(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
-        verify(ingredientDetectionService, never()).detectRawIngredients(any());
+        verify(recipeGenerationOrchestrator).generateRecipesFromIngredients(eq(request.getIngredients()), any(UserPreference.class));
+        verify(recipeGenerationOrchestrator).saveGeneratedRecipesToUserAsync(eq(userId), anyList());
+        verify(ingredientDetectionService, never()).detectRawIngredientsAsync(any());
     }
 
     @Test
@@ -238,7 +240,9 @@ class RecipeControllerUnitTest {
         chicken.setQuantity("200");
         chicken.setUnit("grams");
         List<DetectedIngredientDto> ingredients = List.of(tomato, onion, garlic, chicken);
-        when(ingredientDetectionService.detectRawIngredients(image)).thenReturn(ingredients);
+        java.util.concurrent.CompletableFuture<List<DetectedIngredientDto>> future = 
+            java.util.concurrent.CompletableFuture.completedFuture(ingredients);
+        when(ingredientDetectionService.detectRawIngredientsAsync(image)).thenReturn(future);
 
         ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> resp = controller.detectIngredients(image);
 
@@ -246,7 +250,7 @@ class RecipeControllerUnitTest {
         assertNotNull(resp.getBody());
         assertEquals(ingredients, resp.getBody().getData());
         assertEquals(4, resp.getBody().getData().size());
-        verify(ingredientDetectionService).detectRawIngredients(image);
+        verify(ingredientDetectionService).detectRawIngredientsAsync(image);
     }
 
     @Test
@@ -255,7 +259,7 @@ class RecipeControllerUnitTest {
         when(image.isEmpty()).thenReturn(true);
 
         assertThrows(BadRequestException.class, () -> controller.detectIngredients(image));
-        verify(ingredientDetectionService, never()).detectRawIngredients(any());
+        verify(ingredientDetectionService, never()).detectRawIngredientsAsync(any());
     }
 
     @Test
@@ -269,14 +273,16 @@ class RecipeControllerUnitTest {
         MultipartFile image = mock(MultipartFile.class);
         when(image.isEmpty()).thenReturn(false);
         List<DetectedIngredientDto> emptyIngredients = List.of();
-        when(ingredientDetectionService.detectRawIngredients(image)).thenReturn(emptyIngredients);
+        java.util.concurrent.CompletableFuture<List<DetectedIngredientDto>> future = 
+            java.util.concurrent.CompletableFuture.completedFuture(emptyIngredients);
+        when(ingredientDetectionService.detectRawIngredientsAsync(image)).thenReturn(future);
 
         ResponseEntity<SuccessResponseEntity<List<DetectedIngredientDto>>> resp = controller.detectIngredients(image);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertTrue(resp.getBody().getData().isEmpty());
-        verify(ingredientDetectionService).detectRawIngredients(image);
+        verify(ingredientDetectionService).detectRawIngredientsAsync(image);
     }
 
     @Test
@@ -563,9 +569,9 @@ class RecipeControllerUnitTest {
         recipe2.setId(UUID.randomUUID());
 
         List<RecipeReadDto> recipes = List.of(recipe1, recipe2);
-        when(aiRecipeService.generateRecipes(eq(request.getIngredients()), any(UserPreference.class)))
+        when(recipeGenerationOrchestrator.generateRecipesFromIngredients(eq(request.getIngredients()), any(UserPreference.class)))
                 .thenReturn(recipes);
-        doNothing().when(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
+        doNothing().when(recipeGenerationOrchestrator).saveGeneratedRecipesToUserAsync(eq(userId), anyList());
 
         ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp =
                 controller.generateRecipes(request, user);
@@ -573,7 +579,7 @@ class RecipeControllerUnitTest {
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertEquals(recipes, resp.getBody().getData());
-        verify(aiRecipeService).generateRecipes(eq(request.getIngredients()), any(UserPreference.class));
-        verify(recipeService).addGeneratedRecipesToUser(eq(userId), anyList());
+        verify(recipeGenerationOrchestrator).generateRecipesFromIngredients(eq(request.getIngredients()), any(UserPreference.class));
+        verify(recipeGenerationOrchestrator).saveGeneratedRecipesToUserAsync(eq(userId), anyList());
     }
 }

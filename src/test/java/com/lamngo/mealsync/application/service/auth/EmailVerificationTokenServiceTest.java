@@ -27,6 +27,9 @@ class EmailVerificationTokenServiceTest {
     @Mock
     private IEmailVerificationTokenRepo tokenRepo;
 
+    @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
     @InjectMocks
     private EmailVerificationTokenService emailVerificationTokenService;
 
@@ -46,7 +49,7 @@ class EmailVerificationTokenServiceTest {
     @Test
     void createToken_shouldGenerateToken_whenUserProvided() {
         // Given
-        when(tokenRepo.findByUser(testUser)).thenReturn(Optional.empty());
+        doNothing().when(tokenRepo).deleteByUser(testUser);
         when(tokenRepo.save(any(EmailVerificationToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
@@ -60,29 +63,29 @@ class EmailVerificationTokenServiceTest {
         assertFalse(token.isUsed());
         assertNotNull(token.getExpiryDate());
         assertTrue(token.getExpiryDate().isAfter(Instant.now()));
+        verify(tokenRepo).deleteByUser(testUser);
         verify(tokenRepo).save(any(EmailVerificationToken.class));
     }
 
     @Test
     void createToken_shouldDeleteExistingToken_whenUserHasToken() {
         // Given
-        EmailVerificationToken existingToken = new EmailVerificationToken();
-        existingToken.setToken("old-token");
-        when(tokenRepo.findByUser(testUser)).thenReturn(Optional.of(existingToken));
+        doNothing().when(tokenRepo).deleteByUser(testUser);
         when(tokenRepo.save(any(EmailVerificationToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
         emailVerificationTokenService.createToken(testUser);
 
         // Then
-        verify(tokenRepo).delete(existingToken);
+        // The implementation always calls deleteByUser() first, then saves new token
+        verify(tokenRepo).deleteByUser(testUser);
         verify(tokenRepo).save(any(EmailVerificationToken.class));
     }
 
     @Test
     void createToken_shouldSetExpiryTo24Hours() {
         // Given
-        when(tokenRepo.findByUser(testUser)).thenReturn(Optional.empty());
+        doNothing().when(tokenRepo).deleteByUser(testUser);
         when(tokenRepo.save(any(EmailVerificationToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
         Instant beforeCreation = Instant.now();
 
@@ -186,7 +189,7 @@ class EmailVerificationTokenServiceTest {
     @Test
     void generateSecureToken_shouldGenerateUniqueTokens() {
         // Given
-        when(tokenRepo.findByUser(testUser)).thenReturn(Optional.empty());
+        doNothing().when(tokenRepo).deleteByUser(testUser);
         when(tokenRepo.save(any(EmailVerificationToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // When

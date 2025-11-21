@@ -48,6 +48,9 @@ public class GeminiRecipeService implements IRecipeGenerationService {
     @Value("${GEMINI_API_BASE_URL:https://generativelanguage.googleapis.com}")
     private String geminiApiBaseUrl;
 
+    @Value("${RECIPE_GENERATION_MODE:parallel}")
+    private String recipeGenerationMode;
+
     private static final String GEMINI_MODEL = "gemini-2.5-flash";
 
     private WebClient geminiWebClient;
@@ -57,8 +60,9 @@ public class GeminiRecipeService implements IRecipeGenerationService {
     private final PromptLoader promptLoader;
     private final TransactionTemplate transactionTemplate;
 
-    // Cache for recipe generation prompt to avoid file I/O
+    // Cache for recipe generation prompts to avoid file I/O
     private volatile String cachedRecipePrompt = null;
+    private volatile String cachedRecipeBatchPrompt = null;
 
     public GeminiRecipeService(
             RecipeMapper recipeMapper,
@@ -86,22 +90,53 @@ public class GeminiRecipeService implements IRecipeGenerationService {
     }
 
     /**
-     * Gets the cached recipe generation prompt, loading from cache if available.
+     * Gets the cached recipe generation prompt for parallel mode.
      */
     private String getRecipePrompt() {
         if (cachedRecipePrompt == null) {
             synchronized (this) {
                 if (cachedRecipePrompt == null) {
-                    cachedRecipePrompt = promptLoader.loadPrompt("recipe-generation.txt");
-                    logger.debug("Loaded and cached recipe generation prompt");
+                    cachedRecipePrompt = promptLoader.loadRecipeGenerationPrompt();
+                    logger.debug("Loaded and cached recipe generation prompt (parallel)");
                 }
             }
         }
         return cachedRecipePrompt;
     }
 
+    /**
+     * Gets the cached recipe generation prompt for batch mode.
+     */
+    private String getRecipeBatchPrompt() {
+        if (cachedRecipeBatchPrompt == null) {
+            synchronized (this) {
+                if (cachedRecipeBatchPrompt == null) {
+                    cachedRecipeBatchPrompt = promptLoader.loadRecipeGenerationBatchPrompt();
+                    logger.debug("Loaded and cached recipe generation prompt (batch)");
+                }
+            }
+        }
+        return cachedRecipeBatchPrompt;
+    }
+
     @Override
     public CompletableFuture<List<RecipeReadDto>> generateRecipesAsync(
+            List<DetectedIngredientDto> ingredients,
+            UserPreference userPreference) {
+        // Route to appropriate implementation based on mode
+        if ("batch".equalsIgnoreCase(recipeGenerationMode)) {
+            logger.info("Using BATCH mode for recipe generation");
+            return generateRecipesBatch(ingredients, userPreference);
+        } else {
+            logger.info("Using PARALLEL mode for recipe generation");
+            return generateRecipesParallel(ingredients, userPreference);
+        }
+    }
+
+    /**
+     * Generates recipes using parallel mode (3 separate API requests).
+     */
+    private CompletableFuture<List<RecipeReadDto>> generateRecipesParallel(
             List<DetectedIngredientDto> ingredients,
             UserPreference userPreference) {
         // Parallelize generation with 3 distinct styles to ensure diversity and speed
@@ -201,6 +236,20 @@ public class GeminiRecipeService implements IRecipeGenerationService {
                     logger.info("Total recipes after smart deduplication: {}", uniqueRecipes.size());
                     return new ArrayList<>(uniqueRecipes.values());
                 });
+    }
+
+    /**
+     * Generates recipes using batch mode (1 API request for all 3 recipes).
+     * Note: This method will be implemented similar to OpenAI's batch
+     * implementation.
+     */
+    private CompletableFuture<List<RecipeReadDto>> generateRecipesBatch(
+            List<DetectedIngredientDto> ingredients,
+            UserPreference userPreference) {
+        // TODO: Implement Gemini batch mode
+        // For now, fall back to parallel mode
+        logger.warn("Gemini batch mode not yet implemented, falling back to parallel mode");
+        return generateRecipesParallel(ingredients, userPreference);
     }
 
     private CompletableFuture<List<RecipeReadDto>> generateSingleRecipeInternal(

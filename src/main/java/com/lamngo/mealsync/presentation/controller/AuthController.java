@@ -45,6 +45,9 @@ public class AuthController {
     @Value("${app.frontend-url:${app.base-url}}")
     private String frontendUrl;
     
+    @Value("${app.universal-links-domain:https://cookify.dev}")
+    private String universalLinksDomain;
+    
     @Value("${app.mobile-deep-link-scheme:cookify://}")
     private String mobileDeepLinkScheme;
 
@@ -139,7 +142,14 @@ public class AuthController {
             userRepo.save(user); // Save the updated emailVerified status
             
             // Build URLs
-            String webLoginUrl = frontendUrl.replace("/api/v1", "").replaceAll("/$", "") + "/login?verified=true";
+            // API domain for web login (Cloudflare proxied)
+            String apiDomain = frontendUrl.replace("/api/v1", "").replaceAll("/$", "");
+            String webLoginUrl = apiDomain + "/login?verified=true";
+            
+            // Universal Link URL (root domain, DNS only - will open app if installed)
+            String universalLinkUrl = universalLinksDomain + "/api/v1/users/verify-email?token=" + token + "&verified=true";
+            
+            // Custom deep link as fallback
             String mobileDeepLink = mobileDeepLinkScheme + "login?verified=true&token=" + token;
             
             // Detect if mobile device
@@ -151,6 +161,7 @@ public class AuthController {
             // Load and format success template
             Map<String, String> variables = new HashMap<>();
             variables.put("LOGIN_URL", webLoginUrl);
+            variables.put("UNIVERSAL_LINK_URL", universalLinkUrl);
             variables.put("MOBILE_DEEP_LINK", mobileDeepLink);
             variables.put("IS_MOBILE", String.valueOf(isMobile));
             String html = emailTemplateService.loadAndFormatTemplate("email-verification-success.html", variables);
@@ -161,7 +172,8 @@ public class AuthController {
                     
         } catch (BadRequestException e) {
             // Build login URL for error page
-            String loginUrl = frontendUrl.replace("/api/v1", "").replaceAll("/$", "") + "/login";
+            String apiDomain = frontendUrl.replace("/api/v1", "").replaceAll("/$", "");
+            String loginUrl = apiDomain + "/login";
             
             // Load and format error template
             Map<String, String> variables = new HashMap<>();

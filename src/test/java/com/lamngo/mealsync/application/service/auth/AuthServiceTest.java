@@ -152,6 +152,10 @@ class AuthServiceTest {
         user.setName("Test");
         user.setRole(UserRole.USER);
         user.setPassword("encodedPassword");
+        user.setEmailVerified(true); // Must be verified to login
+        
+        // Mock userRepo.findByEmail to return the user
+        when(userRepo.findByEmail(dto.getEmail())).thenReturn(Optional.of(user));
         when(auth.isAuthenticated()).thenReturn(true);
         when(auth.getPrincipal()).thenReturn(user); // Return User, not UserDetails mock
         when(authenticationManager.authenticate(any())).thenReturn(auth);

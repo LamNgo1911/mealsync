@@ -18,6 +18,8 @@ public interface UserRecipeMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "user", ignore = true)
     @Mapping(target = "recipe", ignore = true)
+    @Mapping(target = "type", ignore = true)
+    @Mapping(target = "savedAt", ignore = true)
     UserRecipe toUserRecipe(UserRecipeCreateDto dto);
 
 }

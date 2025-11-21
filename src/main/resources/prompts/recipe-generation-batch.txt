@@ -1,0 +1,33 @@
+Generate 3 distinct recipes using these ingredients: {INGREDIENTS}
+User preferences: dietary={DIETARY_RESTRICTIONS}, cuisines={FAVORITE_CUISINES}, disliked={DISLIKED_INGREDIENTS}
+
+Required Styles:
+1. "Speed": Focus strictly on speed (under 20 mins). Use shortcuts, one-pot methods, or minimal prep.
+2. "Chef": Focus on culinary technique, presentation, and unique flavor pairings. Ignore time constraints.
+3. "Nourish": Focus on maximizing micronutrients and whole foods. Use gentle cooking methods.
+
+CRITICAL: Ensure each recipe is DISTINCTLY different from the others.
+CRITICAL: Use ONLY International (metric) units (g, kg, ml, l). NO Imperial units.
+
+Return JSON only:
+{
+  "recipes": [
+    {
+      "name": "string",
+      "style": "Speed|Chef|Nourish",
+      "instructions": ["string"],
+      "cuisine": "string",
+      "description": "string",
+      "prepTime": number,
+      "cookTime": number,
+      "servings": number,
+      "calories": number,
+      "protein": number,
+      "carbs": number,
+      "fat": number,
+      "difficulty": "easy|medium|hard",
+      "tags": ["string"],
+      "ingredients": [{"name": "string", "quantity": number, "unit": "string"}]
+    }
+  ]
+}
