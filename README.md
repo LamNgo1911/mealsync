@@ -26,7 +26,15 @@ A high-performance Spring Boot backend for AI-powered meal planning and recipe m
   - Automatic recipe image generation with Google Gemini 2.5 Flash Image
   - Real-time image streaming via Server-Sent Events (SSE) - images appear automatically as they're generated
   - Save and manage favorite recipes
-  - Optimized performance: ~11-16s response time for scan-and-generate workflow
+  - Optimized performance with async image generation
+
+- **💳 Subscription Management**
+  - 3-day free trial for all new users
+  - Premium plans: Monthly ($4.99/month) or Yearly ($39.99/year)
+  - Apple In-App Purchase (IAP) integration for iOS
+  - Google Play Billing integration for Android
+  - Automatic trial expiration tracking
+  - Usage limits and subscription status management
 
 - **🤖 AI Services**
   - **Ingredient Detection**:
@@ -70,11 +78,11 @@ MealSync uses a two-step AI process for recipe generation:
    - Google Gemini 2.5 Flash Image generates attractive recipe images asynchronously
    - Recipes are saved to the database for future reference
 
-3. **Optimized Workflow** (New)
-   - **Combined Endpoint**: `/scan-and-generate` - Single endpoint that pipelines ingredient detection → recipe generation
+3. **Optimized Workflow**
+   - Use separate endpoints: `/detect-ingredients` → `/generate` for best control
    - Images generated asynchronously in background (non-blocking)
    - **Real-time Streaming**: `/image-stream` - Subscribe to Server-Sent Events (SSE) to receive image updates as they're generated (no refresh needed!)
-   - Response time: ~11-16s for complete workflow
+   - Fast response times with async processing
 
 ## 🚀 Getting Started
 
@@ -571,6 +579,7 @@ All endpoints return a standardized response:
     ```
   - **Auth**: Required
   - **Description**: Upload a photo of ingredients to automatically detect what's in the image using AI vision. Returns ingredients with detected quantities and units.
+  - **Subscription**: Requires active trial or premium subscription
 
 - **Validate Ingredients**
   ```
@@ -624,26 +633,7 @@ All endpoints return a standardized response:
     ```
   - **Auth**: Required
   - **Description**: Validate ingredients provided by the user. Validates ingredient names (must be real, specific ingredients), quantities (numeric, fractions, or descriptive), and units. **Only metric/international units are accepted** (grams, kilograms, milliliters, liters). American/Imperial units (cups, tablespoons, pounds, ounces, etc.) are rejected. Returns only valid ingredients that pass all validation checks.
-
-- **Scan Image and Generate Recipes** (Optimized - Recommended)
-  ```
-  POST /scan-and-generate
-  ```
-  - **Content-Type**: `multipart/form-data`
-  - **Form Fields**:
-    - `image` (required): Image file (JPG, PNG)
-    - `userPreference` (optional): JSON string with user preferences
-  - **Request Body** (userPreference as JSON string):
-    ```json
-    {
-      "dietaryRestrictions": ["vegetarian", "gluten-free"],
-      "favoriteCuisines": ["Italian", "Asian"],
-      "dislikedIngredients": ["mushrooms", "olives"]
-    }
-    ```
-  - **Response**: Same as `/generate-recipes` endpoint
-  - **Auth**: Required
-  - **Description**: Combined endpoint that scans image for ingredients and generates 3 recipes in a single optimized request. Images are generated asynchronously in the background. **Response time: ~11-16s**
+  - **Subscription**: Requires active trial or premium subscription
 
 - **Stream Image Generation Updates** (Server-Sent Events)
   ```
@@ -663,7 +653,7 @@ All endpoints return a standardized response:
     data: {"recipeId":"123e4567-e89b-12d3-a456-426614174000","recipeName":"Chicken Stir Fry","imageUrl":"https://s3...","success":true}
     ```
   - **Auth**: Required
-  - **Description**: Subscribe to real-time image generation updates using Server-Sent Events (SSE). Images appear automatically as they're generated - no refresh needed! Use this endpoint after calling `/generate-recipes` or `/scan-and-generate` to receive progressive image updates.
+  - **Description**: Subscribe to real-time image generation updates using Server-Sent Events (SSE). Images appear automatically as they're generated - no refresh needed! Use this endpoint after calling `/generate` to receive progressive image updates.
   - **Frontend Example**:
     ```javascript
     const eventSource = new EventSource('/api/v1/recipes/image-stream?recipeIds=id1,id2,id3');
@@ -688,7 +678,7 @@ All endpoints return a standardized response:
 
 - **Generate Recipes from Ingredients**
   ```
-  POST /generate-recipes
+  POST /generate
   ```
   - **Content-Type**: `application/json`
   - **Request Body**:
@@ -748,6 +738,7 @@ All endpoints return a standardized response:
     ```
   - **Auth**: Required
   - **Description**: Generate 3 creative recipes based on provided ingredients and user preferences. All units are in International (metric) format. Images are generated asynchronously in the background.
+  - **Subscription**: Requires active trial or premium subscription. Trial users have unlimited scans during the 3-day trial period.
 
 - **List Recipes**
   ```
@@ -901,6 +892,81 @@ All endpoints return a standardized response:
   - **Auth**: Required
   - **Description**: Get paginated list of the most recently AI-generated recipes for the authenticated user, sorted by most recent first
 
+#### 💳 Subscriptions (`/api/v1/subscription`)
+
+- **Get Subscription Status**
+  ```
+  GET /status
+  ```
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "plan": "TRIAL",
+        "status": "TRIAL",
+        "trialDaysRemaining": 2,
+        "canScan": true,
+        "subscriptionEndDate": null,
+        "scansUsed": 5,
+        "scansLimit": 999,
+        "paymentProvider": "TRIAL"
+      }
+    }
+    ```
+  - **Auth**: Required
+  - **Description**: Get the current subscription status, trial days remaining, and usage information for the authenticated user
+
+- **Check if User Can Scan**
+  ```
+  GET /can-scan
+  ```
+  - **Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "canScan": true,
+        "trialDaysRemaining": 2,
+        "subscriptionPlan": "TRIAL",
+        "subscriptionStatus": "TRIAL",
+        "scansUsed": 5,
+        "scansLimit": 999
+      }
+    }
+    ```
+  - **Auth**: Required
+  - **Description**: Check if the user can perform a scan (ingredient detection or recipe generation). Returns trial information and usage limits.
+
+- **Verify Apple In-App Purchase**
+  ```
+  POST /apple/verify
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "receiptData": "base64-encoded-receipt-data"
+    }
+    ```
+  - **Response**: Same as `/status` endpoint with updated subscription information
+  - **Auth**: Required
+  - **Description**: Verify and process an Apple In-App Purchase receipt. Updates the user's subscription to premium (monthly or yearly) based on the product ID in the receipt. Supports both production and sandbox receipts.
+
+- **Verify Google Play Purchase**
+  ```
+  POST /google/verify
+  ```
+  - **Request Body**:
+    ```json
+    {
+      "purchaseToken": "google-play-purchase-token",
+      "productId": "premium_monthly"
+    }
+    ```
+  - **Response**: Same as `/status` endpoint with updated subscription information
+  - **Auth**: Required
+  - **Description**: Verify and process a Google Play purchase. Updates the user's subscription to premium. Product IDs: `premium_monthly` or `premium_yearly`.
+
 #### 🖼️ Media (`/api/v1/photos`)
 
 - **Generate Recipe Image**
@@ -977,6 +1043,20 @@ GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com
 # AWS SES Email Configuration (for email verification and password reset)
 AWS_SES_FROM_EMAIL=noreply@yourdomain.com
 app.base-url=http://localhost:8081
+
+# Subscription Management
+# Apple In-App Purchase (for iOS apps)
+APPLE_APP_SHARED_SECRET=your-apple-app-shared-secret
+APPLE_BUNDLE_ID=com.cookify.mealsync
+
+# Google Play Billing (for Android apps)
+GOOGLE_PACKAGE_NAME=com.cookify.mealsync
+GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/path/to/service-account-key.json
+
+# Universal Links Configuration (for mobile deep linking)
+APP_UNIVERSAL_LINKS_DOMAIN=https://cookify.dev
+IOS_TEAM_ID=your-apple-team-id
+ANDROID_SHA256_FINGERPRINT=your-sha256-fingerprint
 ```
 
 **Note on AWS SES Configuration:**
@@ -989,6 +1069,25 @@ app.base-url=http://localhost:8081
 - **Production**: Move out of sandbox mode and verify your sending domain for production use
 - `app.base-url` should be set to your production domain in production environments
 - Uses the same AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`) as S3
+
+**Note on Subscription Configuration:**
+- **Apple IAP Setup**:
+  1. Get your App-Specific Shared Secret from App Store Connect → Your App → Features → In-App Purchases
+  2. Set `APPLE_APP_SHARED_SECRET` with the shared secret
+  3. Set `APPLE_BUNDLE_ID` to match your iOS app's bundle ID
+  4. Set `IOS_TEAM_ID` to your Apple Developer Team ID
+- **Google Play Billing Setup**:
+  1. Create a Service Account in Google Cloud Console
+  2. Grant the service account access to Google Play Console
+  3. Download the service account key JSON file
+  4. Set `GOOGLE_SERVICE_ACCOUNT_KEY_PATH` to the path of the JSON file
+  5. Set `GOOGLE_PACKAGE_NAME` to match your Android app's package name
+  6. Get SHA256 fingerprint: `keytool -list -v -keystore your-keystore.jks`
+- **Universal Links** (for mobile deep linking):
+  - Set `APP_UNIVERSAL_LINKS_DOMAIN` to your root domain (e.g., `https://cookify.dev`)
+  - The domain must be DNS-only (not proxied through Cloudflare) for `.well-known` paths
+  - iOS Universal Links require `/.well-known/apple-app-site-association`
+  - Android App Links require `/.well-known/assetlinks.json`
 
 ## 🚀 Deployment
 
