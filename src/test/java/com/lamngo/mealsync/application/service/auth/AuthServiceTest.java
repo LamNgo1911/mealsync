@@ -4,6 +4,7 @@ import com.lamngo.mealsync.application.dto.user.*;
 import com.lamngo.mealsync.application.mapper.user.RefreshTokenMapper;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
 import com.lamngo.mealsync.application.service.email.EmailService;
+import com.lamngo.mealsync.application.service.subscription.SubscriptionService;
 import com.lamngo.mealsync.domain.model.user.*;
 import com.lamngo.mealsync.domain.repository.user.IRefreshTokenRepo;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
@@ -35,6 +36,7 @@ class AuthServiceTest {
     @Mock private EmailVerificationTokenService emailVerificationTokenService;
     @Mock private EmailService emailService;
     @Mock private PasswordResetTokenService passwordResetTokenService;
+    @Mock private SubscriptionService subscriptionService;
     @Mock private UserMapper userMapper;
     @Mock private RefreshTokenMapper refreshTokenMapper;
     @InjectMocks private AuthService authService;
@@ -43,7 +45,7 @@ class AuthServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         authService = new AuthService(authenticationManager, jwtTokenProvider, userRepo, passwordEncoder, 
-            refreshTokenService, refreshTokenRepo, emailVerificationTokenService, emailService, passwordResetTokenService);
+            refreshTokenService, refreshTokenRepo, emailVerificationTokenService, emailService, passwordResetTokenService, subscriptionService);
         authService.userMapper = userMapper;
 
     }
@@ -74,6 +76,7 @@ class AuthServiceTest {
         doNothing().when(emailService).sendVerificationEmail(anyString(), anyString(), anyString());
         
         assertNotNull(authService.register(dto));
+        verify(subscriptionService).initializeTrial(any(User.class));
         verify(emailVerificationTokenService).createToken(any(User.class));
         verify(emailService).sendVerificationEmail(anyString(), anyString(), anyString());
     }

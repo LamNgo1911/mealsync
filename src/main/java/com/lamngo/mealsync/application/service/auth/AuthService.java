@@ -3,6 +3,7 @@ package com.lamngo.mealsync.application.service.auth;
 import com.lamngo.mealsync.application.dto.user.*;
 import com.lamngo.mealsync.application.mapper.user.UserMapper;
 import com.lamngo.mealsync.application.service.email.EmailService;
+import com.lamngo.mealsync.application.service.subscription.SubscriptionService;
 import com.lamngo.mealsync.domain.model.user.*;
 import com.lamngo.mealsync.domain.repository.user.IRefreshTokenRepo;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
@@ -33,6 +34,7 @@ public class AuthService implements IAuthService {
     private final EmailVerificationTokenService emailVerificationTokenService;
     private final EmailService emailService;
     private final PasswordResetTokenService passwordResetTokenService;
+    private final SubscriptionService subscriptionService;
 
     @Autowired
     UserMapper userMapper;
@@ -46,7 +48,8 @@ public class AuthService implements IAuthService {
             IRefreshTokenRepo refreshTokenRepo,
             EmailVerificationTokenService emailVerificationTokenService,
             EmailService emailService,
-            PasswordResetTokenService passwordResetTokenService
+            PasswordResetTokenService passwordResetTokenService,
+            SubscriptionService subscriptionService
     ) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
@@ -57,6 +60,7 @@ public class AuthService implements IAuthService {
         this.emailVerificationTokenService = emailVerificationTokenService;
         this.emailService = emailService;
         this.passwordResetTokenService = passwordResetTokenService;
+        this.subscriptionService = subscriptionService;
     }
 
     @Override
@@ -83,6 +87,9 @@ public class AuthService implements IAuthService {
 
         user.setUserPreference(preference);
         user = userRepo.save(user);
+
+        // Initialize 3-day free trial
+        subscriptionService.initializeTrial(user);
 
         // Generate and send verification token
         var token = emailVerificationTokenService.createToken(user);

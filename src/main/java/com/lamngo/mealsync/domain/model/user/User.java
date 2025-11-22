@@ -14,6 +14,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.Instant;
 import java.util.*;
 
 @Entity
@@ -66,6 +67,45 @@ public class User implements UserDetails {
 
     @Column(nullable = false)
     private boolean emailVerified = false;
+
+    // Subscription fields
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private SubscriptionPlan subscriptionPlan = SubscriptionPlan.TRIAL;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private SubscriptionStatus subscriptionStatus = SubscriptionStatus.TRIAL;
+
+    @Column(nullable = false, updatable = false)
+    private Instant accountCreatedAt = Instant.now();
+
+    @Column
+    private Instant subscriptionStartDate;
+
+    @Column
+    private Instant subscriptionEndDate;
+
+    @Column
+    private Instant trialEndDate; // accountCreatedAt + 3 days
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private PaymentProvider paymentProvider = PaymentProvider.TRIAL;
+
+    @Column(length = 255)
+    private String paymentProviderId; // Apple transaction ID or Google purchase token
+
+    @Column(columnDefinition = "TEXT")
+    private String receiptData; // Store receipt for re-validation
+
+    @Column
+    private Integer scansUsed = 0;
+
+    @Column
+    private Integer scansLimit = 999; // Unlimited during trial
 
     @Override
     public boolean isEnabled() {

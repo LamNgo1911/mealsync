@@ -11,6 +11,7 @@ import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
 import com.lamngo.mealsync.application.service.AI.AIRecipeService;
 import com.lamngo.mealsync.application.service.AI.IngredientDetectionService;
 import com.lamngo.mealsync.application.service.recipe.RecipeService;
+import com.lamngo.mealsync.application.service.subscription.SubscriptionService;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
@@ -43,16 +44,19 @@ public class RecipeController {
     private final com.lamngo.mealsync.application.service.recipe.RecipeGenerationOrchestrator recipeGenerationOrchestrator;
     private final com.lamngo.mealsync.application.service.recipe.RecipeImageStreamingService recipeImageStreamingService;
     private final IngredientDetectionService ingredientDetectionService;
+    private final SubscriptionService subscriptionService;
 
     public RecipeController(
             RecipeService recipeService, 
             com.lamngo.mealsync.application.service.recipe.RecipeGenerationOrchestrator recipeGenerationOrchestrator,
             com.lamngo.mealsync.application.service.recipe.RecipeImageStreamingService recipeImageStreamingService,
-            IngredientDetectionService ingredientDetectionService) {
+            IngredientDetectionService ingredientDetectionService,
+            SubscriptionService subscriptionService) {
         this.recipeService = recipeService;
         this.recipeGenerationOrchestrator = recipeGenerationOrchestrator;
         this.recipeImageStreamingService = recipeImageStreamingService;
         this.ingredientDetectionService = ingredientDetectionService;
+        this.subscriptionService = subscriptionService;
     }
 
     /**
@@ -92,8 +96,16 @@ public class RecipeController {
         logger.info("Generating recipes from {} ingredients for user {}", ingredients.size(), user.getId());
         logger.info("User preference: {}", userPreference);
 
+        // Check subscription before allowing recipe generation
+        if (!subscriptionService.canScan(user)) {
+            throw new BadRequestException("Trial expired. Please upgrade to premium to continue generating recipes.");
+        }
+
         // Use orchestrator to handle the complete workflow
         List<RecipeReadDto> recipes = recipeGenerationOrchestrator.generateRecipesFromIngredients(ingredients, userPreference);
+        
+        // Increment scan usage for trial users
+        subscriptionService.incrementScanUsage(user);
 
         // Save generated recipes to user's history asynchronously (non-blocking)
         List<UUID> recipeIds = recipes.stream()
@@ -129,44 +141,6 @@ public class RecipeController {
         
         SuccessResponseEntity<List<DetectedIngredientDto>> body = new SuccessResponseEntity<>();
         body.setData(ingredients);
-        return ResponseEntity.ok(body);
-    }
-
-    /**
-     * Combined endpoint that scans an image for ingredients and generates recipes in a single request.
-     * This endpoint pipelines operations for better performance - recipe generation starts as soon as
-     * ingredients are detected, and images are generated asynchronously in the background.
-     * 
-     * @param image The uploaded image file containing ingredients
-     * @param userPreferenceJson Optional JSON string containing user preferences (dietary restrictions, favorite cuisines, disliked ingredients)
-     * @param user The authenticated user
-     * @return List of generated recipes (images will be generated asynchronously in background)
-     */
-    @PostMapping(value = "/scan-and-generate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> scanAndGenerateRecipes(
-            @RequestPart("image") MultipartFile image,
-            @RequestPart(value = "userPreference", required = false) String userPreferenceJson,
-            @AuthenticationPrincipal User user) {
-
-        if (image == null || image.isEmpty()) {
-            throw new BadRequestException("Image file cannot be empty");
-        }
-
-        logger.info("Scanning image and generating recipes for user {}", user.getId());
-
-        // Parse user preference
-        UserPreference userPreference = parseUserPreference(userPreferenceJson);
-
-        // Use orchestrator to handle the complete workflow
-        List<RecipeReadDto> recipes = recipeGenerationOrchestrator.scanAndGenerateRecipes(image, userPreference);
-
-        // Save history asynchronously
-        List<UUID> recipeIds = recipes.stream().map(RecipeReadDto::getId).toList();
-        recipeGenerationOrchestrator.saveGeneratedRecipesToUserAsync(user.getId(), recipeIds);
-
-        SuccessResponseEntity<List<RecipeReadDto>> body = new SuccessResponseEntity<>();
-        body.setData(recipes);
         return ResponseEntity.ok(body);
     }
 

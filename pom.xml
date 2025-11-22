@@ -160,6 +160,16 @@
             <artifactId>google-api-client</artifactId>
             <version>2.8.0</version>
         </dependency>
+        <!-- Google Play Billing API for subscription validation -->
+        <!-- Note: This requires Google Play Developer API access -->
+        <!-- For now, GooglePlayBillingService is a placeholder that accepts purchases -->
+        <!-- To enable full validation, add service account key and uncomment:
+        <dependency>
+            <groupId>com.google.apis</groupId>
+            <artifactId>google-api-services-androidpublisher</artifactId>
+            <version>v3-rev20231130-1.25.0</version>
+        </dependency>
+        -->
         <!-- Spring Boot Actuator for health checks and monitoring -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

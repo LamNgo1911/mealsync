@@ -8,7 +8,10 @@ import com.lamngo.mealsync.application.dto.userRecipe.UserRecipeReadDto;
 import com.lamngo.mealsync.application.service.AI.AIRecipeService;
 import com.lamngo.mealsync.application.service.AI.IngredientDetectionService;
 import com.lamngo.mealsync.application.service.recipe.RecipeService;
+import com.lamngo.mealsync.application.service.subscription.SubscriptionService;
 import com.lamngo.mealsync.application.shared.PaginationResponse;
+import com.lamngo.mealsync.domain.model.user.SubscriptionPlan;
+import com.lamngo.mealsync.domain.model.user.SubscriptionStatus;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.model.user.UserPreference;
 import com.lamngo.mealsync.presentation.error.BadRequestException;
@@ -34,6 +37,7 @@ class RecipeControllerUnitTest {
     @Mock com.lamngo.mealsync.application.service.recipe.RecipeGenerationOrchestrator recipeGenerationOrchestrator;
     @Mock com.lamngo.mealsync.application.service.recipe.RecipeImageStreamingService recipeImageStreamingService;
     @Mock IngredientDetectionService ingredientDetectionService;
+    @Mock SubscriptionService subscriptionService;
     @InjectMocks RecipeController controller;
 
     @BeforeEach
@@ -65,16 +69,40 @@ class RecipeControllerUnitTest {
         recipe.setId(UUID.randomUUID());
         List<RecipeReadDto> recipes = List.of(recipe);
 
+        when(subscriptionService.canScan(user)).thenReturn(true);
         when(recipeGenerationOrchestrator.generateRecipesFromIngredients(eq(request.getIngredients()), any(UserPreference.class))).thenReturn(recipes);
         doNothing().when(recipeGenerationOrchestrator).saveGeneratedRecipesToUserAsync(eq(userId), anyList());
+        doNothing().when(subscriptionService).incrementScanUsage(user);
 
         ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp = controller.generateRecipes(request, user);
 
         assertEquals(200, resp.getStatusCodeValue());
         assertEquals(recipes, resp.getBody().getData());
+        verify(subscriptionService).canScan(user);
+        verify(subscriptionService).incrementScanUsage(user);
         verify(recipeGenerationOrchestrator).generateRecipesFromIngredients(eq(request.getIngredients()), any(UserPreference.class));
         verify(recipeGenerationOrchestrator).saveGeneratedRecipesToUserAsync(eq(userId), anyList());
         verify(ingredientDetectionService, never()).detectRawIngredientsAsync(any());
+    }
+
+    @Test
+    void generateRecipesFromIngredients_throwsException_whenTrialExpired() {
+        GenerateRecipeRequest request = new GenerateRecipeRequest();
+        DetectedIngredientDto egg = new DetectedIngredientDto();
+        egg.setName("egg");
+        request.setIngredients(List.of(egg));
+        UserPreferenceRequestDto userPreferenceDto = new UserPreferenceRequestDto();
+        userPreferenceDto.setDietaryRestrictions(List.of());
+        userPreferenceDto.setFavoriteCuisines(List.of());
+        userPreferenceDto.setDislikedIngredients(List.of());
+        request.setUserPreference(userPreferenceDto);
+
+        User user = mock(User.class);
+        when(subscriptionService.canScan(user)).thenReturn(false);
+
+        assertThrows(BadRequestException.class, () -> controller.generateRecipes(request, user));
+        verify(subscriptionService).canScan(user);
+        verify(recipeGenerationOrchestrator, never()).generateRecipesFromIngredients(any(), any());
     }
 
     @Test
@@ -569,9 +597,11 @@ class RecipeControllerUnitTest {
         recipe2.setId(UUID.randomUUID());
 
         List<RecipeReadDto> recipes = List.of(recipe1, recipe2);
+        when(subscriptionService.canScan(user)).thenReturn(true);
         when(recipeGenerationOrchestrator.generateRecipesFromIngredients(eq(request.getIngredients()), any(UserPreference.class)))
                 .thenReturn(recipes);
         doNothing().when(recipeGenerationOrchestrator).saveGeneratedRecipesToUserAsync(eq(userId), anyList());
+        doNothing().when(subscriptionService).incrementScanUsage(user);
 
         ResponseEntity<SuccessResponseEntity<List<RecipeReadDto>>> resp =
                 controller.generateRecipes(request, user);
@@ -579,6 +609,8 @@ class RecipeControllerUnitTest {
         assertEquals(200, resp.getStatusCodeValue());
         assertNotNull(resp.getBody());
         assertEquals(recipes, resp.getBody().getData());
+        verify(subscriptionService).canScan(user);
+        verify(subscriptionService).incrementScanUsage(user);
         verify(recipeGenerationOrchestrator).generateRecipesFromIngredients(eq(request.getIngredients()), any(UserPreference.class));
         verify(recipeGenerationOrchestrator).saveGeneratedRecipesToUserAsync(eq(userId), anyList());
     }
