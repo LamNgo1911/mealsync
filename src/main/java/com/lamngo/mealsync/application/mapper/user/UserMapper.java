@@ -8,17 +8,13 @@ import org.mapstruct.*;
 
 import java.util.List;
 
-@Mapper(
-        componentModel = "spring",
-        uses = { UserPreferenceMapper.class, RefreshTokenMapper.class }
-)
+@Mapper(componentModel = "spring", uses = { UserPreferenceMapper.class, RefreshTokenMapper.class })
 public interface UserMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "status", constant = "ACTIVE")
     @Mapping(target = "userPreference", ignore = true)
     @Mapping(target = "refreshToken", ignore = true)
-    @Mapping(target = "mealPlans", ignore = true)
     @Mapping(target = "userRecipes", ignore = true)
     @Mapping(target = "authorities", ignore = true)
     @Mapping(target = "enabled", ignore = true)
@@ -39,7 +35,6 @@ public interface UserMapper {
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "userPreference", ignore = true)
     @Mapping(target = "refreshToken", ignore = true)
-    @Mapping(target = "mealPlans", ignore = true)
     @Mapping(target = "userRecipes", ignore = true)
     @Mapping(target = "authorities", ignore = true)
     @Mapping(target = "enabled", ignore = true)

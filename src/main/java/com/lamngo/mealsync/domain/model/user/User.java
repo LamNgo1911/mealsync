@@ -1,7 +1,6 @@
 package com.lamngo.mealsync.domain.model.user;
 
 import com.lamngo.mealsync.domain.model.UserRecipe;
-import com.lamngo.mealsync.domain.model.mealPlan.MealPlan;
 import com.lamngo.mealsync.domain.model.recipe.Recipe;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
@@ -55,9 +54,6 @@ public class User implements UserDetails {
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private UserPreference userPreference;
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<MealPlan> mealPlans = new ArrayList<>();
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UserRecipe> userRecipes = new ArrayList<>();
@@ -134,7 +130,7 @@ public class User implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        if(role == null) {
+        if (role == null) {
             return Collections.emptyList();
         }
 
@@ -153,8 +149,10 @@ public class User implements UserDetails {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof User)) return false;
+        if (this == o)
+            return true;
+        if (!(o instanceof User))
+            return false;
 
         User user = (User) o;
 
