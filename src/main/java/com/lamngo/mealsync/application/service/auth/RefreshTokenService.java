@@ -27,7 +27,8 @@ public class RefreshTokenService {
 
     private final RefreshTokenMapper refreshTokenMapper;
 
-    public RefreshTokenService(IRefreshTokenRepo refreshTokenRepo, IUserRepo userRepo, RefreshTokenMapper refreshTokenMapper) {
+    public RefreshTokenService(IRefreshTokenRepo refreshTokenRepo, IUserRepo userRepo,
+            RefreshTokenMapper refreshTokenMapper) {
         this.refreshTokenRepo = refreshTokenRepo;
         this.userRepo = userRepo;
         this.refreshTokenMapper = refreshTokenMapper;
@@ -37,7 +38,7 @@ public class RefreshTokenService {
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-       // Find an existing token or create a new one (UPSERT pattern)
+        // Find an existing token or create a new one (UPSERT pattern)
         RefreshToken refreshToken = refreshTokenRepo.findByUserId(userId);
         if (refreshToken == null) {
             refreshToken = new RefreshToken();
@@ -48,11 +49,7 @@ public class RefreshTokenService {
         refreshToken.setToken(UUID.randomUUID().toString());
         refreshToken.setExpiryDate(Instant.now().plusMillis(JwtRefreshExpirationMs));
 
-
-
         refreshTokenRepo.save(refreshToken);
-        System.out.println(refreshToken);
-        System.out.println(refreshTokenMapper.toRefreshTokenReadDto(refreshToken));
         return refreshTokenMapper.toRefreshTokenReadDto(refreshToken);
     }
 

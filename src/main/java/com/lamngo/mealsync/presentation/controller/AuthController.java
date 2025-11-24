@@ -25,8 +25,12 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+
+import com.lamngo.mealsync.domain.model.user.UserPreference;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -41,20 +45,20 @@ public class AuthController {
     private final EmailVerificationTokenService emailVerificationTokenService;
     private final EmailService emailService;
     private final EmailTemplateService emailTemplateService;
-    
+
     @Value("${app.frontend-url:${app.base-url}}")
     private String frontendUrl;
-    
+
     @Value("${app.universal-links-domain:https://cookify.dev}")
     private String universalLinksDomain;
-    
+
     @Value("${app.mobile-deep-link-scheme:cookify://}")
     private String mobileDeepLinkScheme;
 
     public AuthController(AuthService authService, GoogleVerifierService googleVerifierService, IUserRepo userRepo,
-                          RefreshTokenService refreshTokenService, UserMapper userMapper, JwtTokenProvider jwtTokenProvider,
-                          EmailVerificationTokenService emailVerificationTokenService, EmailService emailService,
-                          EmailTemplateService emailTemplateService) {
+            RefreshTokenService refreshTokenService, UserMapper userMapper, JwtTokenProvider jwtTokenProvider,
+            EmailVerificationTokenService emailVerificationTokenService, EmailService emailService,
+            EmailTemplateService emailTemplateService) {
         this.authService = authService;
         this.googleVerifierService = googleVerifierService;
         this.userRepo = userRepo;
@@ -68,7 +72,8 @@ public class AuthController {
 
     // Anyone can register a new user
     @PostMapping("/register")
-    public ResponseEntity<SuccessResponseEntity<UserReadDto>> register(@RequestBody @Valid UserCreateDto userCreateDto) {
+    public ResponseEntity<SuccessResponseEntity<UserReadDto>> register(
+            @RequestBody @Valid UserCreateDto userCreateDto) {
         UserReadDto createdUser = authService.register(userCreateDto);
         SuccessResponseEntity<UserReadDto> body = new SuccessResponseEntity<>();
         body.setData(createdUser);
@@ -102,10 +107,30 @@ public class AuthController {
             User newUser = new User();
             newUser.setEmail(email);
             newUser.setName(name);
+            newUser.setPassword(UUID.randomUUID().toString()); // Set random password for Google users
             newUser.setRole(UserRole.USER);
             newUser.setEmailVerified(true); // Google already verified the email
+
+            UserPreference preference = new UserPreference();
+            preference.setDietaryRestrictions(new ArrayList<>());
+            preference.setFavoriteCuisines(new ArrayList<>());
+            preference.setDislikedIngredients(new ArrayList<>());
+            preference.setUser(newUser);
+            newUser.setUserPreference(preference);
+
             return userRepo.save(newUser);
         });
+
+        // Self-healing: Ensure UserPreference exists for existing users
+        if (user.getUserPreference() == null) {
+            UserPreference preference = new UserPreference();
+            preference.setDietaryRestrictions(new ArrayList<>());
+            preference.setFavoriteCuisines(new ArrayList<>());
+            preference.setDislikedIngredients(new ArrayList<>());
+            preference.setUser(user);
+            user.setUserPreference(preference);
+            user = userRepo.save(user);
+        }
 
         String accessToken = jwtTokenProvider.generateToken(user);
         RefreshTokenReadDto newRefreshToken = refreshTokenService.createRefreshToken(user.getId());
@@ -120,6 +145,7 @@ public class AuthController {
         userInfoDto.setUserPreference(userReadDto.getUserPreference());
         userInfoDto.setToken(accessToken);
         userInfoDto.setRefreshToken(newRefreshToken);
+
         SuccessResponseEntity<UserInfoDto> body = new SuccessResponseEntity<>();
         body.setData(userInfoDto);
         return ResponseEntity.ok(body);
@@ -127,7 +153,8 @@ public class AuthController {
 
     // Anyone can refresh their access token using a refresh token
     @PostMapping("/refresh")
-    public ResponseEntity<SuccessResponseEntity<UserInfoDto>> refresh(@RequestBody @Valid RefreshTokenRequestDto refreshTokenRequestDto) {
+    public ResponseEntity<SuccessResponseEntity<UserInfoDto>> refresh(
+            @RequestBody @Valid RefreshTokenRequestDto refreshTokenRequestDto) {
         UserInfoDto userInfo = authService.refreshToken(refreshTokenRequestDto.getRefreshToken());
         SuccessResponseEntity<UserInfoDto> body = new SuccessResponseEntity<>();
         body.setData(userInfo);
@@ -136,28 +163,30 @@ public class AuthController {
 
     // Anyone can verify their email with a token
     @GetMapping("/verify-email")
-    public ResponseEntity<String> verifyEmail(@RequestParam String token, @RequestHeader(value = "User-Agent", required = false) String userAgent) {
+    public ResponseEntity<String> verifyEmail(@RequestParam String token,
+            @RequestHeader(value = "User-Agent", required = false) String userAgent) {
         try {
             User user = emailVerificationTokenService.verifyToken(token);
             userRepo.save(user); // Save the updated emailVerified status
-            
+
             // Build URLs
             // API domain for web login (Cloudflare proxied)
             String apiDomain = frontendUrl.replace("/api/v1", "").replaceAll("/$", "");
             String webLoginUrl = apiDomain + "/login?verified=true";
-            
+
             // Universal Link URL (root domain, DNS only - will open app if installed)
-            String universalLinkUrl = universalLinksDomain + "/api/v1/users/verify-email?token=" + token + "&verified=true";
-            
+            String universalLinkUrl = universalLinksDomain + "/api/v1/users/verify-email?token=" + token
+                    + "&verified=true";
+
             // Custom deep link as fallback
             String mobileDeepLink = mobileDeepLinkScheme + "login?verified=true&token=" + token;
-            
+
             // Detect if mobile device
-            boolean isMobile = userAgent != null && (userAgent.toLowerCase().contains("mobile") || 
-                    userAgent.toLowerCase().contains("android") || 
-                    userAgent.toLowerCase().contains("iphone") || 
+            boolean isMobile = userAgent != null && (userAgent.toLowerCase().contains("mobile") ||
+                    userAgent.toLowerCase().contains("android") ||
+                    userAgent.toLowerCase().contains("iphone") ||
                     userAgent.toLowerCase().contains("ipad"));
-            
+
             // Load and format success template
             Map<String, String> variables = new HashMap<>();
             variables.put("LOGIN_URL", webLoginUrl);
@@ -165,22 +194,22 @@ public class AuthController {
             variables.put("MOBILE_DEEP_LINK", mobileDeepLink);
             variables.put("IS_MOBILE", String.valueOf(isMobile));
             String html = emailTemplateService.loadAndFormatTemplate("email-verification-success.html", variables);
-            
+
             return ResponseEntity.ok()
                     .contentType(MediaType.TEXT_HTML)
                     .body(html);
-                    
+
         } catch (BadRequestException e) {
             // Build login URL for error page
             String apiDomain = frontendUrl.replace("/api/v1", "").replaceAll("/$", "");
             String loginUrl = apiDomain + "/login";
-            
+
             // Load and format error template
             Map<String, String> variables = new HashMap<>();
             variables.put("LOGIN_URL", loginUrl);
             variables.put("ERROR_MESSAGE", e.getMessage());
             String errorHtml = emailTemplateService.loadAndFormatTemplate("email-verification-error.html", variables);
-            
+
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .contentType(MediaType.TEXT_HTML)
                     .body(errorHtml);
@@ -189,22 +218,23 @@ public class AuthController {
 
     // Anyone can request a new verification email
     @PostMapping("/resend-verification")
-    public ResponseEntity<SuccessResponseEntity<String>> resendVerificationEmail(@RequestBody Map<String, String> request) {
+    public ResponseEntity<SuccessResponseEntity<String>> resendVerificationEmail(
+            @RequestBody Map<String, String> request) {
         String email = request.get("email");
         if (email == null || email.isEmpty()) {
             throw new BadRequestException("Email is required");
         }
-        
+
         User user = userRepo.findByEmail(email)
-            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
         if (user.isEmailVerified()) {
             throw new BadRequestException("Email is already verified");
         }
-        
+
         var token = emailVerificationTokenService.createToken(user);
         emailService.sendVerificationEmail(user.getEmail(), token.getToken(), user.getName());
-        
+
         SuccessResponseEntity<String> body = new SuccessResponseEntity<>();
         body.setData("Verification email sent successfully");
         return ResponseEntity.ok(body);
@@ -212,9 +242,10 @@ public class AuthController {
 
     // Anyone can request a password reset
     @PostMapping("/forgot-password")
-    public ResponseEntity<SuccessResponseEntity<String>> forgotPassword(@RequestBody @Valid ForgotPasswordRequestDto request) {
+    public ResponseEntity<SuccessResponseEntity<String>> forgotPassword(
+            @RequestBody @Valid ForgotPasswordRequestDto request) {
         authService.forgotPassword(request.getEmail());
-        
+
         SuccessResponseEntity<String> body = new SuccessResponseEntity<>();
         body.setData("Password reset email sent successfully. Please check your inbox.");
         return ResponseEntity.ok(body);
@@ -222,9 +253,10 @@ public class AuthController {
 
     // Anyone can reset their password with a valid token
     @PostMapping("/reset-password")
-    public ResponseEntity<SuccessResponseEntity<String>> resetPassword(@RequestBody @Valid ResetPasswordRequestDto request) {
+    public ResponseEntity<SuccessResponseEntity<String>> resetPassword(
+            @RequestBody @Valid ResetPasswordRequestDto request) {
         authService.resetPassword(request.getToken(), request.getNewPassword());
-        
+
         SuccessResponseEntity<String> body = new SuccessResponseEntity<>();
         body.setData("Password reset successfully. You can now log in with your new password.");
         return ResponseEntity.ok(body);

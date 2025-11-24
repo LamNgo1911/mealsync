@@ -5,25 +5,39 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import jakarta.annotation.PostConstruct;
-import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
-@Transactional
 public class GoogleVerifierService {
 
     @Value("${GOOGLE_CLIENT_ID}")
     private String googleClientId;
 
+    @Value("${GOOGLE_IOS_CLIENT_ID:}")
+    private String googleIosClientId;
+
+    @Value("${GOOGLE_ANDROID_CLIENT_ID:}")
+    private String googleAndroidClientId;
+
     private GoogleIdTokenVerifier verifier;
 
     @PostConstruct
     public void initVerifier() {
+        List<String> audiences = new ArrayList<>();
+        audiences.add(googleClientId);
+        if (googleIosClientId != null && !googleIosClientId.isEmpty()) {
+            audiences.add(googleIosClientId);
+        }
+        if (googleAndroidClientId != null && !googleAndroidClientId.isEmpty()) {
+            audiences.add(googleAndroidClientId);
+        }
+
         this.verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
-                .setAudience(Collections.singletonList(googleClientId))
+                .setAudience(audiences)
                 .build();
     }
 

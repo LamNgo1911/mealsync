@@ -27,12 +27,18 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class AuthControllerUnitTest {
-    @Mock private AuthService authService;
-    @Mock private GoogleVerifierService googleVerifierService;
-    @Mock private IUserRepo userRepo;
-    @Mock private RefreshTokenService refreshTokenService;
-    @Mock private UserMapper userMapper;
-    @Mock private JwtTokenProvider jwtTokenProvider;
+    @Mock
+    private AuthService authService;
+    @Mock
+    private GoogleVerifierService googleVerifierService;
+    @Mock
+    private IUserRepo userRepo;
+    @Mock
+    private RefreshTokenService refreshTokenService;
+    @Mock
+    private UserMapper userMapper;
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
 
     @InjectMocks
     private AuthController authController;
@@ -86,6 +92,7 @@ class AuthControllerUnitTest {
         user.setName("Test User");
         user.setRole(UserRole.USER);
         when(userRepo.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(userRepo.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(jwtTokenProvider.generateToken(user)).thenReturn("access_token");
         RefreshTokenReadDto refreshTokenDto = new RefreshTokenReadDto();
         when(refreshTokenService.createRefreshToken(user.getId())).thenReturn(refreshTokenDto);
@@ -145,7 +152,7 @@ class AuthControllerUnitTest {
         when(authService.refreshToken("invalid_refresh_token"))
                 .thenThrow(new BadRequestException("Refresh token is not valid"));
 
-        BadRequestException exception = assertThrows(BadRequestException.class, 
+        BadRequestException exception = assertThrows(BadRequestException.class,
                 () -> authController.refresh(requestDto));
         assertEquals("Refresh token is not valid", exception.getMessage());
         verify(authService).refreshToken("invalid_refresh_token");
@@ -159,7 +166,7 @@ class AuthControllerUnitTest {
         when(authService.refreshToken("expired_refresh_token"))
                 .thenThrow(new BadRequestException("Refresh token is expired"));
 
-        BadRequestException exception = assertThrows(BadRequestException.class, 
+        BadRequestException exception = assertThrows(BadRequestException.class,
                 () -> authController.refresh(requestDto));
         assertEquals("Refresh token is expired", exception.getMessage());
         verify(authService).refreshToken("expired_refresh_token");
@@ -173,7 +180,7 @@ class AuthControllerUnitTest {
         when(authService.refreshToken("revoked_refresh_token"))
                 .thenThrow(new BadRequestException("Refresh token has been revoked"));
 
-        BadRequestException exception = assertThrows(BadRequestException.class, 
+        BadRequestException exception = assertThrows(BadRequestException.class,
                 () -> authController.refresh(requestDto));
         assertEquals("Refresh token has been revoked", exception.getMessage());
         verify(authService).refreshToken("revoked_refresh_token");
