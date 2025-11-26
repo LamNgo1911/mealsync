@@ -9,6 +9,8 @@ import com.lamngo.mealsync.application.service.auth.GoogleVerifierService;
 import com.lamngo.mealsync.application.service.auth.RefreshTokenService;
 import com.lamngo.mealsync.application.service.email.EmailService;
 import com.lamngo.mealsync.application.service.email.EmailTemplateService;
+
+import com.lamngo.mealsync.application.service.subscription.SubscriptionService;
 import com.lamngo.mealsync.domain.model.user.User;
 import com.lamngo.mealsync.domain.model.user.UserRole;
 import com.lamngo.mealsync.domain.repository.user.IUserRepo;
@@ -44,7 +46,9 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;
     private final EmailVerificationTokenService emailVerificationTokenService;
     private final EmailService emailService;
+
     private final EmailTemplateService emailTemplateService;
+    private final SubscriptionService subscriptionService;
 
     @Value("${app.frontend-url:${app.base-url}}")
     private String frontendUrl;
@@ -58,7 +62,8 @@ public class AuthController {
     public AuthController(AuthService authService, GoogleVerifierService googleVerifierService, IUserRepo userRepo,
             RefreshTokenService refreshTokenService, UserMapper userMapper, JwtTokenProvider jwtTokenProvider,
             EmailVerificationTokenService emailVerificationTokenService, EmailService emailService,
-            EmailTemplateService emailTemplateService) {
+
+            EmailTemplateService emailTemplateService, SubscriptionService subscriptionService) {
         this.authService = authService;
         this.googleVerifierService = googleVerifierService;
         this.userRepo = userRepo;
@@ -67,7 +72,9 @@ public class AuthController {
         this.jwtTokenProvider = jwtTokenProvider;
         this.emailVerificationTokenService = emailVerificationTokenService;
         this.emailService = emailService;
+
         this.emailTemplateService = emailTemplateService;
+        this.subscriptionService = subscriptionService;
     }
 
     // Anyone can register a new user
@@ -118,6 +125,7 @@ public class AuthController {
             preference.setUser(newUser);
             newUser.setUserPreference(preference);
 
+            subscriptionService.initializeTrial(newUser);
             return userRepo.save(newUser);
         });
 
